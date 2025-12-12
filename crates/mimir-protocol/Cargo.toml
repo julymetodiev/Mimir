@@ -1,0 +1,19 @@
+[package]
+name = "mimir-protocol"
+description = "Command and event protocol for Mimir actor system"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+mimir-types.workspace = true
+mimir-error.workspace = true
+
+serde.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }

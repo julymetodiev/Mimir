@@ -112,6 +112,9 @@ pub enum GraphError {
 
     #[error("Invalid reference: from {from} to {to}")]
     InvalidReference { from: String, to: String },
+
+    #[error("Watcher error: {0}")]
+    WatcherError(String),
 }
 
 /// Edit-related errors.

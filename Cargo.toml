@@ -14,8 +14,10 @@ members = [
     "crates/mimir-parse-core",
     "crates/mimir-parse-rust",
     "crates/mimir-graph",
-    # M3: Edit crate
+    # M3: Actor crates
     "crates/mimir-edit",
+    "crates/mimir-protocol",
+    "crates/mimir-graph-actor",
     # CLI
     "crates/mimir-cli",
 ]
@@ -51,6 +53,8 @@ mimir-parse-rust = { path = "crates/mimir-parse-rust" }
 mimir-files = { path = "crates/mimir-files" }
 mimir-graph = { path = "crates/mimir-graph" }
 mimir-edit = { path = "crates/mimir-edit" }
+mimir-protocol = { path = "crates/mimir-protocol" }
+mimir-graph-actor = { path = "crates/mimir-graph-actor" }
 
 # Error handling
 thiserror = "2.0"
@@ -93,6 +97,8 @@ hex = "0.4"
 ignore = "0.4"
 uuid = { version = "1.11", features = ["v4", "serde"] }
 tempfile = "3.14"
+notify = { version = "7.0", default-features = false, features = ["macos_fsevent"] }
+notify-debouncer-mini = "0.5"
 
 # Testing
 assert_cmd = "2.0"

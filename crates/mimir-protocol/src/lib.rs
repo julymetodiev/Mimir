@@ -1,0 +1,68 @@
+//! Command and event protocol for the Mimir actor system.
+//!
+//! This crate defines the communication protocol between components:
+//!
+//! - **Commands**: Messages sent to actors to request actions
+//! - **Events**: Notifications emitted when state changes
+//! - **Responses**: Data returned from queries
+//! - **Channels**: Typed channel wrappers for actor communication
+//!
+//! # Architecture
+//!
+//! The actor system uses a channel-based architecture:
+//!
+//! ```text
+//! ┌─────────────┐     commands      ┌─────────────┐
+//! │   Client    │ ─────────────────▶│   Actor     │
+//! │  (Handle)   │                   │  (Worker)   │
+//! │             │ ◀───────────────  │             │
+//! └─────────────┘    responses      └─────────────┘
+//!                        │
+//!                        │ events (broadcast)
+//!                        ▼
+//!               ┌─────────────────┐
+//!               │   Subscribers   │
+//!               └─────────────────┘
+//! ```
+//!
+//! # Example
+//!
+//! ```ignore
+//! use mimir_protocol::{command_channel, GraphCommand};
+//! use tokio::sync::oneshot;
+//!
+//! // Create a command channel
+//! let (tx, mut rx) = command_channel(256);
+//!
+//! // Send a stats request
+//! let (reply_tx, reply_rx) = oneshot::channel();
+//! tx.send(GraphCommand::Stats { reply: reply_tx }).await?;
+//!
+//! // Receive in the actor
+//! while let Some(cmd) = rx.recv().await {
+//!     match cmd {
+//!         GraphCommand::Stats { reply } => {
+//!             let stats = get_stats();
+//!             let _ = reply.send(stats);
+//!         }
+//!         GraphCommand::Shutdown => break,
+//!         _ => {}
+//!     }
+//! }
+//! ```
+
+mod channel;
+mod command;
+mod event;
+mod response;
+
+pub use channel::{
+    command_channel, event_channel, CommandReceiver, CommandSender, EventReceiver, EventSender,
+    DEFAULT_COMMAND_BUFFER, DEFAULT_EVENT_CAPACITY,
+};
+
+pub use command::{FindOptions, GraphCommand, SyncResult, TraceOptions};
+
+pub use event::{FileEvent, GraphEvent};
+
+pub use response::{FindResponse, StatsResponse, SymbolInfo, TraceNode, TraceRelation, TraceResponse};

@@ -1,0 +1,27 @@
+[package]
+name = "mimir-graph-actor"
+description = "Actor-based graph management for Mimir"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+mimir-types.workspace = true
+mimir-error.workspace = true
+mimir-protocol.workspace = true
+mimir-graph.workspace = true
+mimir-parse-core.workspace = true
+mimir-parse-rust.workspace = true
+mimir-files.workspace = true
+
+tokio = { workspace = true, features = ["sync", "rt", "time"] }
+tracing.workspace = true
+notify.workspace = true
+notify-debouncer-mini.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tempfile.workspace = true
