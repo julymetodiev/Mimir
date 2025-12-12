@@ -14,31 +14,32 @@ pub async fn list_snapshots(snapshots_dir: &Path) -> Result<Vec<Snapshot>, Stora
         return Ok(snapshots);
     }
 
-    let mut entries = fs::read_dir(snapshots_dir).await.map_err(|e| {
-        StorageError::ReadFailed {
+    let mut entries = fs::read_dir(snapshots_dir)
+        .await
+        .map_err(|e| StorageError::ReadFailed {
             path: snapshots_dir.to_path_buf(),
             source: e,
-        }
-    })?;
+        })?;
 
-    while let Some(entry) = entries.next_entry().await.map_err(|e| {
-        StorageError::ReadFailed {
+    while let Some(entry) = entries
+        .next_entry()
+        .await
+        .map_err(|e| StorageError::ReadFailed {
             path: snapshots_dir.to_path_buf(),
             source: e,
-        }
-    })? {
+        })?
+    {
         let path = entry.path();
 
         if path.is_dir() {
             let manifest_path = path.join("manifest.json");
             if manifest_path.exists() {
-                let content =
-                    fs::read_to_string(&manifest_path).await.map_err(|e| {
-                        StorageError::ReadFailed {
-                            path: manifest_path.clone(),
-                            source: e,
-                        }
-                    })?;
+                let content = fs::read_to_string(&manifest_path).await.map_err(|e| {
+                    StorageError::ReadFailed {
+                        path: manifest_path.clone(),
+                        source: e,
+                    }
+                })?;
 
                 let snapshot: Snapshot = serde_json::from_str(&content).map_err(|e| {
                     StorageError::Deserialization(format!(
@@ -72,12 +73,13 @@ pub async fn get_snapshot(
         return Ok(None);
     }
 
-    let content = fs::read_to_string(&manifest_path).await.map_err(|e| {
-        StorageError::ReadFailed {
-            path: manifest_path.clone(),
-            source: e,
-        }
-    })?;
+    let content =
+        fs::read_to_string(&manifest_path)
+            .await
+            .map_err(|e| StorageError::ReadFailed {
+                path: manifest_path.clone(),
+                source: e,
+            })?;
 
     let snapshot: Snapshot = serde_json::from_str(&content).map_err(|e| {
         StorageError::Deserialization(format!(
@@ -104,7 +106,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_nonexistent() {
-        let snapshots = list_snapshots(Path::new("/nonexistent/path")).await.unwrap();
+        let snapshots = list_snapshots(Path::new("/nonexistent/path"))
+            .await
+            .unwrap();
         assert!(snapshots.is_empty());
     }
 }

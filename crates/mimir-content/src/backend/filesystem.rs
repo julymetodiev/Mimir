@@ -25,10 +25,12 @@ impl FilesystemContentStore {
         let root = root.as_ref().to_path_buf();
         let objects_dir = root.join("objects");
 
-        fs::create_dir_all(&objects_dir).await.map_err(|e| StorageError::WriteFailed {
-            path: objects_dir.clone(),
-            source: e,
-        })?;
+        fs::create_dir_all(&objects_dir)
+            .await
+            .map_err(|e| StorageError::WriteFailed {
+                path: objects_dir.clone(),
+                source: e,
+            })?;
 
         Ok(Self {
             root,
@@ -71,39 +73,49 @@ impl ContentStore for FilesystemContentStore {
 
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).await.map_err(|e| StorageError::WriteFailed {
-                path: parent.to_path_buf(),
-                source: e,
-            })?;
+            fs::create_dir_all(parent)
+                .await
+                .map_err(|e| StorageError::WriteFailed {
+                    path: parent.to_path_buf(),
+                    source: e,
+                })?;
         }
 
         // Compress content
-        let compressed =
-            crate::compression::compress_with_level(content, self.compression_level)?;
+        let compressed = crate::compression::compress_with_level(content, self.compression_level)?;
 
         // Write atomically: write to temp file, then rename
         let temp_path = path.with_extension("tmp");
 
-        let mut file = fs::File::create(&temp_path).await.map_err(|e| StorageError::WriteFailed {
-            path: temp_path.clone(),
-            source: e,
-        })?;
+        let mut file =
+            fs::File::create(&temp_path)
+                .await
+                .map_err(|e| StorageError::WriteFailed {
+                    path: temp_path.clone(),
+                    source: e,
+                })?;
 
-        file.write_all(&compressed).await.map_err(|e| StorageError::WriteFailed {
-            path: temp_path.clone(),
-            source: e,
-        })?;
+        file.write_all(&compressed)
+            .await
+            .map_err(|e| StorageError::WriteFailed {
+                path: temp_path.clone(),
+                source: e,
+            })?;
 
-        file.sync_all().await.map_err(|e| StorageError::WriteFailed {
-            path: temp_path.clone(),
-            source: e,
-        })?;
+        file.sync_all()
+            .await
+            .map_err(|e| StorageError::WriteFailed {
+                path: temp_path.clone(),
+                source: e,
+            })?;
 
         // Atomic rename
-        fs::rename(&temp_path, &path).await.map_err(|e| StorageError::WriteFailed {
-            path: path.clone(),
-            source: e,
-        })?;
+        fs::rename(&temp_path, &path)
+            .await
+            .map_err(|e| StorageError::WriteFailed {
+                path: path.clone(),
+                source: e,
+            })?;
 
         Ok(hash)
     }
@@ -115,10 +127,12 @@ impl ContentStore for FilesystemContentStore {
             return Ok(None);
         }
 
-        let compressed = fs::read(&path).await.map_err(|e| StorageError::ReadFailed {
-            path: path.clone(),
-            source: e,
-        })?;
+        let compressed = fs::read(&path)
+            .await
+            .map_err(|e| StorageError::ReadFailed {
+                path: path.clone(),
+                source: e,
+            })?;
 
         let content = decompress(&compressed)?;
         Ok(Some(content))
@@ -136,10 +150,12 @@ impl ContentStore for FilesystemContentStore {
             return Ok(false);
         }
 
-        fs::remove_file(&path).await.map_err(|e| StorageError::DeleteFailed {
-            path: path.clone(),
-            source: e,
-        })?;
+        fs::remove_file(&path)
+            .await
+            .map_err(|e| StorageError::DeleteFailed {
+                path: path.clone(),
+                source: e,
+            })?;
 
         Ok(true)
     }
@@ -152,19 +168,23 @@ impl ContentStore for FilesystemContentStore {
             return Ok(hashes);
         }
 
-        let mut dir_entries = fs::read_dir(&objects_dir).await.map_err(|e| {
-            StorageError::ReadFailed {
-                path: objects_dir.clone(),
-                source: e,
-            }
-        })?;
+        let mut dir_entries =
+            fs::read_dir(&objects_dir)
+                .await
+                .map_err(|e| StorageError::ReadFailed {
+                    path: objects_dir.clone(),
+                    source: e,
+                })?;
 
-        while let Some(entry) = dir_entries.next_entry().await.map_err(|e| {
-            StorageError::ReadFailed {
-                path: objects_dir.clone(),
-                source: e,
-            }
-        })? {
+        while let Some(entry) =
+            dir_entries
+                .next_entry()
+                .await
+                .map_err(|e| StorageError::ReadFailed {
+                    path: objects_dir.clone(),
+                    source: e,
+                })?
+        {
             let subdir = entry.path();
             if !subdir.is_dir() {
                 continue;
@@ -172,19 +192,23 @@ impl ContentStore for FilesystemContentStore {
 
             let prefix = entry.file_name().to_string_lossy().to_string();
 
-            let mut file_entries = fs::read_dir(&subdir).await.map_err(|e| {
-                StorageError::ReadFailed {
-                    path: subdir.clone(),
-                    source: e,
-                }
-            })?;
+            let mut file_entries =
+                fs::read_dir(&subdir)
+                    .await
+                    .map_err(|e| StorageError::ReadFailed {
+                        path: subdir.clone(),
+                        source: e,
+                    })?;
 
-            while let Some(file_entry) = file_entries.next_entry().await.map_err(|e| {
-                StorageError::ReadFailed {
-                    path: subdir.clone(),
-                    source: e,
-                }
-            })? {
+            while let Some(file_entry) =
+                file_entries
+                    .next_entry()
+                    .await
+                    .map_err(|e| StorageError::ReadFailed {
+                        path: subdir.clone(),
+                        source: e,
+                    })?
+            {
                 let suffix = file_entry.file_name().to_string_lossy().to_string();
 
                 // Skip temp files

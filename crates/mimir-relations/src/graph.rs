@@ -2,9 +2,9 @@
 
 use arc_swap::ArcSwap;
 use mimir_types::SymbolId;
+use petgraph::Direction;
 use petgraph::stable_graph::{NodeIndex, StableGraph};
 use petgraph::visit::EdgeRef;
-use petgraph::Direction;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -96,11 +96,7 @@ impl RelationGraph {
             let mut new_inner = (**current).clone();
 
             // Collect edges to remove
-            let edges_to_remove: Vec<_> = new_inner
-                .graph
-                .edges(node)
-                .map(|e| e.id())
-                .collect();
+            let edges_to_remove: Vec<_> = new_inner.graph.edges(node).map(|e| e.id()).collect();
 
             for edge in edges_to_remove {
                 new_inner.graph.remove_edge(edge);

@@ -111,10 +111,7 @@ impl Editor {
         // Group by file
         let mut by_file: std::collections::HashMap<_, Vec<_>> = std::collections::HashMap::new();
         for op in ops {
-            by_file
-                .entry(op.file_path().clone())
-                .or_default()
-                .push(op);
+            by_file.entry(op.file_path().clone()).or_default().push(op);
         }
 
         let mut results = Vec::new();
@@ -369,9 +366,8 @@ impl Editor {
                 ..
             } => {
                 let old_lines: Vec<&str> = old.lines().collect();
-                let old_region: String = old_lines
-                    [(*start_line as usize - 1)..(*end_line as usize)]
-                    .join("\n");
+                let old_region: String =
+                    old_lines[(*start_line as usize - 1)..(*end_line as usize)].join("\n");
                 (*start_line, *end_line, old_region, new_content.clone())
             }
             _ => {
@@ -399,13 +395,7 @@ impl Editor {
     }
 
     /// Generate unified diff format.
-    fn generate_unified_diff(
-        &self,
-        path: &Path,
-        old: &str,
-        new: &str,
-        start_line: u32,
-    ) -> String {
+    fn generate_unified_diff(&self, path: &Path, old: &str, new: &str, start_line: u32) -> String {
         let path_str = path.display();
         let mut diff = String::new();
 
@@ -501,8 +491,7 @@ mod tests {
         let path = create_test_file(dir.path(), "test.txt", content).await;
 
         let hash = ContentHash::compute(content.as_bytes());
-        let op = EditOp::replace(&path, Span::new(0, 8), "modified")
-            .with_expected_hash(hash);
+        let op = EditOp::replace(&path, Span::new(0, 8), "modified").with_expected_hash(hash);
         let editor = Editor::new();
 
         let result = editor.apply(&op).await;
@@ -515,8 +504,7 @@ mod tests {
         let path = create_test_file(dir.path(), "test.txt", "original content").await;
 
         let wrong_hash = ContentHash::compute(b"different content");
-        let op = EditOp::replace(&path, Span::new(0, 8), "modified")
-            .with_expected_hash(wrong_hash);
+        let op = EditOp::replace(&path, Span::new(0, 8), "modified").with_expected_hash(wrong_hash);
         let editor = Editor::new();
 
         let result = editor.apply(&op).await;
@@ -786,8 +774,8 @@ mod tests {
         let result1 = editor.apply(&op1).await.unwrap();
 
         // Second edit - use new hash
-        let op2 = EditOp::replace(&path, Span::new(6, 11), "WORLD")
-            .with_expected_hash(result1.new_hash);
+        let op2 =
+            EditOp::replace(&path, Span::new(6, 11), "WORLD").with_expected_hash(result1.new_hash);
         editor.apply(&op2).await.unwrap();
 
         let content = fs::read_to_string(&path).await.unwrap();
@@ -807,8 +795,8 @@ mod tests {
         fs::write(&path, "modified by other").await.unwrap();
 
         // Try to edit with old hash - should fail
-        let op = EditOp::replace(&path, Span::new(0, 8), "my edit")
-            .with_expected_hash(original_hash);
+        let op =
+            EditOp::replace(&path, Span::new(0, 8), "my edit").with_expected_hash(original_hash);
 
         let result = editor.apply(&op).await;
         assert!(matches!(result, Err(EditError::HashMismatch { .. })));
@@ -998,9 +986,9 @@ mod tests {
 
         // Multiple non-overlapping operations
         let ops = vec![
-            EditOp::delete(&path, Span::new(0, 2)),      // Remove "AA"
-            EditOp::insert(&path, 4, "XX"),              // Insert after "BB"
-            EditOp::delete(&path, Span::new(6, 8)),      // Remove "DD"
+            EditOp::delete(&path, Span::new(0, 2)), // Remove "AA"
+            EditOp::insert(&path, 4, "XX"),         // Insert after "BB"
+            EditOp::delete(&path, Span::new(6, 8)), // Remove "DD"
         ];
 
         let results = editor.apply_batch(&ops).await.unwrap();
@@ -1022,8 +1010,7 @@ mod tests {
         let editor = Editor::new();
 
         let wrong_hash = ContentHash::compute(b"wrong");
-        let op = EditOp::replace(&path, Span::new(0, 7), "new")
-            .with_expected_hash(wrong_hash);
+        let op = EditOp::replace(&path, Span::new(0, 7), "new").with_expected_hash(wrong_hash);
 
         let result = editor.preview(&op).await;
         assert!(matches!(result, Err(EditError::HashMismatch { .. })));

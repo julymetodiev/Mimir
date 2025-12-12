@@ -96,7 +96,10 @@ impl FileIndex {
 
     /// Get all paths in the index.
     pub fn paths(&self) -> Vec<PathBuf> {
-        self.by_path.iter().map(|entry| entry.key().clone()).collect()
+        self.by_path
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect()
     }
 
     /// Clear the index.

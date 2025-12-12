@@ -8,11 +8,16 @@ use mimir_types::{FileId, IdGenerator, Language, Symbol};
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::app::{find_project_root, Config};
+use crate::app::{Config, find_project_root};
 use crate::commands::sync::load_graph;
 
 /// Execute the trace command.
-pub async fn execute(file: Option<&Path>, symbol_name: &str, depth: usize, json: bool) -> Result<()> {
+pub async fn execute(
+    file: Option<&Path>,
+    symbol_name: &str,
+    depth: usize,
+    json: bool,
+) -> Result<()> {
     match file {
         Some(f) => execute_single_file(f, symbol_name, depth, json).await,
         None => execute_from_graph(symbol_name, depth, json).await,
@@ -20,7 +25,12 @@ pub async fn execute(file: Option<&Path>, symbol_name: &str, depth: usize, json:
 }
 
 /// Execute trace on a single file.
-async fn execute_single_file(file: &Path, symbol_name: &str, depth: usize, json: bool) -> Result<()> {
+async fn execute_single_file(
+    file: &Path,
+    symbol_name: &str,
+    depth: usize,
+    json: bool,
+) -> Result<()> {
     // Verify file exists
     if !file.exists() {
         anyhow::bail!("File not found: {}", file.display());
@@ -44,9 +54,7 @@ async fn execute_single_file(file: &Path, symbol_name: &str, depth: usize, json:
     let source = std::fs::read_to_string(file)
         .with_context(|| format!("Failed to read {}", file.display()))?;
 
-    let parsed = adapter
-        .parse(&source)
-        .context("Failed to parse file")?;
+    let parsed = adapter.parse(&source).context("Failed to parse file")?;
 
     // Create ID generator and graph
     let ids = IdGenerator::new();
@@ -82,7 +90,12 @@ async fn execute_single_file(file: &Path, symbol_name: &str, depth: usize, json:
             // Find target symbol by name
             let targets = graph.find_symbol(&reference.name);
             if let Some(to_symbol) = targets.first() {
-                graph.add_call(from_symbol.id, to_symbol.id, reference.span, reference.confidence);
+                graph.add_call(
+                    from_symbol.id,
+                    to_symbol.id,
+                    reference.span,
+                    reference.confidence,
+                );
             }
         }
     }
@@ -111,7 +124,13 @@ async fn execute_from_graph(symbol_name: &str, depth: usize, json: bool) -> Resu
 }
 
 /// Common trace logic.
-fn trace_symbol(graph: &CodeGraph, symbol_name: &str, depth: usize, json: bool, file: Option<&Path>) -> Result<()> {
+fn trace_symbol(
+    graph: &CodeGraph,
+    symbol_name: &str,
+    depth: usize,
+    json: bool,
+    file: Option<&Path>,
+) -> Result<()> {
     // Find the target symbol
     let symbols = graph.find_symbol(symbol_name);
     if symbols.is_empty() {

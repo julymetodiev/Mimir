@@ -5,7 +5,7 @@ use mimir_edit::{EditOp, Editor};
 use mimir_types::Span;
 use std::path::PathBuf;
 
-use crate::app::{find_project_root, Config};
+use crate::app::{Config, find_project_root};
 
 /// Edit mode specifying the type of edit operation.
 #[derive(Debug, Clone, Copy)]
@@ -29,7 +29,10 @@ impl std::str::FromStr for EditMode {
             "insert" => Ok(Self::Insert),
             "delete" => Ok(Self::Delete),
             "lines" => Ok(Self::Lines),
-            _ => Err(format!("Unknown edit mode: {}. Use: replace, insert, delete, lines", s)),
+            _ => Err(format!(
+                "Unknown edit mode: {}. Use: replace, insert, delete, lines",
+                s
+            )),
         }
     }
 }
@@ -115,8 +118,8 @@ pub async fn execute(
 
 /// Execute batch edit from JSON input.
 pub async fn execute_batch(json_input: &str, preview: bool, backup: bool) -> Result<()> {
-    let ops: Vec<EditOp> = serde_json::from_str(json_input)
-        .context("Failed to parse JSON edit operations")?;
+    let ops: Vec<EditOp> =
+        serde_json::from_str(json_input).context("Failed to parse JSON edit operations")?;
 
     if ops.is_empty() {
         anyhow::bail!("No edit operations provided");

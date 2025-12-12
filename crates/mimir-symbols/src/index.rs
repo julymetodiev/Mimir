@@ -22,10 +22,7 @@ impl NameIndex {
 
     /// Add a symbol to the index.
     pub fn insert(&self, name: String, symbol_id: SymbolId) {
-        self.index
-            .entry(name)
-            .or_default()
-            .push(symbol_id);
+        self.index.entry(name).or_default().push(symbol_id);
     }
 
     /// Look up symbols by name.
@@ -89,10 +86,7 @@ impl FileIndex {
 
     /// Add a symbol to the index.
     pub fn insert(&self, file_id: FileId, symbol_id: SymbolId) {
-        self.index
-            .entry(file_id)
-            .or_default()
-            .push(symbol_id);
+        self.index.entry(file_id).or_default().push(symbol_id);
     }
 
     /// Get all symbols in a file.

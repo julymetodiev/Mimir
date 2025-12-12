@@ -42,8 +42,7 @@ impl ParsedTree {
 
     /// Get the text for a node.
     pub fn node_text(&self, node: &Node<'_>) -> &str {
-        node.utf8_text(self.source_bytes())
-            .unwrap_or("")
+        node.utf8_text(self.source_bytes()).unwrap_or("")
     }
 
     /// Check if the parse had errors.

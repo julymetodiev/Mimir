@@ -126,11 +126,8 @@ impl CodeGraph {
 
     /// Add a call relationship between symbols.
     pub fn add_call(&self, from: SymbolId, to: SymbolId, span: Span, confidence: Confidence) {
-        self.relations.add_edge(
-            from,
-            to,
-            EdgeData::new(EdgeKind::Calls, span, confidence),
-        );
+        self.relations
+            .add_edge(from, to, EdgeData::new(EdgeKind::Calls, span, confidence));
     }
 
     /// Add an import relationship.

@@ -104,9 +104,21 @@ pub struct User {
 
         // Should have struct + 2 fields
         assert_eq!(symbols.len(), 3);
-        assert!(symbols.iter().any(|s| s.name == "User" && s.kind == SymbolKind::Struct));
-        assert!(symbols.iter().any(|s| s.name == "name" && s.kind == SymbolKind::Field));
-        assert!(symbols.iter().any(|s| s.name == "age" && s.kind == SymbolKind::Field));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "User" && s.kind == SymbolKind::Struct)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "name" && s.kind == SymbolKind::Field)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "age" && s.kind == SymbolKind::Field)
+        );
     }
 
     #[test]
@@ -125,8 +137,16 @@ pub enum Status {
 
         // Should have enum + 3 variants
         assert_eq!(symbols.len(), 4);
-        assert!(symbols.iter().any(|s| s.name == "Status" && s.kind == SymbolKind::Enum));
-        assert!(symbols.iter().any(|s| s.name == "Active" && s.kind == SymbolKind::EnumVariant));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Status" && s.kind == SymbolKind::Enum)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Active" && s.kind == SymbolKind::EnumVariant)
+        );
     }
 
     #[test]
@@ -150,8 +170,16 @@ impl User {
         // Should have impl + 2 methods
         assert_eq!(symbols.len(), 3);
         assert!(symbols.iter().any(|s| s.kind == SymbolKind::Impl));
-        assert!(symbols.iter().any(|s| s.name == "new" && s.kind == SymbolKind::Method));
-        assert!(symbols.iter().any(|s| s.name == "validate" && s.kind == SymbolKind::Method));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "new" && s.kind == SymbolKind::Method)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "validate" && s.kind == SymbolKind::Method)
+        );
     }
 
     #[test]
@@ -203,7 +231,11 @@ pub trait Processor {
         let tree = adapter.parse(source).expect("Failed to parse");
         let symbols = adapter.extract_symbols(&tree, FileId::new(1));
 
-        assert!(symbols.iter().any(|s| s.name == "Processor" && s.kind == SymbolKind::Trait));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Processor" && s.kind == SymbolKind::Trait)
+        );
     }
 
     #[test]
@@ -218,8 +250,16 @@ mod utils {
         let tree = adapter.parse(source).expect("Failed to parse");
         let symbols = adapter.extract_symbols(&tree, FileId::new(1));
 
-        assert!(symbols.iter().any(|s| s.name == "utils" && s.kind == SymbolKind::Module));
-        assert!(symbols.iter().any(|s| s.name == "helper" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "utils" && s.kind == SymbolKind::Module)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "helper" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]

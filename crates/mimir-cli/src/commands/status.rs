@@ -1,7 +1,7 @@
 //! Status command implementation.
 
-use crate::app::{find_project_root, App};
-use anyhow::{bail, Result};
+use crate::app::{App, find_project_root};
+use anyhow::{Result, bail};
 use mimir_snapshot::list_snapshots;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -68,7 +68,11 @@ pub async fn execute() -> Result<()> {
     // Count objects
     let objects_count = count_objects(&objects_dir).await;
     let objects_size = dir_size(&objects_dir).await;
-    println!("  Objects: {} ({} files)", format_bytes(objects_size), objects_count);
+    println!(
+        "  Objects: {} ({} files)",
+        format_bytes(objects_size),
+        objects_count
+    );
 
     // Count snapshots
     let snapshots = list_snapshots(&snapshots_dir).await.unwrap_or_default();

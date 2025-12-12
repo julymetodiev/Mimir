@@ -126,10 +126,7 @@ mod tests {
 
     #[test]
     fn test_from_path() {
-        assert_eq!(
-            Language::from_path(Path::new("main.rs")),
-            Language::Rust
-        );
+        assert_eq!(Language::from_path(Path::new("main.rs")), Language::Rust);
         assert_eq!(
             Language::from_path(Path::new("src/components/App.tsx")),
             Language::TypeScript

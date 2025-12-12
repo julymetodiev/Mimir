@@ -134,9 +134,7 @@ mod tests {
 
     #[test]
     fn test_trace_options() {
-        let opts = TraceOptions::new()
-            .with_max_depth(5)
-            .callers_only();
+        let opts = TraceOptions::new().with_max_depth(5).callers_only();
 
         assert_eq!(opts.max_depth, Some(5));
         assert!(opts.include_callers);

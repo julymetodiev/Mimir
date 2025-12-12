@@ -21,12 +21,12 @@ pub async fn restore_snapshot<S: ContentStore>(
 
         // Ensure parent directory exists
         if let Some(parent) = target_path.parent() {
-            fs::create_dir_all(parent).await.map_err(|e| {
-                StorageError::WriteFailed {
+            fs::create_dir_all(parent)
+                .await
+                .map_err(|e| StorageError::WriteFailed {
                     path: parent.to_path_buf(),
                     source: e,
-                }
-            })?;
+                })?;
         }
 
         // Get content from store
@@ -36,19 +36,20 @@ pub async fn restore_snapshot<S: ContentStore>(
             .ok_or_else(|| StorageError::ContentNotFound { hash: *hash })?;
 
         // Write to file
-        let mut file = fs::File::create(&target_path).await.map_err(|e| {
-            StorageError::WriteFailed {
-                path: target_path.clone(),
-                source: e,
-            }
-        })?;
+        let mut file =
+            fs::File::create(&target_path)
+                .await
+                .map_err(|e| StorageError::WriteFailed {
+                    path: target_path.clone(),
+                    source: e,
+                })?;
 
-        file.write_all(&content).await.map_err(|e| {
-            StorageError::WriteFailed {
+        file.write_all(&content)
+            .await
+            .map_err(|e| StorageError::WriteFailed {
                 path: target_path.clone(),
                 source: e,
-            }
-        })?;
+            })?;
 
         stats.files_restored += 1;
         stats.bytes_written += content.len() as u64;

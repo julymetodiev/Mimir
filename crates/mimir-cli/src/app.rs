@@ -105,7 +105,9 @@ impl App {
     }
 
     /// Initialize the storage backend.
-    pub async fn init_storage(&mut self) -> Result<&FilesHandle<FilesystemContentStore>, StorageError> {
+    pub async fn init_storage(
+        &mut self,
+    ) -> Result<&FilesHandle<FilesystemContentStore>, StorageError> {
         if self.files_handle.is_none() {
             let store = FilesystemContentStore::new(&self.config.objects_dir).await?;
             let index = Arc::new(FileIndex::new());

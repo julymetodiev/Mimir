@@ -114,10 +114,7 @@ impl Scanner {
                 .unwrap_or_else(Utc::now);
 
             // Compute relative path
-            let relative_path = path
-                .strip_prefix(&root)
-                .unwrap_or(path)
-                .to_path_buf();
+            let relative_path = path.strip_prefix(&root).unwrap_or(path).to_path_buf();
 
             files.push(ScannedFile {
                 path: relative_path,

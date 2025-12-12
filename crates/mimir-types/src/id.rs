@@ -66,7 +66,10 @@ macro_rules! define_id {
     };
 }
 
-define_id!(SymbolId, "Unique identifier for a symbol in the code graph.");
+define_id!(
+    SymbolId,
+    "Unique identifier for a symbol in the code graph."
+);
 define_id!(FileId, "Unique identifier for a file in the index.");
 define_id!(TaskId, "Unique identifier for a task.");
 define_id!(StepId, "Unique identifier for a step within a task.");

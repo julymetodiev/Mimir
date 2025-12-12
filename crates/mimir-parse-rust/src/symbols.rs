@@ -1,7 +1,7 @@
 //! Symbol extraction for Rust.
 
-use mimir_parse_core::extracted::ExtractedSymbol;
 use mimir_parse_core::ParsedTree;
+use mimir_parse_core::extracted::ExtractedSymbol;
 use mimir_types::{FileId, Language, QualifiedName, Range, Span, SymbolKind, Visibility};
 use tree_sitter::Node;
 
@@ -92,8 +92,14 @@ fn extract_function(node: &Node, source: &[u8], parent: Option<&str>) -> Option<
     let range = node_to_range(node);
     let span = node_to_span(node);
 
-    let mut sym = ExtractedSymbol::new(name.clone(), SymbolKind::Function, Language::Rust, range, span)
-        .with_visibility(visibility);
+    let mut sym = ExtractedSymbol::new(
+        name.clone(),
+        SymbolKind::Function,
+        Language::Rust,
+        range,
+        span,
+    )
+    .with_visibility(visibility);
 
     if let Some(p) = parent {
         sym = sym
@@ -112,8 +118,14 @@ fn extract_struct(node: &Node, source: &[u8], parent: Option<&str>) -> Option<Ex
     let range = node_to_range(node);
     let span = node_to_span(node);
 
-    let mut sym = ExtractedSymbol::new(name.clone(), SymbolKind::Struct, Language::Rust, range, span)
-        .with_visibility(visibility);
+    let mut sym = ExtractedSymbol::new(
+        name.clone(),
+        SymbolKind::Struct,
+        Language::Rust,
+        range,
+        span,
+    )
+    .with_visibility(visibility);
 
     if let Some(p) = parent {
         sym = sym
@@ -124,7 +136,12 @@ fn extract_struct(node: &Node, source: &[u8], parent: Option<&str>) -> Option<Ex
     Some(sym)
 }
 
-fn extract_struct_fields(node: &Node, source: &[u8], symbols: &mut Vec<ExtractedSymbol>, struct_name: &str) {
+fn extract_struct_fields(
+    node: &Node,
+    source: &[u8],
+    symbols: &mut Vec<ExtractedSymbol>,
+    struct_name: &str,
+) {
     if let Some(body) = node.child_by_field_name("body") {
         for i in 0..body.named_child_count() {
             if let Some(field) = body.named_child(i) {
@@ -178,7 +195,12 @@ fn extract_enum(node: &Node, source: &[u8], parent: Option<&str>) -> Option<Extr
     Some(sym)
 }
 
-fn extract_enum_variants(node: &Node, source: &[u8], symbols: &mut Vec<ExtractedSymbol>, enum_name: &str) {
+fn extract_enum_variants(
+    node: &Node,
+    source: &[u8],
+    symbols: &mut Vec<ExtractedSymbol>,
+    enum_name: &str,
+) {
     if let Some(body) = node.child_by_field_name("body") {
         for i in 0..body.named_child_count() {
             if let Some(variant) = body.named_child(i) {
@@ -218,8 +240,9 @@ fn extract_trait(node: &Node, source: &[u8], parent: Option<&str>) -> Option<Ext
     let range = node_to_range(node);
     let span = node_to_span(node);
 
-    let mut sym = ExtractedSymbol::new(name.clone(), SymbolKind::Trait, Language::Rust, range, span)
-        .with_visibility(visibility);
+    let mut sym =
+        ExtractedSymbol::new(name.clone(), SymbolKind::Trait, Language::Rust, range, span)
+            .with_visibility(visibility);
 
     if let Some(p) = parent {
         sym = sym
@@ -249,7 +272,13 @@ fn extract_impl(node: &Node, source: &[u8], parent: Option<&str>) -> Option<Extr
         format!("<{}>", name)
     };
 
-    let mut sym = ExtractedSymbol::new(impl_name.clone(), SymbolKind::Impl, Language::Rust, range, span);
+    let mut sym = ExtractedSymbol::new(
+        impl_name.clone(),
+        SymbolKind::Impl,
+        Language::Rust,
+        range,
+        span,
+    );
 
     if let Some(p) = parent {
         sym = sym.with_parent(p.to_string());
@@ -258,7 +287,12 @@ fn extract_impl(node: &Node, source: &[u8], parent: Option<&str>) -> Option<Extr
     Some(sym)
 }
 
-fn extract_impl_methods(node: &Node, source: &[u8], symbols: &mut Vec<ExtractedSymbol>, impl_name: &str) {
+fn extract_impl_methods(
+    node: &Node,
+    source: &[u8],
+    symbols: &mut Vec<ExtractedSymbol>,
+    impl_name: &str,
+) {
     if let Some(body) = node.child_by_field_name("body") {
         for i in 0..body.named_child_count() {
             if let Some(child) = body.named_child(i) {
@@ -281,8 +315,14 @@ fn extract_module(node: &Node, source: &[u8], parent: Option<&str>) -> Option<Ex
     let range = node_to_range(node);
     let span = node_to_span(node);
 
-    let mut sym = ExtractedSymbol::new(name.clone(), SymbolKind::Module, Language::Rust, range, span)
-        .with_visibility(visibility);
+    let mut sym = ExtractedSymbol::new(
+        name.clone(),
+        SymbolKind::Module,
+        Language::Rust,
+        range,
+        span,
+    )
+    .with_visibility(visibility);
 
     if let Some(p) = parent {
         sym = sym

@@ -73,7 +73,8 @@ impl SymbolTable {
             // Remove from indices
             self.name_index.remove(&symbol.name, id);
             self.file_index.remove(symbol.file_id, id);
-            self.qualified_index.remove(&symbol.qualified_name.join("::"));
+            self.qualified_index
+                .remove(&symbol.qualified_name.join("::"));
             Some(symbol)
         } else {
             None
@@ -115,7 +116,8 @@ impl SymbolTable {
             .filter_map(|id| {
                 if let Some((_, symbol)) = self.symbols.remove(&id) {
                     self.name_index.remove(&symbol.name, id);
-                    self.qualified_index.remove(&symbol.qualified_name.join("::"));
+                    self.qualified_index
+                        .remove(&symbol.qualified_name.join("::"));
                     Some(symbol)
                 } else {
                     None
@@ -257,8 +259,16 @@ mod tests {
         let table = SymbolTable::new();
         let file_id: FileId = ids.next();
 
-        table.insert(make_qualified_symbol(&["crate", "module", "foo"], file_id, &ids));
-        table.insert(make_qualified_symbol(&["crate", "other", "foo"], file_id, &ids));
+        table.insert(make_qualified_symbol(
+            &["crate", "module", "foo"],
+            file_id,
+            &ids,
+        ));
+        table.insert(make_qualified_symbol(
+            &["crate", "other", "foo"],
+            file_id,
+            &ids,
+        ));
 
         let sym1 = table.find_by_qualified_name("crate::module::foo");
         assert!(sym1.is_some());

@@ -1,10 +1,10 @@
 //! Init command implementation.
 
 use crate::app::App;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use mimir_content::ContentStore;
 use mimir_files::Scanner;
-use mimir_snapshot::{create_snapshot, FileInfo};
+use mimir_snapshot::{FileInfo, create_snapshot};
 use mimir_types::{FileId, SnapshotId};
 use std::collections::HashMap;
 use tracing::info;
@@ -100,7 +100,11 @@ pub async fn execute(force: bool) -> Result<()> {
     print_step(5, 5, "Creating initial snapshot...");
 
     let snapshot_id = SnapshotId::new(1);
-    let snapshot = create_snapshot(snapshot_id, file_infos, Some("Initial snapshot".to_string()))?;
+    let snapshot = create_snapshot(
+        snapshot_id,
+        file_infos,
+        Some("Initial snapshot".to_string()),
+    )?;
 
     // Save snapshot to disk
     let snapshot_path = snapshots_dir.join(format!("snap_{}", snapshot.id.value()));

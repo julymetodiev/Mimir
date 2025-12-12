@@ -7,7 +7,7 @@ mod list;
 mod restore;
 mod snapshot;
 
-pub use create::{create_snapshot, FileInfo};
+pub use create::{FileInfo, create_snapshot};
 pub use list::list_snapshots;
 pub use restore::restore_snapshot;
 pub use snapshot::{Snapshot, SnapshotMetadata};

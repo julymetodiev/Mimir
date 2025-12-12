@@ -59,7 +59,11 @@ pub enum EditOp {
 
 impl EditOp {
     /// Create a replace operation.
-    pub fn replace(file_path: impl Into<PathBuf>, span: Span, new_content: impl Into<String>) -> Self {
+    pub fn replace(
+        file_path: impl Into<PathBuf>,
+        span: Span,
+        new_content: impl Into<String>,
+    ) -> Self {
         Self::Replace {
             file_path: file_path.into(),
             span,
@@ -69,7 +73,11 @@ impl EditOp {
     }
 
     /// Create an insert operation.
-    pub fn insert(file_path: impl Into<PathBuf>, position: u32, content: impl Into<String>) -> Self {
+    pub fn insert(
+        file_path: impl Into<PathBuf>,
+        position: u32,
+        content: impl Into<String>,
+    ) -> Self {
         Self::Insert {
             file_path: file_path.into(),
             position,
@@ -185,7 +193,10 @@ mod tests {
     #[test]
     fn test_insert_op() {
         let op = EditOp::insert("test.rs", 50, "inserted text");
-        if let EditOp::Insert { position, content, .. } = op {
+        if let EditOp::Insert {
+            position, content, ..
+        } = op
+        {
             assert_eq!(position, 50);
             assert_eq!(content, "inserted text");
         } else {
@@ -207,7 +218,12 @@ mod tests {
     #[test]
     fn test_replace_lines_op() {
         let op = EditOp::replace_lines("test.rs", 5, 10, "new lines\n");
-        if let EditOp::ReplaceLines { start_line, end_line, .. } = op {
+        if let EditOp::ReplaceLines {
+            start_line,
+            end_line,
+            ..
+        } = op
+        {
             assert_eq!(start_line, 5);
             assert_eq!(end_line, 10);
         } else {

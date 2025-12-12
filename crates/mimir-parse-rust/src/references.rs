@@ -1,7 +1,7 @@
 //! Reference extraction for Rust.
 
-use mimir_parse_core::extracted::ExtractedReference;
 use mimir_parse_core::ParsedTree;
+use mimir_parse_core::extracted::ExtractedReference;
 use mimir_types::{Confidence, FileId, Range, ReferenceKind, Span};
 use tree_sitter::Node;
 
@@ -74,7 +74,8 @@ fn extract_call(node: &Node, source: &[u8], container: Option<&str>) -> Option<E
             let name = name_node.utf8_text(source).ok()?.to_string();
 
             // Get the path for context
-            let path = func.child_by_field_name("path")
+            let path = func
+                .child_by_field_name("path")
                 .and_then(|p| p.utf8_text(source).ok())
                 .map(|s| s.to_string());
 

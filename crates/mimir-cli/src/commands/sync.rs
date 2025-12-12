@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::app::{find_project_root, Config};
+use crate::app::{Config, find_project_root};
 
 /// Persisted graph data.
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -61,7 +61,11 @@ pub async fn execute() -> Result<()> {
         .filter(|f| f.language == Language::Rust)
         .collect();
 
-    println!("Found {} Rust files (of {} total code files)", rust_files.len(), scanned_files.len());
+    println!(
+        "Found {} Rust files (of {} total code files)",
+        rust_files.len(),
+        scanned_files.len()
+    );
 
     let mut total_symbols = 0;
     let mut total_refs = 0;
@@ -70,7 +74,9 @@ pub async fn execute() -> Result<()> {
         let rel_path = scanned.path.to_string_lossy().to_string();
 
         // Get or create FileId
-        let file_id: FileId = *file_ids.entry(rel_path.clone()).or_insert_with(|| ids.next());
+        let file_id: FileId = *file_ids
+            .entry(rel_path.clone())
+            .or_insert_with(|| ids.next());
 
         // Read and parse
         let source = match std::fs::read_to_string(&scanned.absolute_path) {
@@ -118,18 +124,27 @@ pub async fn execute() -> Result<()> {
         let references = adapter.extract_references(&parsed, file_id);
         for reference in &references {
             // Find source symbol (containing function)
-            if let Some(from_symbol) = find_containing_symbol(&graph, file_id, reference.span.start) {
+            if let Some(from_symbol) = find_containing_symbol(&graph, file_id, reference.span.start)
+            {
                 // Find target symbol by name
                 let targets = graph.find_symbol(&reference.name);
                 if let Some(to_symbol) = targets.first() {
-                    graph.add_call(from_symbol.id, to_symbol.id, reference.span, reference.confidence);
+                    graph.add_call(
+                        from_symbol.id,
+                        to_symbol.id,
+                        reference.span,
+                        reference.confidence,
+                    );
                     total_refs += 1;
                 }
             }
         }
     }
 
-    println!("Indexed {} symbols, {} references", total_symbols, total_refs);
+    println!(
+        "Indexed {} symbols, {} references",
+        total_symbols, total_refs
+    );
 
     // Persist the graph
     persist_graph(&graph, &ids, &file_ids, &config.graph_dir).await?;
@@ -200,8 +215,9 @@ async fn persist_graph(
 }
 
 /// Load the graph from disk.
-#[allow(dead_code)]
-pub async fn load_graph(config: &Config) -> Result<Option<(CodeGraph, IdGenerator, HashMap<String, FileId>)>> {
+pub async fn load_graph(
+    config: &Config,
+) -> Result<Option<(CodeGraph, IdGenerator, HashMap<String, FileId>)>> {
     let graph_file = config.graph_dir.join("graph.json");
 
     if !graph_file.exists() {

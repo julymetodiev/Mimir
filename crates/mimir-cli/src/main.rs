@@ -47,8 +47,8 @@ async fn main() -> anyhow::Result<()> {
             preview,
             backup,
         } => {
-            let edit_mode: commands::edit::EditMode = mode.parse()
-                .map_err(|e: String| anyhow::anyhow!(e))?;
+            let edit_mode: commands::edit::EditMode =
+                mode.parse().map_err(|e: String| anyhow::anyhow!(e))?;
             commands::edit::execute(file, edit_mode, start, end, content, preview, backup).await?
         }
         commands::Commands::EditBatch {

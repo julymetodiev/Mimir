@@ -33,7 +33,9 @@ mod tests {
 
     #[test]
     fn test_compress_decompress() {
-        let original = b"Hello, World! This is some test data that should compress well when repeated. ".repeat(100);
+        let original =
+            b"Hello, World! This is some test data that should compress well when repeated. "
+                .repeat(100);
 
         let compressed = compress(&original).unwrap();
         let decompressed = decompress(&compressed).unwrap();
