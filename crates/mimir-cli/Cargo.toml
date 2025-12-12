@@ -24,6 +24,8 @@ mimir-graph = { workspace = true }
 mimir-parse-core = { workspace = true }
 mimir-parse-rust = { workspace = true }
 mimir-edit = { workspace = true }
+mimir-protocol = { workspace = true }
+mimir-graph-actor = { workspace = true }
 clap = { workspace = true }
 ignore = { workspace = true }
 tokio = { workspace = true }

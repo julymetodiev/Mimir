@@ -11,6 +11,24 @@ use tokio::fs;
 /// The name of the Mimir data directory.
 pub const MIMIR_DIR: &str = ".agent";
 
+/// Sync configuration.
+#[derive(Debug, Clone)]
+pub struct SyncConfig {
+    /// Automatically sync before queries (trace, find, etc.)
+    pub sync_on_query: bool,
+    /// Automatically sync after edits.
+    pub sync_on_edit: bool,
+}
+
+impl Default for SyncConfig {
+    fn default() -> Self {
+        Self {
+            sync_on_query: true,
+            sync_on_edit: true,
+        }
+    }
+}
+
 /// Application configuration.
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -31,6 +49,9 @@ pub struct Config {
 
     /// Path to the graph directory.
     pub graph_dir: PathBuf,
+
+    /// Sync configuration.
+    pub sync: SyncConfig,
 }
 
 impl Config {
@@ -50,6 +71,7 @@ impl Config {
             index_dir,
             snapshots_dir,
             graph_dir,
+            sync: SyncConfig::default(),
         }
     }
 

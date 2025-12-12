@@ -6,6 +6,7 @@ use mimir_types::Span;
 use std::path::PathBuf;
 
 use crate::app::{Config, find_project_root};
+use crate::commands::sync::sync_project;
 
 /// Edit mode specifying the type of edit operation.
 #[derive(Debug, Clone, Copy)]
@@ -111,6 +112,12 @@ pub async fn execute(
             result.bytes_changed
         );
         println!("  Lines changed: {:+}", result.lines_changed);
+
+        // Auto-sync after edit if enabled (default: true)
+        if config.sync.sync_on_edit {
+            let (_graph, _ids, _file_ids, stats) = sync_project(&config, false).await?;
+            println!("  Graph synced: {} symbols", stats.symbols_count);
+        }
     }
 
     Ok(())

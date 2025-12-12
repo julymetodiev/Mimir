@@ -54,6 +54,7 @@
 mod channel;
 mod command;
 mod event;
+pub mod ipc;
 mod response;
 
 pub use channel::{
@@ -66,3 +67,8 @@ pub use command::{FindOptions, GraphCommand, SyncResult, TraceOptions};
 pub use event::{FileEvent, GraphEvent};
 
 pub use response::{FindResponse, StatsResponse, SymbolInfo, TraceNode, TraceRelation, TraceResponse};
+
+pub use ipc::{
+    DaemonStatus, IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult, RequestId,
+    SOCKET_NAME, socket_path,
+};

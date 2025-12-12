@@ -123,16 +123,14 @@ impl FileWatcher {
         let debounce = self.config.debounce;
         let config = self.config.clone();
 
+        // Get runtime handle BEFORE spawning the thread
+        let rt = tokio::runtime::Handle::current();
+
         // Spawn the notify watcher in a blocking task
         let event_tx_clone = event_tx.clone();
         std::thread::spawn(move || {
-            let rt = match tokio::runtime::Handle::try_current() {
-                Ok(rt) => rt,
-                Err(_) => {
-                    error!("No tokio runtime available");
-                    return;
-                }
-            };
+            // Use the captured runtime handle
+            let rt = rt;
 
             let (tx, rx) = std::sync::mpsc::channel();
             let mut debouncer = match new_debouncer(debounce, tx) {

@@ -25,20 +25,26 @@ struct PersistedGraph {
     next_id: u64,
 }
 
-/// Execute the sync command.
-pub async fn execute() -> Result<()> {
-    // Find project root
-    let root = find_project_root().context("Not in a Mimir project. Run 'mimir init' first.")?;
-    let config = Config::new(&root);
+/// Sync result statistics.
+#[derive(Debug, Clone)]
+pub struct SyncStats {
+    /// Number of files processed.
+    pub files_count: usize,
+    /// Number of symbols indexed.
+    pub symbols_count: usize,
+    /// Number of references indexed.
+    pub references_count: usize,
+}
 
-    if !config.is_initialized() {
-        anyhow::bail!("Project not initialized. Run 'mimir init' first.");
-    }
-
+/// Sync the project and return the graph.
+/// This is the core sync function that can be called by other commands.
+pub async fn sync_project(config: &Config, verbose: bool) -> Result<(CodeGraph, IdGenerator, HashMap<String, FileId>, SyncStats)> {
     // Ensure graph directory exists
     tokio::fs::create_dir_all(&config.graph_dir).await?;
 
-    println!("Syncing project: {}", root.display());
+    if verbose {
+        println!("Syncing project: {}", config.root.display());
+    }
 
     // Setup adapter registry
     let registry = AdapterRegistry::new();
@@ -52,7 +58,7 @@ pub async fn execute() -> Result<()> {
     let mut file_ids: HashMap<String, FileId> = HashMap::new();
 
     // Use mimir-files Scanner for proper gitignore support
-    let scanner = Scanner::new(&root);
+    let scanner = Scanner::new(&config.root);
     let scanned_files = scanner.scan().await?;
 
     // Filter to only supported languages (Rust for now)
@@ -61,11 +67,13 @@ pub async fn execute() -> Result<()> {
         .filter(|f| f.language == Language::Rust)
         .collect();
 
-    println!(
-        "Found {} Rust files (of {} total code files)",
-        rust_files.len(),
-        scanned_files.len()
-    );
+    if verbose {
+        println!(
+            "Found {} Rust files (of {} total code files)",
+            rust_files.len(),
+            scanned_files.len()
+        );
+    }
 
     let mut total_symbols = 0;
     let mut total_refs = 0;
@@ -82,7 +90,9 @@ pub async fn execute() -> Result<()> {
         let source = match std::fs::read_to_string(&scanned.absolute_path) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("  Warning: Could not read {}: {}", rel_path, e);
+                if verbose {
+                    eprintln!("  Warning: Could not read {}: {}", rel_path, e);
+                }
                 continue;
             }
         };
@@ -95,7 +105,9 @@ pub async fn execute() -> Result<()> {
         let parsed = match adapter.parse(&source) {
             Some(p) => p,
             None => {
-                eprintln!("  Warning: Could not parse {}", rel_path);
+                if verbose {
+                    eprintln!("  Warning: Could not parse {}", rel_path);
+                }
                 continue;
             }
         };
@@ -141,15 +153,40 @@ pub async fn execute() -> Result<()> {
         }
     }
 
-    println!(
-        "Indexed {} symbols, {} references",
-        total_symbols, total_refs
-    );
+    if verbose {
+        println!(
+            "Indexed {} symbols, {} references",
+            total_symbols, total_refs
+        );
+    }
 
     // Persist the graph
     persist_graph(&graph, &ids, &file_ids, &config.graph_dir).await?;
 
-    println!("Graph saved to {}", config.graph_dir.display());
+    if verbose {
+        println!("Graph saved to {}", config.graph_dir.display());
+    }
+
+    let stats = SyncStats {
+        files_count: rust_files.len(),
+        symbols_count: total_symbols,
+        references_count: total_refs,
+    };
+
+    Ok((graph, ids, file_ids, stats))
+}
+
+/// Execute the sync command.
+pub async fn execute() -> Result<()> {
+    // Find project root
+    let root = find_project_root().context("Not in a Mimir project. Run 'mimir init' first.")?;
+    let config = Config::new(&root);
+
+    if !config.is_initialized() {
+        anyhow::bail!("Project not initialized. Run 'mimir init' first.");
+    }
+
+    let (_graph, _ids, _file_ids, _stats) = sync_project(&config, true).await?;
 
     Ok(())
 }

@@ -1,5 +1,6 @@
 //! CLI commands.
 
+pub mod daemon;
 pub mod edit;
 pub mod init;
 pub mod status;
@@ -9,9 +10,30 @@ pub mod trace;
 use clap::Subcommand;
 use std::path::PathBuf;
 
+/// Daemon subcommands.
+#[derive(Subcommand)]
+pub enum DaemonCommands {
+    /// Start the daemon.
+    Start {
+        /// Run in foreground (don't daemonize).
+        #[arg(short, long)]
+        foreground: bool,
+    },
+    /// Stop the daemon.
+    Stop,
+    /// Show daemon status.
+    Status,
+}
+
 /// Available commands.
 #[derive(Subcommand)]
 pub enum Commands {
+    /// Manage the Mimir daemon (background graph service).
+    Daemon {
+        #[command(subcommand)]
+        command: DaemonCommands,
+    },
+
     /// Initialize Mimir in the current directory.
     Init {
         /// Force re-initialization even if already initialized.

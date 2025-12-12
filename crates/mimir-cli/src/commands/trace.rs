@@ -4,12 +4,14 @@ use anyhow::{Context, Result};
 use mimir_graph::{CodeGraph, TraceOptions};
 use mimir_parse_core::AdapterRegistry;
 use mimir_parse_rust::RustAdapter;
+use mimir_protocol::TraceOptions as IpcTraceOptions;
 use mimir_types::{FileId, IdGenerator, Language, Symbol};
 use std::path::Path;
 use std::sync::Arc;
 
 use crate::app::{Config, find_project_root};
-use crate::commands::sync::load_graph;
+use crate::commands::sync::{load_graph, sync_project};
+use crate::daemon::{check_daemon_running, DaemonClient};
 
 /// Execute the trace command.
 pub async fn execute(
@@ -114,13 +116,76 @@ async fn execute_from_graph(symbol_name: &str, depth: usize, json: bool) -> Resu
         anyhow::bail!("Project not initialized. Run 'mimir init' first.");
     }
 
-    // Load the graph
-    let (graph, _ids, _file_ids) = load_graph(&config)
-        .await?
-        .context("Graph not found. Run 'mimir sync' first.")?;
+    // Check if daemon is running - use it for automatic updates
+    if check_daemon_running(&config.agent_dir) {
+        return execute_via_daemon(&config, symbol_name, depth, json).await;
+    }
+
+    // Fallback: sync and query locally
+    let graph = if config.sync.sync_on_query {
+        // Sync before query to ensure graph is up-to-date
+        let (graph, _ids, _file_ids, _stats) = sync_project(&config, false).await?;
+        graph
+    } else {
+        // Load from disk
+        let (graph, _ids, _file_ids) = load_graph(&config)
+            .await?
+            .context("Graph not found. Run 'mimir sync' first.")?;
+        graph
+    };
 
     // Find and trace the symbol
     trace_symbol(&graph, symbol_name, depth, json, None)
+}
+
+/// Execute trace via the daemon.
+async fn execute_via_daemon(config: &Config, symbol_name: &str, depth: usize, json: bool) -> Result<()> {
+    let mut client = DaemonClient::connect(&config.agent_dir).await?;
+
+    let options = IpcTraceOptions {
+        max_depth: Some(depth as u32),
+        callers_only: false,
+        callees_only: false,
+        cross_language: false,
+    };
+
+    let result = client.trace_by_name(symbol_name, options).await?;
+
+    // Output results
+    if json {
+        let output = serde_json::to_string_pretty(&result)?;
+        println!("{}", output);
+    } else {
+        println!("Trace for: {} ({:?})", result.root.name, result.root.kind);
+        println!("  Line: {}", result.root.start_line);
+        println!("  (via daemon)");
+        println!();
+
+        if !result.callers.is_empty() {
+            println!("Callers ({}):", result.callers.len());
+            for node in &result.callers {
+                let indent = "  ".repeat(node.depth as usize);
+                println!("{}← {} ({:?})", indent, node.symbol.name, node.symbol.kind);
+            }
+            println!();
+        }
+
+        if !result.callees.is_empty() {
+            println!("Callees ({}):", result.callees.len());
+            for node in &result.callees {
+                let indent = "  ".repeat(node.depth as usize);
+                println!("{}→ {} ({:?})", indent, node.symbol.name, node.symbol.kind);
+            }
+            println!();
+        }
+
+        println!(
+            "Total: {} symbols, max depth: {}",
+            result.total_symbols, result.max_depth_reached
+        );
+    }
+
+    Ok(())
 }
 
 /// Common trace logic.

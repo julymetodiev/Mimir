@@ -1,0 +1,31 @@
+/// A user in the system.
+#[derive(Debug, Clone)]
+pub struct User {
+    name: String,
+    email: String,
+}
+
+impl User {
+    /// Create a new user.
+    pub fn new(name: &str, email: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            email: email.to_string(),
+        }
+    }
+
+    /// Get the user's name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Get the user's email.
+    pub fn email(&self) -> &str {
+        &self.email
+    }
+
+    /// Check if email matches.
+    pub fn has_email(&self, email: &str) -> bool {
+        self.email == email
+    }
+}

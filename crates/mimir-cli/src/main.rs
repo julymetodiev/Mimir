@@ -2,6 +2,7 @@
 
 mod app;
 mod commands;
+mod daemon;
 
 use clap::Parser;
 
@@ -29,6 +30,13 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     match cli.command {
+        commands::Commands::Daemon { command } => match command {
+            commands::DaemonCommands::Start { foreground } => {
+                commands::daemon::execute_start(foreground).await?
+            }
+            commands::DaemonCommands::Stop => commands::daemon::execute_stop().await?,
+            commands::DaemonCommands::Status => commands::daemon::execute_status().await?,
+        },
         commands::Commands::Init { force } => commands::init::execute(force).await?,
         commands::Commands::Status => commands::status::execute().await?,
         commands::Commands::Sync => commands::sync::execute().await?,
