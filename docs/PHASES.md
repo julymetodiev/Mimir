@@ -1,0 +1,624 @@
+# Mímir Implementation Phases
+
+This document outlines the implementation plan in phases with milestones.
+
+---
+
+## Milestones Overview
+
+| Milestone | Description | Key Deliverable |
+|-----------|-------------|-----------------|
+| M1 | Storage + Init | `mimir init`, content store |
+| M2 | Single-Language Graph | `mimir trace` for Rust |
+| M3 | Actor + Sync | File watching, incremental sync |
+| M4 | Multi-Language | TS, Python, Go + cross-language trace |
+| M5 | Semantic Search | `mimir search` with embeddings |
+| M6 | Agent | `mimir agent` autonomous coding |
+
+---
+
+## Phase 0: Project Setup
+
+**Focus**: Repository and workspace setup
+
+```
+Tasks:
+├── Repository setup
+│   ├── Create GitHub repo
+│   ├── Setup CI/CD (GitHub Actions)
+│   ├── Configure rustfmt, clippy
+│   └── Setup pre-commit hooks
+│
+├── Crate structure
+│   ├── Create workspace Cargo.toml
+│   ├── Initialize Layer 0 crates:
+│   │   ├── mimir-types
+│   │   └── mimir-error
+│   ├── Initialize Layer 1 crates:
+│   │   ├── mimir-content
+│   │   ├── mimir-cache
+│   │   └── mimir-persist
+│   └── Setup internal dependencies
+│
+├── Dependencies audit
+│   ├── Lock versions for:
+│   │   ├── tree-sitter = "0.22"
+│   │   ├── dashmap = "5.5"
+│   │   ├── petgraph = "0.6"
+│   │   ├── moka = "0.12"
+│   │   ├── blake3 = "1.5"
+│   │   └── tokio = "1.36"
+│   └── Verify no conflicts
+│
+└── Documentation
+    ├── README.md
+    ├── ARCHITECTURE.md
+    └── CONTRIBUTING.md
+```
+
+**Deliverables**:
+- Workspace compiles
+- CI runs clippy + tests
+- Basic documentation in place
+
+---
+
+## Phase 1: Storage Foundation (M1)
+
+**Focus**: Content store, file index, basic persistence
+
+### Part A: Core Storage
+
+```
+Tasks:
+├── mimir-types
+│   ├── ID types (SymbolId, FileId, etc.)
+│   ├── Location, Span types
+│   ├── Language enum
+│   └── Tests: serialization round-trip
+│
+├── mimir-error
+│   ├── Error hierarchy (MimirError, StorageError, etc.)
+│   └── Tests: error conversions
+│
+├── mimir-content
+│   ├── ContentHash type
+│   ├── ContentStore trait
+│   ├── Filesystem backend
+│   │   ├── Blake3 hashing
+│   │   ├── Zstd compression
+│   │   └── Atomic writes (write to tmp, rename)
+│   ├── Memory backend (for testing)
+│   ├── LRU cache (moka)
+│   └── Tests: store/retrieve/dedup
+│
+└── Basic serialization
+    ├── bincode for internal structures
+    └── Tests: round-trip
+```
+
+### Part B: File Index
+
+```
+Tasks:
+├── mimir-files
+│   ├── FileEntry structure
+│   ├── FileIndex (DashMap)
+│   ├── Directory scanner
+│   │   ├── Ignore patterns (.gitignore style)
+│   │   ├── Language detection
+│   │   └── Incremental scan (mtime check)
+│   ├── ChangeSet (added/modified/deleted)
+│   └── Tests: scan/detect changes
+│
+├── mimir-snapshot
+│   ├── Snapshot structure
+│   ├── Create snapshot
+│   ├── List snapshots
+│   ├── Restore snapshot
+│   └── Tests: create/restore cycle
+│
+└── CLI: init command
+    ├── `mimir init` creates .agent/
+    ├── `mimir status` shows indexed files
+    └── Integration tests
+```
+
+**M1 Deliverables**:
+- `mimir init` creates `.agent/` directory
+- `mimir status` shows indexed files
+- Content deduplication works
+- Snapshots can be created/restored
+
+---
+
+## Phase 2: Core Graph (M2)
+
+**Focus**: Symbol table, reference graph, basic queries
+
+### Part A: Data Structures
+
+```
+Tasks:
+├── mimir-types (additions)
+│   ├── Symbol, QualifiedName
+│   ├── SymbolKind enum
+│   ├── Reference, ReferenceKind
+│   ├── Confidence levels
+│   └── Serialization
+│
+├── mimir-symbols
+│   ├── Symbol table
+│   │   ├── DashMap<SymbolId, Arc<Symbol>>
+│   │   ├── Name index (name → Vec<SymbolId>)
+│   │   └── File index (FileId → Vec<SymbolId>)
+│   ├── SymbolsHandle pattern
+│   └── Tests: CRUD operations
+│
+└── mimir-relations
+    ├── petgraph::StableGraph wrapper
+    ├── ArcSwap for snapshot reads
+    ├── Add/remove edges
+    ├── Basic traversal
+    └── Tests: graph operations
+```
+
+### Part B: First Language Adapter
+
+```
+Tasks:
+├── mimir-parse-core
+│   ├── LanguageAdapter trait
+│   ├── ParsedTree wrapper
+│   ├── ExtractedSymbol, ExtractedReference
+│   ├── AdapterRegistry
+│   └── Tests: registry operations
+│
+├── mimir-parse-rust
+│   ├── tree-sitter-rust setup
+│   ├── Query definitions (functions, structs, etc.)
+│   ├── Symbol extraction
+│   ├── Reference extraction
+│   ├── Tests: parse real Rust files
+│   └── Snapshot tests (insta)
+│
+└── Integration
+    ├── Build graph from file set
+    ├── Symbol resolution (basic)
+    └── Tests: small Rust project
+```
+
+### Part C: Graph Queries
+
+```
+Tasks:
+├── mimir-graph
+│   ├── Graph facade (combines symbols + relations)
+│   ├── find_symbol(name) → Vec<Symbol>
+│   ├── find_references(symbol_id) → Vec<Reference>
+│   ├── get_callers(symbol_id) → Vec<Symbol>
+│   ├── get_callees(symbol_id) → Vec<Symbol>
+│   └── Tests: query accuracy
+│
+├── trace() implementation
+│   ├── Combine queries
+│   ├── Call chain building
+│   ├── Context extraction
+│   ├── TraceResult structure
+│   └── Tests: trace on sample code
+│
+└── CLI integration
+    ├── `mimir trace <symbol>`
+    ├── `mimir refs <symbol>`
+    ├── JSON output format
+    └── Integration tests
+```
+
+**M2 Deliverables**:
+- `mimir trace process_data` returns definition + callers + callees
+- Works on Rust projects
+- JSON output for tooling integration
+
+---
+
+## Phase 3: Actor & Sync (M3)
+
+**Focus**: Concurrent architecture, file watching, sync
+
+### Part A: Channel Architecture
+
+```
+Tasks:
+├── mimir-protocol
+│   ├── GraphCommand enum
+│   ├── GraphEvent enum
+│   ├── TaskCommand, TaskEvent
+│   └── Response types
+│
+├── mimir-graph-actor
+│   ├── GraphActor (owns graph internals)
+│   ├── Command processing loop
+│   ├── Reply channels (oneshot)
+│   └── Tests: concurrent access
+│
+├── GraphHandle (client)
+│   ├── Async query methods
+│   ├── Event subscription
+│   └── Tests: multiple clients
+│
+└── File watcher
+    ├── notify crate integration
+    ├── Debouncing
+    ├── Dirty flag mechanism
+    └── Tests: change detection
+```
+
+### Part B: Sync & Edit
+
+```
+Tasks:
+├── Sync implementation
+│   ├── scan() → ChangeSet
+│   ├── Apply changes to graph
+│   ├── Incremental update
+│   └── Tests: sync accuracy
+│
+├── mimir-edit
+│   ├── EditOp enum
+│   ├── Line-based edits
+│   ├── Byte-range edits
+│   ├── Optimistic locking (content hash)
+│   ├── Conflict detection
+│   └── Tests: edit + verify
+│
+└── Integration tests
+    ├── Full workflow: init → edit → sync → query
+    ├── Concurrent edits
+    └── Conflict handling
+```
+
+**M3 Deliverables**:
+- File changes detected automatically
+- Incremental sync (only changed files)
+- Safe concurrent access
+- Edit operations with conflict detection
+
+---
+
+## Phase 4: Multi-Language (M4)
+
+**Focus**: TypeScript, Python, Go adapters + cross-language bridges
+
+### Part A: Language Adapters
+
+```
+Tasks:
+├── mimir-parse-ts
+│   ├── tree-sitter-typescript setup
+│   ├── Symbol extraction (functions, classes, interfaces)
+│   ├── Reference extraction
+│   ├── Import resolution
+│   ├── JSX support
+│   └── Tests: real TS/TSX files
+│
+├── mimir-parse-py
+│   ├── tree-sitter-python setup
+│   ├── Symbol extraction (functions, classes)
+│   ├── Reference extraction
+│   └── Tests: real Python files
+│
+└── mimir-parse-go
+    ├── tree-sitter-go setup
+    ├── Symbol extraction
+    ├── Reference extraction
+    └── Tests
+```
+
+### Part B: Cross-Language Bridges
+
+```
+Tasks:
+├── Bridge detection
+│   ├── Bridge enum (HttpEndpoint, HttpCall, etc.)
+│   ├── Rust: Axum/Actix endpoint detection
+│   ├── TypeScript: fetch/axios call detection
+│   ├── Bridge matching algorithm
+│   └── Confidence scoring
+│
+├── Cross-language trace
+│   ├── trace() with cross_language=true
+│   ├── Protocol detection (HTTP/gRPC)
+│   ├── CrossLanguageRef in TraceResult
+│   └── Tests: frontend→backend tracing
+│
+└── CLI enhancements
+    ├── `mimir trace --cross-language`
+    ├── Language filter options
+    └── Output formatting
+```
+
+**M4 Deliverables**:
+- Support for Rust, TypeScript, Python, Go
+- `mimir trace --cross-language` follows HTTP calls across frontend/backend
+
+---
+
+## Phase 5: Semantic Search (M5)
+
+**Focus**: Vector embeddings and semantic search
+
+### Part A: Embedding Infrastructure
+
+```
+Tasks:
+├── mimir-embeddings
+│   ├── EmbeddingEncoder trait
+│   ├── Local encoder (ONNX Runtime)
+│   ├── API encoder (OpenAI)
+│   └── Tests: encode/compare
+│
+├── HNSW index
+│   ├── Index implementation
+│   ├── Add/remove/search
+│   ├── ArcSwap + append buffer pattern
+│   ├── Persistence
+│   └── Tests: recall accuracy
+│
+└── Embedding manager
+    ├── Background encoding queue
+    ├── Incremental updates on graph changes
+    └── Tests: large-scale indexing
+```
+
+### Part B: Semantic Search
+
+```
+Tasks:
+├── Search implementation
+│   ├── Query encoding
+│   ├── K-NN search
+│   ├── Filter by language/kind
+│   ├── SimilarSymbol in TraceResult
+│   └── Tests: search relevance
+│
+└── CLI integration
+    ├── `mimir search "validate user input"`
+    ├── `mimir trace --similar`
+    └── Output formatting
+```
+
+**M5 Deliverables**:
+- `mimir search "handle authentication"` finds semantically similar code
+- Trace results include similar implementations
+
+---
+
+## Phase 6: Agent Integration (M6)
+
+**Focus**: LLM orchestration, tools, agent loop
+
+### Part A: Tool Definitions
+
+```
+Tasks:
+├── mimir-tools
+│   ├── Tool trait
+│   ├── ToolRegistry
+│   ├── JSON Schema generation
+│   ├── Built-in tools:
+│   │   ├── TraceTool
+│   │   ├── EditTool
+│   │   ├── SearchTool
+│   │   ├── ReadFileTool
+│   │   └── ShellTool
+│   └── Tests: tool execution
+│
+├── mimir-llm
+│   ├── LlmProvider trait
+│   ├── Anthropic implementation
+│   ├── OpenAI implementation
+│   ├── Streaming support
+│   └── Tests: basic completion
+│
+└── Agent config format
+    ├── TOML schema
+    ├── Parsing & validation
+    └── Hot reload
+```
+
+### Part B: Task System
+
+```
+Tasks:
+├── mimir-tasks
+│   ├── Task, TaskPlan, PlannedStep
+│   ├── TaskStatus state machine
+│   ├── Checkpoint system
+│   ├── Task storage (filesystem)
+│   └── Tests: task lifecycle
+│
+├── mimir-context
+│   ├── HierarchicalContext
+│   ├── Context compression
+│   ├── Smart code loading
+│   └── Tests: context management
+│
+└── mimir-executor
+    ├── Step execution loop
+    ├── Recovery from checkpoint
+    ├── Graceful shutdown
+    └── Tests: execution flow
+```
+
+### Part C: Agent Runtime
+
+```
+Tasks:
+├── mimir-agent
+│   ├── Agent struct
+│   ├── Tool execution loop
+│   ├── Context management integration
+│   ├── Error handling
+│   └── Tests: agent workflow
+│
+├── CLI integration
+│   ├── `mimir agent` interactive mode
+│   ├── `mimir task <request>`
+│   ├── `mimir resume`
+│   └── Progress display
+│
+└── Security & sandbox
+    ├── Path restrictions
+    ├── Command whitelist
+    ├── Resource limits
+    └── Tests: escape attempts
+```
+
+**M6 Deliverables**:
+- `mimir agent` runs autonomous coding agent
+- Tasks with checkpointing and recovery
+- Sandboxed execution
+
+---
+
+## Testing Strategy
+
+### Unit Tests
+
+```rust
+// tests/unit/symbol_test.rs
+#[test]
+fn test_qualified_name_parsing() {
+    let qn = QualifiedName::from_str("crate::module::func", "::");
+    assert_eq!(qn.name(), "func");
+    assert_eq!(qn.parent().unwrap().to_string(), "crate::module");
+}
+
+// tests/unit/content_store_test.rs
+#[test]
+fn test_content_deduplication() {
+    let store = ContentStore::new_temp();
+    let content = b"hello world";
+    let hash1 = store.store(content).unwrap();
+    let hash2 = store.store(content).unwrap();
+    assert_eq!(hash1, hash2);
+}
+```
+
+### Integration Tests
+
+```rust
+// tests/integration/rust_adapter_test.rs
+#[test]
+fn test_rust_symbol_extraction() {
+    let adapter = RustAdapter::new();
+    let source = include_str!("fixtures/sample.rs");
+    let tree = adapter.parse(source).unwrap();
+    let symbols = adapter.extract_symbols(&tree, source, FileId::new(1));
+    insta::assert_yaml_snapshot!(symbols);
+}
+
+// tests/integration/cross_language_test.rs
+#[tokio::test]
+async fn test_http_bridge_detection() {
+    let graph = build_test_graph(&[
+        ("api.ts", include_str!("fixtures/api.ts")),
+        ("handlers.rs", include_str!("fixtures/handlers.rs")),
+    ]).await;
+
+    let result = graph.trace("list_users", TraceOptions {
+        cross_language: true,
+        ..Default::default()
+    }).await.unwrap();
+
+    assert_eq!(result.cross_language.len(), 1);
+}
+```
+
+### Benchmark Tests
+
+```rust
+// benches/graph_bench.rs
+use criterion::{criterion_group, criterion_main, Criterion};
+
+fn bench_trace(c: &mut Criterion) {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let graph = rt.block_on(setup_large_project()); // 10k files
+
+    c.bench_function("trace_simple", |b| {
+        b.iter(|| {
+            rt.block_on(graph.trace("process_data", Default::default()))
+        });
+    });
+}
+
+criterion_group!(benches, bench_trace);
+criterion_main!(benches);
+```
+
+---
+
+## Configuration Schema
+
+```toml
+# .agent/config.toml
+
+[project]
+name = "my-project"
+root = "."
+output_dir = ".agent"
+
+[indexing]
+include = ["**/*.rs", "**/*.ts", "**/*.py", "**/*.go"]
+exclude = [
+    "**/node_modules/**",
+    "**/target/**",
+    "**/.git/**",
+]
+max_file_size_kb = 500
+
+[languages]
+enabled = ["rust", "typescript", "python", "go"]
+
+[languages.rust]
+edition = "2021"
+
+[languages.typescript]
+tsconfig = "tsconfig.json"
+jsx = true
+
+[resolution]
+use_lsp = false
+lsp_timeout_ms = 1000
+fallback_to_name = true
+
+[bridges]
+enabled = true
+confidence_threshold = 0.7
+
+[cache]
+max_memory_mb = 512
+embedding_cache_size = 10000
+ast_cache_size = 1000
+
+[embeddings]
+enabled = true
+model = "local"  # or "openai"
+
+[embeddings.local]
+model_path = "models/code-embeddings.onnx"
+
+[sync]
+watch_enabled = true
+watch_debounce_ms = 100
+sync_on_query = true
+
+[snapshots]
+auto_snapshot = true
+max_snapshots = 20
+retention_days = 30
+```
+
+---
+
+## Next: See DECISIONS.md for architectural rationale
