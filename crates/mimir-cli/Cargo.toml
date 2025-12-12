@@ -24,6 +24,7 @@ mimir-graph = { workspace = true }
 mimir-parse-core = { workspace = true }
 mimir-parse-rust = { workspace = true }
 clap = { workspace = true }
+ignore = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

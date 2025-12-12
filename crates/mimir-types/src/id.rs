@@ -26,6 +26,18 @@ macro_rules! define_id {
             pub const fn value(&self) -> u64 {
                 self.0
             }
+
+            /// Alias for value() - get as u64.
+            #[inline]
+            pub const fn as_u64(&self) -> u64 {
+                self.0
+            }
+
+            /// Create from u64.
+            #[inline]
+            pub const fn from_u64(value: u64) -> Self {
+                Self(value)
+            }
         }
 
         impl fmt::Debug for $name {

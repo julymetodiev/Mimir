@@ -2,6 +2,7 @@
 
 pub mod init;
 pub mod status;
+pub mod sync;
 pub mod trace;
 
 use clap::Subcommand;
@@ -20,11 +21,14 @@ pub enum Commands {
     /// Show project status.
     Status,
 
+    /// Sync the code graph from project files.
+    Sync,
+
     /// Trace call chains for a symbol.
     Trace {
-        /// Source file to analyze.
+        /// Source file to analyze (optional if graph is synced).
         #[arg(short, long)]
-        file: PathBuf,
+        file: Option<PathBuf>,
 
         /// Symbol name to trace.
         #[arg(short, long)]

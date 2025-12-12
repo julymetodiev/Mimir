@@ -8,8 +8,19 @@ use mimir_types::{FileId, IdGenerator, Language, Symbol};
 use std::path::Path;
 use std::sync::Arc;
 
+use crate::app::{find_project_root, Config};
+use crate::commands::sync::load_graph;
+
 /// Execute the trace command.
-pub async fn execute(file: &Path, symbol_name: &str, depth: usize, json: bool) -> Result<()> {
+pub async fn execute(file: Option<&Path>, symbol_name: &str, depth: usize, json: bool) -> Result<()> {
+    match file {
+        Some(f) => execute_single_file(f, symbol_name, depth, json).await,
+        None => execute_from_graph(symbol_name, depth, json).await,
+    }
+}
+
+/// Execute trace on a single file.
+async fn execute_single_file(file: &Path, symbol_name: &str, depth: usize, json: bool) -> Result<()> {
     // Verify file exists
     if !file.exists() {
         anyhow::bail!("File not found: {}", file.display());
@@ -76,10 +87,39 @@ pub async fn execute(file: &Path, symbol_name: &str, depth: usize, json: bool) -
         }
     }
 
+    // Find and trace the symbol
+    trace_symbol(&graph, symbol_name, depth, json, Some(file))
+}
+
+/// Execute trace from the synced graph.
+async fn execute_from_graph(symbol_name: &str, depth: usize, json: bool) -> Result<()> {
+    // Find project root
+    let root = find_project_root().context("Not in a Mimir project. Run 'mimir init' first.")?;
+    let config = Config::new(&root);
+
+    if !config.is_initialized() {
+        anyhow::bail!("Project not initialized. Run 'mimir init' first.");
+    }
+
+    // Load the graph
+    let (graph, _ids, _file_ids) = load_graph(&config)
+        .await?
+        .context("Graph not found. Run 'mimir sync' first.")?;
+
+    // Find and trace the symbol
+    trace_symbol(&graph, symbol_name, depth, json, None)
+}
+
+/// Common trace logic.
+fn trace_symbol(graph: &CodeGraph, symbol_name: &str, depth: usize, json: bool, file: Option<&Path>) -> Result<()> {
     // Find the target symbol
     let symbols = graph.find_symbol(symbol_name);
     if symbols.is_empty() {
-        anyhow::bail!("Symbol '{}' not found in {}", symbol_name, file.display());
+        if let Some(f) = file {
+            anyhow::bail!("Symbol '{}' not found in {}", symbol_name, f.display());
+        } else {
+            anyhow::bail!("Symbol '{}' not found in project", symbol_name);
+        }
     }
 
     let target = &symbols[0];
@@ -96,7 +136,11 @@ pub async fn execute(file: &Path, symbol_name: &str, depth: usize, json: bool) -
         println!("{}", output);
     } else {
         println!("Trace for: {} ({})", result.root.name, result.root.kind);
-        println!("  File: {}:{}", file.display(), result.root.range.start_line);
+        if let Some(f) = file {
+            println!("  File: {}:{}", f.display(), result.root.range.start_line);
+        } else {
+            println!("  Line: {}", result.root.range.start_line);
+        }
         println!();
 
         if !result.callers.is_empty() {

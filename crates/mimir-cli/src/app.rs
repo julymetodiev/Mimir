@@ -28,6 +28,9 @@ pub struct Config {
 
     /// Path to the snapshots directory.
     pub snapshots_dir: PathBuf,
+
+    /// Path to the graph directory.
+    pub graph_dir: PathBuf,
 }
 
 impl Config {
@@ -38,6 +41,7 @@ impl Config {
         let objects_dir = agent_dir.join("objects");
         let index_dir = agent_dir.join("index");
         let snapshots_dir = agent_dir.join("snapshots");
+        let graph_dir = agent_dir.join("graph");
 
         Self {
             root,
@@ -45,6 +49,7 @@ impl Config {
             objects_dir,
             index_dir,
             snapshots_dir,
+            graph_dir,
         }
     }
 
@@ -67,6 +72,9 @@ impl Config {
         fs::create_dir_all(&self.snapshots_dir)
             .await
             .context("Failed to create snapshots directory")?;
+        fs::create_dir_all(&self.graph_dir)
+            .await
+            .context("Failed to create graph directory")?;
         Ok(())
     }
 }
