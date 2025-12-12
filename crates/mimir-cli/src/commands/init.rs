@@ -117,7 +117,7 @@ pub async fn execute(force: bool) -> Result<()> {
 
     // Summary
     println!();
-    println!("✓ Mimir initialized. Run 'mimir status' to see details.");
+    println!(" Mimir initialized. Run 'mimir status' to see details.");
 
     // Show language breakdown
     if !language_counts.is_empty() {
