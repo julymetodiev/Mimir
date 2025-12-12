@@ -38,6 +38,24 @@ async fn main() -> anyhow::Result<()> {
             depth,
             json,
         } => commands::trace::execute(file.as_deref(), &symbol, depth, json).await?,
+        commands::Commands::Edit {
+            file,
+            mode,
+            start,
+            end,
+            content,
+            preview,
+            backup,
+        } => {
+            let edit_mode: commands::edit::EditMode = mode.parse()
+                .map_err(|e: String| anyhow::anyhow!(e))?;
+            commands::edit::execute(file, edit_mode, start, end, content, preview, backup).await?
+        }
+        commands::Commands::EditBatch {
+            json,
+            preview,
+            backup,
+        } => commands::edit::execute_batch(&json, preview, backup).await?,
     }
 
     Ok(())

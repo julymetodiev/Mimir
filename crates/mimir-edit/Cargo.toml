@@ -1,0 +1,21 @@
+[package]
+name = "mimir-edit"
+description = "File editing operations with conflict detection"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+mimir-types.workspace = true
+mimir-error.workspace = true
+
+tokio.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

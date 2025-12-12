@@ -10,7 +10,7 @@ This document outlines the implementation plan in phases with milestones.
 |-----------|-------------|-----------------|--------|
 | M1 | Storage + Init | `mimir init`, content store | ✅ Done |
 | M2 | Single-Language Graph | `mimir trace` for Rust | ✅ Done |
-| M3 | Actor + Sync | File watching, incremental sync | 🔄 Next |
+| M3 | Actor + Sync | File watching, incremental sync | 🔄 In Progress (Edit ✅) |
 | M4 | Multi-Language | TS, Python, Go + cross-language trace | ⏳ |
 | M5 | Semantic Search | `mimir search` with embeddings | ⏳ |
 | M6 | Agent | `mimir agent` autonomous coding | ⏳ |
@@ -255,11 +255,13 @@ Total: 6 symbols, max depth: 1
 
 ---
 
-## Phase 3: Actor & Sync (M3)
+## Phase 3: Actor & Sync (M3) - 🔄 IN PROGRESS
 
 **Focus**: Concurrent architecture, file watching, sync
 
-### Part A: Channel Architecture
+**Progress**: Edit crate completed | 133 tests passing (18 new from mimir-edit)
+
+### Part A: Channel Architecture (⏳ Pending)
 
 ```
 Tasks:
@@ -287,35 +289,67 @@ Tasks:
     └── Tests: change detection
 ```
 
-### Part B: Sync & Edit
+### Part B: Sync & Edit (✅ Edit Done)
 
 ```
 Tasks:
-├── Sync implementation
+├── Sync implementation (⏳ pending)
 │   ├── scan() → ChangeSet
 │   ├── Apply changes to graph
 │   ├── Incremental update
 │   └── Tests: sync accuracy
 │
-├── mimir-edit
-│   ├── EditOp enum
+├── mimir-edit ✅ (16 tests)
+│   ├── EditOp enum (Replace, Insert, Delete, ReplaceLines)
+│   ├── Editor with apply(), preview(), apply_batch()
 │   ├── Line-based edits
 │   ├── Byte-range edits
 │   ├── Optimistic locking (content hash)
-│   ├── Conflict detection
+│   ├── Conflict detection (HashMismatch error)
+│   ├── Backup file creation
 │   └── Tests: edit + verify
 │
-└── Integration tests
+├── CLI integration ✅
+│   ├── `mimir edit --file <f> --mode replace --start <s> --end <e> --content <c>`
+│   ├── `mimir edit --preview` for diff preview
+│   ├── `mimir edit-batch --json <ops>` for batch operations
+│   └── `--backup` flag for backup creation
+│
+└── Integration tests (⏳ pending)
     ├── Full workflow: init → edit → sync → query
     ├── Concurrent edits
     └── Conflict handling
 ```
 
 **M3 Deliverables**:
-- File changes detected automatically
-- Incremental sync (only changed files)
-- Safe concurrent access
-- Edit operations with conflict detection
+- ⏳ File changes detected automatically
+- ⏳ Incremental sync (only changed files)
+- ⏳ Safe concurrent access
+- ✅ Edit operations with conflict detection
+
+**Implemented Crates**:
+- `mimir-edit` - EditOp, EditError, Editor, Diff with optimistic locking
+
+**Example Usage**:
+```bash
+# Preview a replace operation
+$ mimir edit -f src/main.rs -m replace -s 10 -e 20 -c "new_code" -p
+Preview of changes to: src/main.rs
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -1,1 +1,1 @@
+-old_code
++new_code
+
+# Apply line replacement with backup
+$ mimir edit -f src/lib.rs -m lines -s 5 -e 10 -c "// new lines\n" -b
+Edited: src/lib.rs
+  Bytes: 4a3b2c1d → 5e6f7a8b (+25)
+  Lines changed: +2
+
+# Batch edit from JSON
+$ mimir edit-batch -j '[{"Replace":{"file_path":"f.rs","span":{"start":0,"end":5},"new_content":"test"}}]'
+```
 
 ---
 

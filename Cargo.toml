@@ -14,6 +14,8 @@ members = [
     "crates/mimir-parse-core",
     "crates/mimir-parse-rust",
     "crates/mimir-graph",
+    # M3: Edit crate
+    "crates/mimir-edit",
     # CLI
     "crates/mimir-cli",
 ]
@@ -48,6 +50,7 @@ mimir-parse-rust = { path = "crates/mimir-parse-rust" }
 # Internal crates - Layer 3
 mimir-files = { path = "crates/mimir-files" }
 mimir-graph = { path = "crates/mimir-graph" }
+mimir-edit = { path = "crates/mimir-edit" }
 
 # Error handling
 thiserror = "2.0"
