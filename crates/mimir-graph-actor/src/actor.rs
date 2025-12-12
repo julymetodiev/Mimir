@@ -1,17 +1,27 @@
 //! Graph actor implementation.
 
 use mimir_error::GraphError;
+use mimir_files::{ScannedFile, Scanner};
 use mimir_graph::CodeGraph;
 use mimir_parse_core::AdapterRegistry;
 use mimir_protocol::{
     CommandReceiver, EventSender, FindResponse, GraphCommand, GraphEvent, StatsResponse,
     SymbolInfo, SyncResult, TraceNode, TraceRelation, TraceResponse,
 };
-use mimir_types::{FileId, IdGenerator, Language, Symbol, SymbolId, SymbolKind};
+use mimir_types::{ContentHash, FileId, IdGenerator, Language, Symbol, SymbolId, SymbolKind};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
+
+/// Tracked file info.
+struct TrackedFile {
+    file_id: FileId,
+    content_hash: ContentHash,
+    #[allow(dead_code)] // May be used for language-specific operations
+    language: Language,
+}
 
 /// The graph actor owns the graph and processes commands.
 pub struct GraphActor {
@@ -23,6 +33,8 @@ pub struct GraphActor {
     root: PathBuf,
     /// ID generator for symbols and files.
     ids: IdGenerator,
+    /// Tracked files by path.
+    files: HashMap<PathBuf, TrackedFile>,
 }
 
 impl GraphActor {
@@ -33,6 +45,7 @@ impl GraphActor {
             registry: Arc::new(AdapterRegistry::new()),
             root,
             ids: IdGenerator::new(),
+            files: HashMap::new(),
         }
     }
 
@@ -43,6 +56,7 @@ impl GraphActor {
             registry,
             root,
             ids: IdGenerator::new(),
+            files: HashMap::new(),
         }
     }
 
@@ -131,8 +145,21 @@ impl GraphActor {
             path: path.clone(),
         })?;
 
+        // Compute content hash
+        let content_hash = ContentHash::compute(content.as_bytes());
+
         // Assign file ID
         let file_id: FileId = self.ids.next();
+
+        // Track the file
+        self.files.insert(
+            path.clone(),
+            TrackedFile {
+                file_id,
+                content_hash,
+                language,
+            },
+        );
 
         // Extract symbols
         let extracted_symbols = adapter.extract_symbols(&tree, file_id);
@@ -199,6 +226,18 @@ impl GraphActor {
     ) -> Result<bool, GraphError> {
         debug!("Removing file: {:?}", file_id);
 
+        // Find and remove from tracked files
+        let mut path_to_remove = None;
+        for (path, tracked) in &self.files {
+            if tracked.file_id == file_id {
+                path_to_remove = Some(path.clone());
+                break;
+            }
+        }
+        if let Some(path) = path_to_remove {
+            self.files.remove(&path);
+        }
+
         let removed = self.graph.remove_file(file_id);
         let was_removed = !removed.is_empty();
 
@@ -210,6 +249,25 @@ impl GraphActor {
         }
 
         Ok(was_removed)
+    }
+
+    /// Remove a file by path.
+    fn remove_file_by_path(&mut self, path: &PathBuf, events: &EventSender) -> Option<usize> {
+        if let Some(tracked) = self.files.remove(path) {
+            let removed = self.graph.remove_file(tracked.file_id);
+            let symbols_removed = removed.len();
+
+            if symbols_removed > 0 {
+                let _ = events.send(GraphEvent::FileRemoved {
+                    file_id: tracked.file_id,
+                    path: path.clone(),
+                });
+            }
+
+            Some(symbols_removed)
+        } else {
+            None
+        }
     }
 
     /// Handle finding symbols by name.
@@ -377,7 +435,7 @@ impl GraphActor {
     /// Handle getting statistics.
     fn handle_stats(&self) -> StatsResponse {
         StatsResponse {
-            files_count: 0, // Would need to track this separately
+            files_count: self.files.len(),
             symbols_count: self.graph.symbol_count(),
             references_count: self.graph.edge_count(),
             files_by_language: Vec::new(),
@@ -391,22 +449,185 @@ impl GraphActor {
 
         let _ = events.send(GraphEvent::SyncStarted);
 
-        // TODO: Implement actual sync with file scanner
+        // Scan the directory
+        let scanner = Scanner::new(&self.root);
+        let scanned_files = scanner.scan().await.map_err(|e| {
+            GraphError::WatcherError(format!("Scan failed: {}", e))
+        })?;
+
+        info!("Scanned {} files in {:?}", scanned_files.len(), start.elapsed());
+
+        let mut files_added = 0;
+        let mut files_updated = 0;
+        let mut files_removed = 0;
+        let mut symbols_added = 0;
+        let mut symbols_removed = 0;
+
+        // Build a set of paths we've seen
+        let mut seen_paths: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+
+        // Process each scanned file
+        for scanned in scanned_files {
+            seen_paths.insert(scanned.absolute_path.clone());
+
+            // Check if we already have this file
+            if let Some(tracked) = self.files.get(&scanned.absolute_path) {
+                // Check if content changed
+                if tracked.content_hash != scanned.content_hash {
+                    // File was updated - remove old, add new
+                    if let Some(removed_count) = self.remove_file_by_path(&scanned.absolute_path.clone(), events) {
+                        symbols_removed += removed_count;
+                    }
+
+                    // Add updated file
+                    match self.sync_add_file(&scanned, events) {
+                        Ok(added_count) => {
+                            symbols_added += added_count;
+                            files_updated += 1;
+                        }
+                        Err(e) => {
+                            warn!("Failed to update {}: {}", scanned.absolute_path.display(), e);
+                        }
+                    }
+                }
+                // File unchanged - skip
+            } else {
+                // New file - add it
+                match self.sync_add_file(&scanned, events) {
+                    Ok(added_count) => {
+                        symbols_added += added_count;
+                        files_added += 1;
+                    }
+                    Err(e) => {
+                        warn!("Failed to add {}: {}", scanned.absolute_path.display(), e);
+                    }
+                }
+            }
+        }
+
+        // Find files that were removed
+        let tracked_paths: Vec<PathBuf> = self.files.keys().cloned().collect();
+        for path in tracked_paths {
+            if !seen_paths.contains(&path) {
+                if let Some(removed_count) = self.remove_file_by_path(&path, events) {
+                    symbols_removed += removed_count;
+                    files_removed += 1;
+                }
+            }
+        }
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+
         let result = SyncResult {
-            files_added: 0,
-            files_updated: 0,
-            files_removed: 0,
-            symbols_added: 0,
-            symbols_removed: 0,
-            duration_ms: start.elapsed().as_millis() as u64,
+            files_added,
+            files_updated,
+            files_removed,
+            symbols_added,
+            symbols_removed,
+            duration_ms,
         };
 
+        info!(
+            "Sync completed: {} added, {} updated, {} removed in {}ms",
+            files_added, files_updated, files_removed, duration_ms
+        );
+
         let _ = events.send(GraphEvent::SyncCompleted {
-            files_processed: result.files_added + result.files_updated,
-            duration_ms: result.duration_ms,
+            files_processed: files_added + files_updated,
+            duration_ms,
         });
 
         Ok(result)
+    }
+
+    /// Add a file during sync operation.
+    fn sync_add_file(&mut self, scanned: &ScannedFile, events: &EventSender) -> Result<usize, GraphError> {
+        // Read file content
+        let content = std::fs::read_to_string(&scanned.absolute_path).map_err(|_| {
+            GraphError::FileNotFound {
+                path: scanned.absolute_path.clone(),
+            }
+        })?;
+
+        // Get adapter for this language
+        let adapter = self.registry.get_by_language(scanned.language).ok_or_else(|| {
+            GraphError::FileNotFound {
+                path: scanned.absolute_path.clone(),
+            }
+        })?;
+
+        // Parse the file
+        let tree = adapter.parse(&content).ok_or_else(|| {
+            GraphError::FileNotFound {
+                path: scanned.absolute_path.clone(),
+            }
+        })?;
+
+        // Assign file ID
+        let file_id: FileId = self.ids.next();
+
+        // Track the file
+        self.files.insert(
+            scanned.absolute_path.clone(),
+            TrackedFile {
+                file_id,
+                content_hash: scanned.content_hash.clone(),
+                language: scanned.language,
+            },
+        );
+
+        // Extract symbols
+        let extracted_symbols = adapter.extract_symbols(&tree, file_id);
+        let extracted_refs = adapter.extract_references(&tree, file_id);
+
+        // Convert ExtractedSymbol to Symbol and add to graph
+        let mut symbol_map: HashMap<String, SymbolId> = HashMap::new();
+
+        for extracted in &extracted_symbols {
+            let symbol_id: SymbolId = self.ids.next();
+            symbol_map.insert(extracted.name.clone(), symbol_id);
+
+            let symbol = Symbol {
+                id: symbol_id,
+                name: extracted.name.clone(),
+                qualified_name: extracted.qualified_name.clone(),
+                kind: extracted.kind,
+                language: extracted.language,
+                file_id,
+                range: extracted.range,
+                span: extracted.span,
+                signature: extracted.signature.clone(),
+                visibility: extracted.visibility,
+                doc: extracted.doc.clone(),
+            };
+
+            self.graph.add_symbol(symbol);
+        }
+
+        // Add references as edges
+        for reference in &extracted_refs {
+            if let Some(&from_id) = reference.container.as_ref().and_then(|c| symbol_map.get(c)) {
+                if let Some(target) = self.graph.find_symbol(&reference.name).first() {
+                    self.graph.add_call(
+                        from_id,
+                        target.id,
+                        reference.span,
+                        reference.confidence,
+                    );
+                }
+            }
+        }
+
+        let symbols_count = extracted_symbols.len();
+
+        // Emit event
+        let _ = events.send(GraphEvent::FileAdded {
+            file_id,
+            path: scanned.absolute_path.clone(),
+            symbols_count,
+        });
+
+        Ok(symbols_count)
     }
 
     /// Convert a Symbol to SymbolInfo.

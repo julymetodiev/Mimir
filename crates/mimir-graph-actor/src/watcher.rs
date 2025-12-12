@@ -72,6 +72,7 @@ pub enum WatchEvent {
     /// A file was removed.
     Removed(PathBuf),
     /// An error occurred.
+    #[allow(dead_code)] // Used for future error reporting
     Error(String),
 }
 
