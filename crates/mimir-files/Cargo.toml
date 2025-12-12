@@ -1,0 +1,23 @@
+[package]
+name = "mimir-files"
+description = "File indexing for the Mimir semantic code intelligence engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+mimir-types = { workspace = true }
+mimir-error = { workspace = true }
+mimir-content = { workspace = true }
+dashmap = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+ignore = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -1,0 +1,21 @@
+[package]
+name = "mimir-content"
+description = "Content-addressed storage for the Mimir semantic code intelligence engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+mimir-types = { workspace = true }
+mimir-error = { workspace = true }
+mimir-cache = { workspace = true }
+blake3 = { workspace = true }
+zstd = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

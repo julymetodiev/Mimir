@@ -1,7 +1,7 @@
-# Data and cache
-data/
-*.csv
-*.html
+# Rust build artifacts
+/target/
+**/*.rs.bk
+Cargo.lock
 
 # IDE
 .vscode/
@@ -10,38 +10,31 @@ data/
 *.swo
 *~
 
-.claude/
-CLAUDE.md
-mcp.json
-start-mcp-server.sh
-benches
-
 # OS
 .DS_Store
 Thumbs.db
 
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
+# Mimir state (for testing)
+.agent/
+
+# Environment
+.env
+.env.local
 
 # Logs
 *.log
 
-# Environment variables
-.env
-.env.local
+# Coverage
+*.profraw
+coverage/
 
-post_cortex_data
-logs
+# Claude/AI
+.claude/
+CLAUDE.md
+mcp.json
+
+# Temporary project files
 dev.txt
-vector_db/
-# Ignore Python and shell test files but keep Rust integration tests
-tests/*.py
-tests/*.sh
-tests/test_data_*
-target
-examples
-scripts
-GEMINI.md
 TODO.md
 PROJECT.md
+GEMINI.md
