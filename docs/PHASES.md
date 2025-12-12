@@ -9,8 +9,8 @@ This document outlines the implementation plan in phases with milestones.
 | Milestone | Description | Key Deliverable | Status |
 |-----------|-------------|-----------------|--------|
 | M1 | Storage + Init | `mimir init`, content store | ✅ Done |
-| M2 | Single-Language Graph | `mimir trace` for Rust | 🔄 Next |
-| M3 | Actor + Sync | File watching, incremental sync | ⏳ |
+| M2 | Single-Language Graph | `mimir trace` for Rust | ✅ Done |
+| M3 | Actor + Sync | File watching, incremental sync | 🔄 Next |
 | M4 | Multi-Language | TS, Python, Go + cross-language trace | ⏳ |
 | M5 | Semantic Search | `mimir search` with embeddings | ⏳ |
 | M6 | Agent | `mimir agent` autonomous coding | ⏳ |
