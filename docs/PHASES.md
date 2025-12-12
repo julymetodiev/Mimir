@@ -10,7 +10,7 @@ This document outlines the implementation plan in phases with milestones.
 |-----------|-------------|-----------------|--------|
 | M1 | Storage + Init | `mimir init`, content store | ✅ Done |
 | M2 | Single-Language Graph | `mimir trace` for Rust | ✅ Done |
-| M3 | Actor + Sync | File watching, incremental sync | 🔄 In Progress (Edit ✅) |
+| M3 | Actor + Sync | File watching, incremental sync | ✅ Done |
 | M4 | Multi-Language | TS, Python, Go + cross-language trace | ⏳ |
 | M5 | Semantic Search | `mimir search` with embeddings | ⏳ |
 | M6 | Agent | `mimir agent` autonomous coding | ⏳ |
@@ -255,49 +255,54 @@ Total: 6 symbols, max depth: 1
 
 ---
 
-## Phase 3: Actor & Sync (M3) - 🔄 IN PROGRESS
+## Phase 3: Actor & Sync (M3) ✅ COMPLETED
 
 **Focus**: Concurrent architecture, file watching, sync
 
-**Progress**: Edit crate completed | 133 tests passing (18 new from mimir-edit)
+**Completed**: December 2025 | Rust 1.90 (2024 edition) | 189 tests passing (56 new)
 
-### Part A: Channel Architecture (⏳ Pending)
+### Part A: Channel Architecture ✅
 
 ```
 Tasks:
-├── mimir-protocol
-│   ├── GraphCommand enum
-│   ├── GraphEvent enum
-│   ├── TaskCommand, TaskEvent
-│   └── Response types
+├── mimir-protocol ✅ (16 tests)
+│   ├── GraphCommand enum (AddFile, RemoveFile, FindSymbol, Trace, Stats, Sync, Shutdown)
+│   ├── GraphEvent enum (FileAdded, FileUpdated, FileRemoved, SyncStarted, SyncCompleted)
+│   ├── FindOptions, TraceOptions configuration
+│   ├── Response types (FindResponse, TraceResponse, StatsResponse, SyncResult)
+│   └── Typed channel wrappers (CommandSender, EventSender, etc.)
 │
-├── mimir-graph-actor
-│   ├── GraphActor (owns graph internals)
-│   ├── Command processing loop
-│   ├── Reply channels (oneshot)
-│   └── Tests: concurrent access
+├── mimir-graph-actor ✅ (14 tests: 10 unit + 4 integration)
+│   ├── GraphActor (owns graph, registry, file tracking)
+│   ├── Command processing loop with async support
+│   ├── Reply channels (oneshot for request-reply)
+│   ├── File tracking with content hashes
+│   └── Tests: concurrent access, full workflow
 │
-├── GraphHandle (client)
-│   ├── Async query methods
-│   ├── Event subscription
+├── GraphHandle (client) ✅
+│   ├── Async query methods (find_symbol, trace, stats, sync)
+│   ├── Event subscription via broadcast channel
+│   ├── Clone is O(1), Send + Sync
 │   └── Tests: multiple clients
 │
-└── File watcher
-    ├── notify crate integration
-    ├── Debouncing
-    ├── Dirty flag mechanism
-    └── Tests: change detection
+└── File watcher ✅
+    ├── notify + notify-debouncer-mini integration
+    ├── 100ms debouncing by default
+    ├── Configurable ignore patterns (target/, node_modules/, .git/)
+    ├── Language detection for watched files
+    └── Tests: configuration, ignore patterns
 ```
 
-### Part B: Sync & Edit (✅ Edit Done)
+### Part B: Sync & Edit ✅
 
 ```
 Tasks:
-├── Sync implementation (⏳ pending)
-│   ├── scan() → ChangeSet
-│   ├── Apply changes to graph
-│   ├── Incremental update
-│   └── Tests: sync accuracy
+├── Sync implementation ✅
+│   ├── Scanner integration from mimir-files
+│   ├── Content hash comparison for change detection
+│   ├── Incremental update (add/update/remove files)
+│   ├── SyncResult with detailed statistics
+│   └── Tests: full sync workflow, incremental sync
 │
 ├── mimir-edit ✅ (16 tests)
 │   ├── EditOp enum (Replace, Insert, Delete, ReplaceLines)
@@ -315,40 +320,44 @@ Tasks:
 │   ├── `mimir edit-batch --json <ops>` for batch operations
 │   └── `--backup` flag for backup creation
 │
-└── Integration tests (⏳ pending)
-    ├── Full workflow: init → edit → sync → query
-    ├── Concurrent edits
-    └── Conflict handling
+└── Integration tests ✅ (4 tests)
+    ├── test_full_sync_workflow: init → sync → query
+    ├── test_incremental_sync: add/modify/delete detection
+    ├── test_add_file_directly: manual file addition
+    └── test_trace_symbols: symbol tracing
 ```
 
-**M3 Deliverables**:
-- ⏳ File changes detected automatically
-- ⏳ Incremental sync (only changed files)
-- ⏳ Safe concurrent access
+**M3 Deliverables**: ✅ All completed
+- ✅ File changes detected automatically (FileWatcher with notify)
+- ✅ Incremental sync (only changed files via content hash)
+- ✅ Safe concurrent access (actor pattern with channels)
 - ✅ Edit operations with conflict detection
 
 **Implemented Crates**:
+- `mimir-protocol` - GraphCommand, GraphEvent, Response types, typed channels
+- `mimir-graph-actor` - GraphActor, GraphHandle, FileWatcher with debouncing
 - `mimir-edit` - EditOp, EditError, Editor, Diff with optimistic locking
 
 **Example Usage**:
 ```bash
+# Trigger sync via API
+let sync_result = handle.sync().await?;
+println!("Added: {}, Updated: {}, Removed: {}",
+    sync_result.files_added,
+    sync_result.files_updated,
+    sync_result.files_removed);
+
+# Find symbols after sync
+let result = handle.find_symbol("process_data").await?;
+for sym in result.symbols {
+    println!("{}: {} at line {}", sym.name, sym.kind, sym.start_line);
+}
+
 # Preview a replace operation
 $ mimir edit -f src/main.rs -m replace -s 10 -e 20 -c "new_code" -p
-Preview of changes to: src/main.rs
---- a/src/main.rs
-+++ b/src/main.rs
-@@ -1,1 +1,1 @@
--old_code
-+new_code
 
 # Apply line replacement with backup
 $ mimir edit -f src/lib.rs -m lines -s 5 -e 10 -c "// new lines\n" -b
-Edited: src/lib.rs
-  Bytes: 4a3b2c1d → 5e6f7a8b (+25)
-  Lines changed: +2
-
-# Batch edit from JSON
-$ mimir edit-batch -j '[{"Replace":{"file_path":"f.rs","span":{"start":0,"end":5},"new_content":"test"}}]'
 ```
 
 ---

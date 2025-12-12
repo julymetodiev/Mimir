@@ -112,11 +112,12 @@ mimir/
 │   │       ├── lib.rs
 │   │       └── errors.rs           # MimirError, StorageError, etc.
 │   │
-│   ├── mimir-protocol/              # Inter-module communication
+│   ├── mimir-protocol/              # Inter-module communication (16 tests)
 │   │   └── src/
-│   │       ├── commands.rs         # GraphCommand, TaskCommand
-│   │       ├── events.rs           # GraphEvent, TaskEvent
-│   │       └── responses.rs        # TraceResult, EditResult
+│   │       ├── command.rs          # GraphCommand (AddFile, RemoveFile, FindSymbol, Trace, Stats, Sync, Shutdown)
+│   │       ├── event.rs            # GraphEvent (FileAdded, FileUpdated, FileRemoved, SyncStarted, SyncCompleted)
+│   │       ├── response.rs         # FindResponse, TraceResponse, StatsResponse, SyncResult
+│   │       └── channel.rs          # Typed channels (CommandSender, EventSender, etc.)
 │   │
 │   │  ╔═══════════════════════════════════════════════════════════╗
 │   │  ║                    LAYER 1: STORAGE                       ║
@@ -221,11 +222,11 @@ mimir/
 │   │       │   └── update.rs
 │   │       └── sync.rs             # Sync with filesystem
 │   │
-│   ├── mimir-graph-actor/           # Actor wrapper
+│   ├── mimir-graph-actor/           # Actor wrapper (14 tests: 10 unit + 4 integration)
 │   │   └── src/
-│   │       ├── actor.rs            # GraphActor
-│   │       ├── handle.rs           # GraphHandle (client)
-│   │       └── commands.rs         # Command processing
+│   │       ├── actor.rs            # GraphActor (owns graph, registry, file tracking)
+│   │       ├── handle.rs           # GraphHandle (async client: find_symbol, trace, stats, sync)
+│   │       └── watcher.rs          # FileWatcher (notify + debouncing)
 │   │
 │   │  ╔═══════════════════════════════════════════════════════════╗
 │   │  ║                   LAYER 5: EXECUTION                      ║
@@ -650,30 +651,30 @@ project/
 
 ```toml
 # Layer 0
-thiserror = "1.0"
+thiserror = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 
 # Layer 1
-blake3 = "1.5"
+blake3 = "1.8"
 zstd = "0.13"
 moka = { version = "0.12", features = ["sync"] }
-bincode = "1.3"
+bincode = { version = "2.0.0-rc.3", features = ["serde"] }
 
 # Layer 2
-tree-sitter = "0.22"
-tree-sitter-rust = "0.21"
-tree-sitter-typescript = "0.21"
+tree-sitter = "0.24"
+tree-sitter-rust = "0.23"
 
 # Layer 3
-dashmap = "5.5"
+dashmap = "6.1"
 arc-swap = "1.7"
 petgraph = "0.6"
 
-# Async runtime
-tokio = { version = "1.36", features = ["full"] }
+# Layer 4 (Actor)
+notify = { version = "7.0", default-features = false, features = ["macos_fsevent"] }
+notify-debouncer-mini = "0.5"
 
-# Channels
-async-channel = "2.0"
+# Async runtime
+tokio = { version = "1.48", features = ["full"] }
 ```
 
 ---
