@@ -112,7 +112,11 @@ impl App {
             let handle = FilesHandle::new(index, Arc::new(store));
             self.files_handle = Some(handle);
         }
-        Ok(self.files_handle.as_ref().unwrap())
+        // Safe: we just ensured files_handle is Some
+        match &self.files_handle {
+            Some(handle) => Ok(handle),
+            None => unreachable!("files_handle was just set"),
+        }
     }
 
     /// Get the files handle if initialized.

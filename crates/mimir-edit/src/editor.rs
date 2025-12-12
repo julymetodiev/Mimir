@@ -1,7 +1,7 @@
 //! Editor for applying file operations.
 
-use crate::error::{EditError, EditResult};
 use crate::op::{Diff, EditOp, EditResult as OpResult};
+use crate::{EditError, EditResult};
 use mimir_types::ContentHash;
 use std::path::Path;
 use tokio::fs;
@@ -595,5 +595,437 @@ mod tests {
         let backup_path = path.with_extension("bak");
         let backup_content = fs::read_to_string(&backup_path).await.unwrap();
         assert_eq!(backup_content, "original");
+    }
+
+    // ==================== Advanced Tests ====================
+
+    #[tokio::test]
+    async fn test_empty_file_operations() {
+        let dir = tempdir().unwrap();
+        let path = create_test_file(dir.path(), "empty.txt", "").await;
+        let editor = Editor::new();
+
+        // Insert into empty file
+        let op = EditOp::insert(&path, 0, "hello world");
+        let result = editor.apply(&op).await.unwrap();
+        assert_eq!(result.bytes_changed, 11);
+
+        let content = fs::read_to_string(&path).await.unwrap();
+        assert_eq!(content, "hello world");
+    }
+
+    #[tokio::test]
+    async fn test_unicode_content() {
+        let dir = tempdir().unwrap();
+        let original = "Привет мир! 你好世界 🦀🔥";
+        let path = create_test_file(dir.path(), "unicode.txt", original).await;
+        let editor = Editor::new();
+
+        // Replace unicode characters - need byte offsets
+        let privet_end = "Привет".len(); // 12 bytes in UTF-8
+
+        let op = EditOp::replace(&path, Span::new(0, privet_end as u32), "Здравей");
+        editor.apply(&op).await.unwrap();
+
+        let content = fs::read_to_string(&path).await.unwrap();
+        assert!(content.starts_with("Здравей"));
+        assert!(content.contains("🦀"));
+    }
+
+    #[tokio::test]
+    async fn test_multiline_replace() {
+        let dir = tempdir().unwrap();
+        let content = r#"fn main() {
+    println!("Hello");
+    println!("World");
+}
+"#;
+        let path = create_test_file(dir.path(), "main.rs", content).await;
+        let editor = Editor::new();
+
+        // Replace lines 2-3 with a single line (4 lines -> 3 lines)
+        let op = EditOp::replace_lines(&path, 2, 3, "    println!(\"Hello World\");\n");
+        editor.apply(&op).await.unwrap();
+
+        let result = fs::read_to_string(&path).await.unwrap();
+        assert!(result.contains("Hello World"));
+        assert!(!result.contains("\"Hello\""));
+        assert!(!result.contains("\"World\""));
+        // Original: 4 lines, replaced 2 lines with 1 = 3 lines total
+        assert_eq!(result.lines().count(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_replace_first_line() {
+        let dir = tempdir().unwrap();
+        let content = "first\nsecond\nthird\n";
+        let path = create_test_file(dir.path(), "test.txt", content).await;
+        let editor = Editor::new();
+
+        let op = EditOp::replace_lines(&path, 1, 1, "FIRST\n");
+        editor.apply(&op).await.unwrap();
+
+        let result = fs::read_to_string(&path).await.unwrap();
+        assert_eq!(result, "FIRST\nsecond\nthird\n");
+    }
+
+    #[tokio::test]
+    async fn test_replace_last_line() {
+        let dir = tempdir().unwrap();
+        let content = "first\nsecond\nthird\n";
+        let path = create_test_file(dir.path(), "test.txt", content).await;
+        let editor = Editor::new();
+
+        let op = EditOp::replace_lines(&path, 3, 3, "THIRD\n");
+        editor.apply(&op).await.unwrap();
+
+        let result = fs::read_to_string(&path).await.unwrap();
+        assert_eq!(result, "first\nsecond\nTHIRD\n");
+    }
+
+    #[tokio::test]
+    async fn test_invalid_line_range_zero() {
+        let dir = tempdir().unwrap();
+        let path = create_test_file(dir.path(), "test.txt", "line1\nline2\n").await;
+        let editor = Editor::new();
+
+        // Line 0 is invalid (1-indexed)
+        let op = EditOp::replace_lines(&path, 0, 1, "new\n");
+        let result = editor.apply(&op).await;
+        assert!(matches!(result, Err(EditError::InvalidLineRange { .. })));
+    }
+
+    #[tokio::test]
+    async fn test_invalid_line_range_reversed() {
+        let dir = tempdir().unwrap();
+        let path = create_test_file(dir.path(), "test.txt", "line1\nline2\nline3\n").await;
+        let editor = Editor::new();
+
+        // start > end is invalid
+        let op = EditOp::replace_lines(&path, 3, 1, "new\n");
+        let result = editor.apply(&op).await;
+        assert!(matches!(result, Err(EditError::InvalidLineRange { .. })));
+    }
+
+    #[tokio::test]
+    async fn test_invalid_line_range_exceeds_file() {
+        let dir = tempdir().unwrap();
+        let path = create_test_file(dir.path(), "test.txt", "line1\nline2\n").await;
+        let editor = Editor::new();
+
+        // Line 5 doesn't exist
+        let op = EditOp::replace_lines(&path, 1, 5, "new\n");
+        let result = editor.apply(&op).await;
+        assert!(matches!(result, Err(EditError::InvalidLineRange { .. })));
+    }
+
+    #[tokio::test]
+    async fn test_overlapping_edits_detection() {
+        let dir = tempdir().unwrap();
+        let path = create_test_file(dir.path(), "test.txt", "0123456789").await;
+        let editor = Editor::new();
+
+        // These spans overlap: 2-6 and 4-8
+        let ops = vec![
+            EditOp::replace(&path, Span::new(2, 6), "XX"),
+            EditOp::replace(&path, Span::new(4, 8), "YY"),
+        ];
+
+        let result = editor.apply_batch(&ops).await;
+        assert!(matches!(result, Err(EditError::OverlappingEdits)));
+    }
+
+    #[tokio::test]
+    async fn test_adjacent_edits_allowed() {
+        let dir = tempdir().unwrap();
+        let path = create_test_file(dir.path(), "test.txt", "0123456789").await;
+        let editor = Editor::new();
+
+        // Adjacent spans: 0-3 and 3-6 (touching but not overlapping)
+        let ops = vec![
+            EditOp::replace(&path, Span::new(0, 3), "AAA"),
+            EditOp::replace(&path, Span::new(3, 6), "BBB"),
+        ];
+
+        let results = editor.apply_batch(&ops).await.unwrap();
+        assert_eq!(results.len(), 1);
+
+        let content = fs::read_to_string(&path).await.unwrap();
+        assert_eq!(content, "AAABBB6789");
+    }
+
+    #[tokio::test]
+    async fn test_batch_multiple_files() {
+        let dir = tempdir().unwrap();
+        let path1 = create_test_file(dir.path(), "file1.txt", "content1").await;
+        let path2 = create_test_file(dir.path(), "file2.txt", "content2").await;
+        let editor = Editor::new();
+
+        let ops = vec![
+            EditOp::replace(&path1, Span::new(0, 7), "CONTENT"),
+            EditOp::replace(&path2, Span::new(0, 7), "MODIFIED"),
+        ];
+
+        let results = editor.apply_batch(&ops).await.unwrap();
+        assert_eq!(results.len(), 2);
+
+        let c1 = fs::read_to_string(&path1).await.unwrap();
+        let c2 = fs::read_to_string(&path2).await.unwrap();
+        assert_eq!(c1, "CONTENT1");
+        assert_eq!(c2, "MODIFIED2");
+    }
+
+    #[tokio::test]
+    async fn test_sequential_edits_same_file() {
+        let dir = tempdir().unwrap();
+        let path = create_test_file(dir.path(), "test.txt", "hello world").await;
+        let editor = Editor::new();
+
+        // First edit
+        let op1 = EditOp::replace(&path, Span::new(0, 5), "HELLO");
+        let result1 = editor.apply(&op1).await.unwrap();
+
+        // Second edit - use new hash
+        let op2 = EditOp::replace(&path, Span::new(6, 11), "WORLD")
+            .with_expected_hash(result1.new_hash);
+        editor.apply(&op2).await.unwrap();
+
+        let content = fs::read_to_string(&path).await.unwrap();
+        assert_eq!(content, "HELLO WORLD");
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_modification_detected() {
+        let dir = tempdir().unwrap();
+        let path = create_test_file(dir.path(), "test.txt", "original").await;
+        let editor = Editor::new();
+
+        // Get hash of original content
+        let original_hash = ContentHash::compute(b"original");
+
+        // Simulate another process modifying the file
+        fs::write(&path, "modified by other").await.unwrap();
+
+        // Try to edit with old hash - should fail
+        let op = EditOp::replace(&path, Span::new(0, 8), "my edit")
+            .with_expected_hash(original_hash);
+
+        let result = editor.apply(&op).await;
+        assert!(matches!(result, Err(EditError::HashMismatch { .. })));
+
+        // Verify the "other" modification is preserved
+        let content = fs::read_to_string(&path).await.unwrap();
+        assert_eq!(content, "modified by other");
+    }
+
+    #[tokio::test]
+    async fn test_insert_at_end() {
+        let dir = tempdir().unwrap();
+        let path = create_test_file(dir.path(), "test.txt", "hello").await;
+        let editor = Editor::new();
+
+        let op = EditOp::insert(&path, 5, " world");
+        editor.apply(&op).await.unwrap();
+
+        let content = fs::read_to_string(&path).await.unwrap();
+        assert_eq!(content, "hello world");
+    }
+
+    #[tokio::test]
+    async fn test_insert_at_start() {
+        let dir = tempdir().unwrap();
+        let path = create_test_file(dir.path(), "test.txt", "world").await;
+        let editor = Editor::new();
+
+        let op = EditOp::insert(&path, 0, "hello ");
+        editor.apply(&op).await.unwrap();
+
+        let content = fs::read_to_string(&path).await.unwrap();
+        assert_eq!(content, "hello world");
+    }
+
+    #[tokio::test]
+    async fn test_delete_entire_content() {
+        let dir = tempdir().unwrap();
+        let path = create_test_file(dir.path(), "test.txt", "delete me").await;
+        let editor = Editor::new();
+
+        let op = EditOp::delete(&path, Span::new(0, 9));
+        let result = editor.apply(&op).await.unwrap();
+
+        assert_eq!(result.bytes_changed, -9);
+
+        let content = fs::read_to_string(&path).await.unwrap();
+        assert_eq!(content, "");
+    }
+
+    #[tokio::test]
+    async fn test_preview_does_not_modify() {
+        let dir = tempdir().unwrap();
+        let original = "do not change";
+        let path = create_test_file(dir.path(), "test.txt", original).await;
+        let editor = Editor::new();
+
+        // Preview multiple times
+        for _ in 0..3 {
+            let op = EditOp::replace(&path, Span::new(0, 2), "XX");
+            let diff = editor.preview(&op).await.unwrap();
+            assert!(diff.unified.contains("-do"));
+            assert!(diff.unified.contains("+XX"));
+        }
+
+        // File should be unchanged
+        let content = fs::read_to_string(&path).await.unwrap();
+        assert_eq!(content, original);
+    }
+
+    #[tokio::test]
+    async fn test_result_stats_accuracy() {
+        let dir = tempdir().unwrap();
+        let original = "line1\nline2\nline3\n";
+        let path = create_test_file(dir.path(), "test.txt", original).await;
+        let editor = Editor::new();
+
+        // Replace 2 lines with 3 lines
+        let op = EditOp::replace_lines(&path, 1, 2, "new1\nnew2\nnew3\n");
+        let result = editor.apply(&op).await.unwrap();
+
+        assert_eq!(result.lines_changed, 1); // 3 lines - 2 lines = +1
+        assert!(result.bytes_changed > 0);
+
+        // Verify hashes are different
+        assert_ne!(result.old_hash, result.new_hash);
+    }
+
+    #[tokio::test]
+    async fn test_large_file_edit() {
+        let dir = tempdir().unwrap();
+
+        // Create a file with 1000 lines (1-indexed: line 1 = "Line number 1")
+        let mut content = String::new();
+        for i in 1..=1000 {
+            content.push_str(&format!("Line number {}\n", i));
+        }
+        let path = create_test_file(dir.path(), "large.txt", &content).await;
+        let editor = Editor::new();
+
+        // Edit line 500 (which contains "Line number 500")
+        let op = EditOp::replace_lines(&path, 500, 500, "MODIFIED LINE 500\n");
+        let result = editor.apply(&op).await.unwrap();
+
+        assert!(result.bytes_changed != 0);
+
+        let result_content = fs::read_to_string(&path).await.unwrap();
+        assert!(result_content.contains("MODIFIED LINE 500"));
+        // Line 499 and 501 should be unchanged
+        assert!(result_content.contains("Line number 499"));
+        assert!(result_content.contains("Line number 501"));
+        // Original line 500 should be gone
+        assert!(!result_content.contains("Line number 500\n"));
+    }
+
+    #[tokio::test]
+    async fn test_special_characters_in_content() {
+        let dir = tempdir().unwrap();
+        let path = create_test_file(dir.path(), "test.txt", "placeholder").await;
+        let editor = Editor::new();
+
+        // Content with special regex/shell characters
+        let special = r#"$HOME/*.rs | grep -E "test\d+" && echo 'done'"#;
+        let op = EditOp::replace(&path, Span::new(0, 11), special);
+        editor.apply(&op).await.unwrap();
+
+        let content = fs::read_to_string(&path).await.unwrap();
+        assert_eq!(content, special);
+    }
+
+    #[tokio::test]
+    async fn test_newline_handling_no_trailing() {
+        let dir = tempdir().unwrap();
+        // File without trailing newline
+        let path = create_test_file(dir.path(), "test.txt", "no newline").await;
+        let editor = Editor::new();
+
+        let op = EditOp::replace(&path, Span::new(3, 10), "NEWLINE");
+        editor.apply(&op).await.unwrap();
+
+        let content = fs::read_to_string(&path).await.unwrap();
+        assert_eq!(content, "no NEWLINE");
+        assert!(!content.ends_with('\n'));
+    }
+
+    #[tokio::test]
+    async fn test_newline_handling_with_trailing() {
+        let dir = tempdir().unwrap();
+        // File with trailing newline
+        let path = create_test_file(dir.path(), "test.txt", "with newline\n").await;
+        let editor = Editor::new();
+
+        let op = EditOp::replace(&path, Span::new(5, 12), "NEWLINE");
+        editor.apply(&op).await.unwrap();
+
+        let content = fs::read_to_string(&path).await.unwrap();
+        assert_eq!(content, "with NEWLINE\n");
+    }
+
+    #[tokio::test]
+    async fn test_hash_chain_verification() {
+        let dir = tempdir().unwrap();
+        let path = create_test_file(dir.path(), "test.txt", "step0").await;
+        let editor = Editor::new();
+
+        // Chain of edits, each using previous hash
+        let mut current_hash = ContentHash::compute(b"step0");
+
+        for i in 1..=5 {
+            let new_content = format!("step{}", i);
+            let op = EditOp::replace(&path, Span::new(0, 5), &new_content)
+                .with_expected_hash(current_hash);
+
+            let result = editor.apply(&op).await.unwrap();
+            current_hash = result.new_hash;
+
+            let content = fs::read_to_string(&path).await.unwrap();
+            assert_eq!(content, new_content);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_batch_with_inserts_and_deletes() {
+        let dir = tempdir().unwrap();
+        let path = create_test_file(dir.path(), "test.txt", "AABBCCDD").await;
+        let editor = Editor::new();
+
+        // Multiple non-overlapping operations
+        let ops = vec![
+            EditOp::delete(&path, Span::new(0, 2)),      // Remove "AA"
+            EditOp::insert(&path, 4, "XX"),              // Insert after "BB"
+            EditOp::delete(&path, Span::new(6, 8)),      // Remove "DD"
+        ];
+
+        let results = editor.apply_batch(&ops).await.unwrap();
+        assert_eq!(results.len(), 1);
+
+        let content = fs::read_to_string(&path).await.unwrap();
+        // After sorting by position (descending) and applying:
+        // Original: AABBCCDD
+        // Delete 6-8 (DD): AABBCC
+        // Insert at 4 (XX): AABBXXCC
+        // Delete 0-2 (AA): BBXXCC
+        assert_eq!(content, "BBXXCC");
+    }
+
+    #[tokio::test]
+    async fn test_preview_with_hash_mismatch() {
+        let dir = tempdir().unwrap();
+        let path = create_test_file(dir.path(), "test.txt", "content").await;
+        let editor = Editor::new();
+
+        let wrong_hash = ContentHash::compute(b"wrong");
+        let op = EditOp::replace(&path, Span::new(0, 7), "new")
+            .with_expected_hash(wrong_hash);
+
+        let result = editor.preview(&op).await;
+        assert!(matches!(result, Err(EditError::HashMismatch { .. })));
     }
 }

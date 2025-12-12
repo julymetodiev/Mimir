@@ -117,15 +117,34 @@ pub enum GraphError {
 /// Edit-related errors.
 #[derive(Error, Debug)]
 pub enum EditError {
-    #[error("File changed externally: {path}")]
-    ConflictDetected {
+    #[error("File not found: {path}")]
+    FileNotFound { path: PathBuf },
+
+    #[error("Content hash mismatch for {path}: expected {expected}, got {actual}")]
+    HashMismatch {
         path: PathBuf,
         expected: ContentHash,
         actual: ContentHash,
     },
 
-    #[error("Invalid edit range: {start}..{end} in file with {total} lines")]
-    InvalidRange { start: u32, end: u32, total: u32 },
+    #[error("Invalid span {start}..{end} for file {path} (size: {size} bytes)")]
+    InvalidSpan {
+        path: PathBuf,
+        start: u32,
+        end: u32,
+        size: u32,
+    },
+
+    #[error("Invalid line range {start_line}..{end_line} for file {path} (lines: {total_lines})")]
+    InvalidLineRange {
+        path: PathBuf,
+        start_line: u32,
+        end_line: u32,
+        total_lines: u32,
+    },
+
+    #[error("Overlapping edits detected in batch operation")]
+    OverlappingEdits,
 
     #[error("Symbol not found for edit: {name}")]
     SymbolNotFound { name: String },
@@ -136,8 +155,11 @@ pub enum EditError {
     #[error("Transaction failed: {0}")]
     TransactionFailed(String),
 
-    #[error("File not found: {path}")]
-    FileNotFound { path: PathBuf },
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("UTF-8 error: {0}")]
+    Utf8(#[from] std::string::FromUtf8Error),
 }
 
 /// Task-related errors.

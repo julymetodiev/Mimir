@@ -9,7 +9,7 @@
 //! use mimir_edit::{Editor, EditOp};
 //! use mimir_types::Span;
 //!
-//! # async fn example() -> Result<(), mimir_edit::EditError> {
+//! # async fn example() -> Result<(), mimir_error::EditError> {
 //! let editor = Editor::new();
 //!
 //! // Replace text at a specific byte range
@@ -29,7 +29,7 @@
 //! use mimir_edit::{Editor, EditOp};
 //! use mimir_types::{ContentHash, Span};
 //!
-//! # async fn example() -> Result<(), mimir_edit::EditError> {
+//! # async fn example() -> Result<(), mimir_error::EditError> {
 //! let content = std::fs::read("src/main.rs")?;
 //! let hash = ContentHash::compute(&content);
 //!
@@ -44,9 +44,13 @@
 //! ```
 
 mod editor;
-mod error;
 mod op;
 
+// Re-export error types from mimir-error
+pub use mimir_error::EditError;
+
+/// Result type for edit operations.
+pub type EditResult<T> = Result<T, EditError>;
+
 pub use editor::Editor;
-pub use error::{EditError, EditResult};
 pub use op::{Diff, EditOp, EditResult as OpResult};

@@ -1,23 +1,23 @@
 //! In-memory content store for testing.
 
 use async_trait::async_trait;
+use dashmap::DashMap;
 use mimir_error::StorageError;
 use mimir_types::ContentHash;
-use std::collections::HashMap;
-use std::sync::RwLock;
 
 use crate::traits::ContentStore;
 
 /// An in-memory content store, primarily for testing.
+/// Uses DashMap for lock-free concurrent access.
 pub struct MemoryContentStore {
-    data: RwLock<HashMap<ContentHash, Vec<u8>>>,
+    data: DashMap<ContentHash, Vec<u8>>,
 }
 
 impl MemoryContentStore {
     /// Create a new empty memory store.
     pub fn new() -> Self {
         Self {
-            data: RwLock::new(HashMap::new()),
+            data: DashMap::new(),
         }
     }
 }
@@ -32,29 +32,24 @@ impl Default for MemoryContentStore {
 impl ContentStore for MemoryContentStore {
     async fn store(&self, content: &[u8]) -> Result<ContentHash, StorageError> {
         let hash = ContentHash::compute(content);
-        let mut data = self.data.write().unwrap();
-        data.entry(hash).or_insert_with(|| content.to_vec());
+        self.data.entry(hash).or_insert_with(|| content.to_vec());
         Ok(hash)
     }
 
     async fn get(&self, hash: &ContentHash) -> Result<Option<Vec<u8>>, StorageError> {
-        let data = self.data.read().unwrap();
-        Ok(data.get(hash).cloned())
+        Ok(self.data.get(hash).map(|v| v.value().clone()))
     }
 
     async fn exists(&self, hash: &ContentHash) -> Result<bool, StorageError> {
-        let data = self.data.read().unwrap();
-        Ok(data.contains_key(hash))
+        Ok(self.data.contains_key(hash))
     }
 
     async fn delete(&self, hash: &ContentHash) -> Result<bool, StorageError> {
-        let mut data = self.data.write().unwrap();
-        Ok(data.remove(hash).is_some())
+        Ok(self.data.remove(hash).is_some())
     }
 
     async fn list_hashes(&self) -> Result<Vec<ContentHash>, StorageError> {
-        let data = self.data.read().unwrap();
-        Ok(data.keys().copied().collect())
+        Ok(self.data.iter().map(|entry| *entry.key()).collect())
     }
 }
 
@@ -113,5 +108,30 @@ mod tests {
         // Deleting again should return false
         let deleted_again = store.delete(&hash).await.unwrap();
         assert!(!deleted_again);
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_access() {
+        use std::sync::Arc;
+
+        let store = Arc::new(MemoryContentStore::new());
+        let mut handles = vec![];
+
+        // Spawn multiple tasks writing concurrently
+        for i in 0..10 {
+            let store = Arc::clone(&store);
+            handles.push(tokio::spawn(async move {
+                let content = format!("content {}", i);
+                store.store(content.as_bytes()).await.unwrap()
+            }));
+        }
+
+        // Wait for all tasks
+        for handle in handles {
+            handle.await.unwrap();
+        }
+
+        // Should have 10 unique entries
+        assert_eq!(store.list_hashes().await.unwrap().len(), 10);
     }
 }

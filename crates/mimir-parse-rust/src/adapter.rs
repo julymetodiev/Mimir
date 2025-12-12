@@ -3,28 +3,31 @@
 use mimir_parse_core::extracted::{ExtractedReference, ExtractedSymbol};
 use mimir_parse_core::{LanguageAdapter, ParsedTree};
 use mimir_types::{FileId, Language};
-use std::sync::Mutex;
+use std::cell::RefCell;
 use tree_sitter::Parser;
 
 use crate::references::extract_references;
 use crate::symbols::extract_symbols;
 
-/// Rust language adapter using tree-sitter-rust.
-pub struct RustAdapter {
-    parser: Mutex<Parser>,
-}
-
-impl RustAdapter {
-    /// Create a new Rust adapter.
-    pub fn new() -> Self {
+thread_local! {
+    /// Thread-local parser instance for lock-free parsing.
+    static RUST_PARSER: RefCell<Parser> = RefCell::new({
         let mut parser = Parser::new();
         parser
             .set_language(&tree_sitter_rust::LANGUAGE.into())
             .expect("Failed to set Rust language");
+        parser
+    });
+}
 
-        Self {
-            parser: Mutex::new(parser),
-        }
+/// Rust language adapter using tree-sitter-rust.
+/// Uses thread-local storage for lock-free concurrent parsing.
+pub struct RustAdapter;
+
+impl RustAdapter {
+    /// Create a new Rust adapter.
+    pub fn new() -> Self {
+        Self
     }
 }
 
@@ -40,8 +43,10 @@ impl LanguageAdapter for RustAdapter {
     }
 
     fn parse(&self, source: &str) -> Option<ParsedTree> {
-        let mut parser = self.parser.lock().ok()?;
-        ParsedTree::parse(&mut parser, source)
+        RUST_PARSER.with(|parser| {
+            let mut parser = parser.borrow_mut();
+            ParsedTree::parse(&mut parser, source)
+        })
     }
 
     fn extract_symbols(&self, tree: &ParsedTree, file_id: FileId) -> Vec<ExtractedSymbol> {
@@ -215,5 +220,27 @@ mod utils {
 
         assert!(symbols.iter().any(|s| s.name == "utils" && s.kind == SymbolKind::Module));
         assert!(symbols.iter().any(|s| s.name == "helper" && s.kind == SymbolKind::Function));
+    }
+
+    #[test]
+    fn test_concurrent_parsing() {
+        use std::thread;
+
+        let handles: Vec<_> = (0..4)
+            .map(|i| {
+                thread::spawn(move || {
+                    let adapter = RustAdapter::new();
+                    let source = format!("fn test_{}() {{}}", i);
+                    let tree = adapter.parse(&source).expect("Failed to parse");
+                    let symbols = adapter.extract_symbols(&tree, FileId::new(i as u64));
+                    assert_eq!(symbols.len(), 1);
+                    assert_eq!(symbols[0].name, format!("test_{}", i));
+                })
+            })
+            .collect();
+
+        for handle in handles {
+            handle.join().expect("Thread panicked");
+        }
     }
 }

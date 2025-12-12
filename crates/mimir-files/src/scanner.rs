@@ -110,7 +110,7 @@ impl Scanner {
                 .modified()
                 .ok()
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| Utc.timestamp_opt(d.as_secs() as i64, 0).unwrap())
+                .and_then(|d| Utc.timestamp_opt(d.as_secs() as i64, 0).single())
                 .unwrap_or_else(Utc::now);
 
             // Compute relative path
