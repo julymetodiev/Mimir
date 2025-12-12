@@ -6,14 +6,14 @@ This document outlines the implementation plan in phases with milestones.
 
 ## Milestones Overview
 
-| Milestone | Description | Key Deliverable |
-|-----------|-------------|-----------------|
-| M1 | Storage + Init | `mimir init`, content store |
-| M2 | Single-Language Graph | `mimir trace` for Rust |
-| M3 | Actor + Sync | File watching, incremental sync |
-| M4 | Multi-Language | TS, Python, Go + cross-language trace |
-| M5 | Semantic Search | `mimir search` with embeddings |
-| M6 | Agent | `mimir agent` autonomous coding |
+| Milestone | Description | Key Deliverable | Status |
+|-----------|-------------|-----------------|--------|
+| M1 | Storage + Init | `mimir init`, content store | ✅ Done |
+| M2 | Single-Language Graph | `mimir trace` for Rust | 🔄 Next |
+| M3 | Actor + Sync | File watching, incremental sync | ⏳ |
+| M4 | Multi-Language | TS, Python, Go + cross-language trace | ⏳ |
+| M5 | Semantic Search | `mimir search` with embeddings | ⏳ |
+| M6 | Agent | `mimir agent` autonomous coding | ⏳ |
 
 ---
 
@@ -63,9 +63,11 @@ Tasks:
 
 ---
 
-## Phase 1: Storage Foundation (M1)
+## Phase 1: Storage Foundation (M1) ✅ COMPLETED
 
 **Focus**: Content store, file index, basic persistence
+
+**Completed**: December 2025 | Rust 1.90 (2024 edition) | 59 tests passing
 
 ### Part A: Core Storage
 
@@ -124,11 +126,21 @@ Tasks:
     └── Integration tests
 ```
 
-**M1 Deliverables**:
-- `mimir init` creates `.agent/` directory
-- `mimir status` shows indexed files
-- Content deduplication works
-- Snapshots can be created/restored
+**M1 Deliverables**: ✅ All completed
+- ✅ `mimir init` creates `.agent/` directory
+- ✅ `mimir status` shows indexed files
+- ✅ Content deduplication works
+- ✅ Snapshots can be created/restored
+
+**Implemented Crates**:
+- `mimir-types` - IDs, ContentHash, Location, Span, Language
+- `mimir-error` - Error hierarchy (MimirError, StorageError, etc.)
+- `mimir-persist` - Bincode serialization
+- `mimir-cache` - LRU cache with moka
+- `mimir-content` - ContentStore trait + Memory/Filesystem backends
+- `mimir-snapshot` - Snapshot create/list/restore
+- `mimir-files` - FileIndex (DashMap), Scanner with gitignore
+- `mimir-cli` - CLI with init/status commands
 
 ---
 

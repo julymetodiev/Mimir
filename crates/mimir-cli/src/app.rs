@@ -108,6 +108,7 @@ impl App {
     }
 
     /// Get the files handle if initialized.
+    #[allow(dead_code)]
     pub fn files(&self) -> Option<&FilesHandle<FilesystemContentStore>> {
         self.files_handle.as_ref()
     }

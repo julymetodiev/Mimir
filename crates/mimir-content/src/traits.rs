@@ -34,6 +34,7 @@ pub trait ContentStore: Send + Sync {
 }
 
 /// Extension methods for ContentStore.
+#[allow(dead_code)]
 #[async_trait]
 pub trait ContentStoreExt: ContentStore {
     /// Store a string as content.

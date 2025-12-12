@@ -31,6 +31,12 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         commands::Commands::Init { force } => commands::init::execute(force).await?,
         commands::Commands::Status => commands::status::execute().await?,
+        commands::Commands::Trace {
+            file,
+            symbol,
+            depth,
+            json,
+        } => commands::trace::execute(&file, &symbol, depth, json).await?,
     }
 
     Ok(())

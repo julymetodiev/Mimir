@@ -8,6 +8,13 @@ members = [
     "crates/mimir-content",
     "crates/mimir-snapshot",
     "crates/mimir-files",
+    # M2: Graph crates
+    "crates/mimir-symbols",
+    "crates/mimir-relations",
+    "crates/mimir-parse-core",
+    "crates/mimir-parse-rust",
+    "crates/mimir-graph",
+    # CLI
     "crates/mimir-cli",
 ]
 
@@ -30,8 +37,17 @@ mimir-cache = { path = "crates/mimir-cache" }
 mimir-content = { path = "crates/mimir-content" }
 mimir-snapshot = { path = "crates/mimir-snapshot" }
 
-# Internal crates - Layer 3 (partial)
+# Internal crates - Layer 2 (Symbols & Relations)
+mimir-symbols = { path = "crates/mimir-symbols" }
+mimir-relations = { path = "crates/mimir-relations" }
+
+# Internal crates - Layer 2 (Parsing)
+mimir-parse-core = { path = "crates/mimir-parse-core" }
+mimir-parse-rust = { path = "crates/mimir-parse-rust" }
+
+# Internal crates - Layer 3
 mimir-files = { path = "crates/mimir-files" }
+mimir-graph = { path = "crates/mimir-graph" }
 
 # Error handling
 thiserror = "2.0"
@@ -51,6 +67,14 @@ zstd = "0.13"
 dashmap = "6.1"
 tokio = { version = "1.48", features = ["full"] }
 async-trait = "0.1"
+arc-swap = "1.7"
+
+# Graph
+petgraph = "0.6"
+
+# Parsing
+tree-sitter = "0.24"
+tree-sitter-rust = "0.23"
 
 # Caching
 moka = { version = "0.12", features = ["sync"] }

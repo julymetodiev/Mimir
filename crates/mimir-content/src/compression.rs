@@ -21,6 +21,7 @@ pub fn decompress(data: &[u8]) -> Result<Vec<u8>, StorageError> {
 }
 
 /// Check if data appears to be zstd-compressed.
+#[allow(dead_code)]
 pub fn is_compressed(data: &[u8]) -> bool {
     // Zstd magic number: 0x28 0xB5 0x2F 0xFD
     data.len() >= 4 && data[0] == 0x28 && data[1] == 0xB5 && data[2] == 0x2F && data[3] == 0xFD

@@ -18,6 +18,11 @@ mimir-error = { workspace = true }
 mimir-content = { workspace = true }
 mimir-files = { workspace = true }
 mimir-snapshot = { workspace = true }
+mimir-symbols = { workspace = true }
+mimir-relations = { workspace = true }
+mimir-graph = { workspace = true }
+mimir-parse-core = { workspace = true }
+mimir-parse-rust = { workspace = true }
 clap = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

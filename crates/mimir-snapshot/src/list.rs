@@ -60,6 +60,7 @@ pub async fn list_snapshots(snapshots_dir: &Path) -> Result<Vec<Snapshot>, Stora
 }
 
 /// Get a single snapshot by ID.
+#[allow(dead_code)]
 pub async fn get_snapshot(
     snapshots_dir: &Path,
     id: &str,

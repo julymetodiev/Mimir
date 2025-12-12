@@ -2,8 +2,10 @@
 
 pub mod init;
 pub mod status;
+pub mod trace;
 
 use clap::Subcommand;
+use std::path::PathBuf;
 
 /// Available commands.
 #[derive(Subcommand)]
@@ -17,4 +19,23 @@ pub enum Commands {
 
     /// Show project status.
     Status,
+
+    /// Trace call chains for a symbol.
+    Trace {
+        /// Source file to analyze.
+        #[arg(short, long)]
+        file: PathBuf,
+
+        /// Symbol name to trace.
+        #[arg(short, long)]
+        symbol: String,
+
+        /// Maximum trace depth.
+        #[arg(short, long, default_value = "3")]
+        depth: usize,
+
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
 }
