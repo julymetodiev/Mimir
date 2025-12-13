@@ -31,6 +31,7 @@ impl ToolRegistry {
         registry.register(crate::tools::EditTool);
         registry.register(crate::tools::EditBatchTool);
         registry.register(crate::tools::AppendTool);
+        registry.register(crate::tools::WriteTool);
         registry.register(crate::tools::ShellTool);
         registry
     }

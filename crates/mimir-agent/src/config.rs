@@ -169,6 +169,15 @@ Add to the end of a file.
   "content": "\n// New Enum\npub enum Role {\n    Admin,\n    User,\n}"
 }
 
+## write_file
+Overwrite/Create file. USE CAREFULLY.
+{
+  "file": "src/new_mod.rs",
+  "content": "pub mod new_mod {\n ... full content ... \n}"
+}
+- Use to CREATE new files.
+- Use to OVERWRITE files when `edit` fails repeatedly.
+
 ## search / read / shell
 Standard usage.
 

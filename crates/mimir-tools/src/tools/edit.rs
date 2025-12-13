@@ -26,42 +26,46 @@ impl Tool for EditTool {
     }
 
     fn description(&self) -> &str {
-        "Edit source code by symbol name or file path. When editing by symbol, replaces the entire symbol. When editing by file, can specify line range or append to end."
+        "Edit source code. PREFER 'Symbol Mode' or 'Text Replace Mode'. Avoid line numbers if possible.\n\
+         MODES:\n\
+         1. Symbol Mode: { \"symbol\": \"User\", \"content\": \"...\" }\n\
+         2. Text Replace: { \"file\": \"src/main.rs\", \"old_content\": \"let x = 1;\", \"content\": \"let x = 2;\" }\n\
+         3. Line Mode (Fallback): { \"file\": \"...\", \"start_line\": 10, \"content\": \"...\" }"
     }
 
     fn schema(&self) -> ToolSchema {
         ToolSchema::new(self.name(), self.description())
             .with_param(ToolParameter::optional_string(
                 "symbol",
-                "Symbol name to edit (e.g., 'User', 'impl User', 'UserService'). Replaces entire symbol with new content.",
+                "Symbol name to edit (e.g., 'User', 'impl User'). Replaces the ENTIRE symbol definition.",
             ))
             .with_param(ToolParameter::optional_string(
                 "file",
-                "File path to edit. Required if symbol is not provided.",
+                "File path. Required for Text Replace or Line Mode.",
             ))
             .with_param(ToolParameter::optional_string(
                 "old_content",
-                "Exact content to replace. If provided, performs a text-based search and replace. Supersedes line numbers.",
+                "EXACT text to find and replace. If provided, ignores line numbers. Best for specific changes.",
             ))
             .with_param(ToolParameter::optional_integer(
                 "start_line",
-                "Start line number (1-based). Used with file parameter if old_content is NOT provided.",
+                "Start line (1-based). Use ONLY if symbol/old_content are not suitable. Risky due to line shifts.",
             ))
             .with_param(ToolParameter::optional_integer(
                 "end_line",
-                "End line number (1-based, inclusive). Used with file parameter. Defaults to start_line.",
+                "End line (1-based). Defaults to start_line.",
             ))
             .with_param(ToolParameter::required_string(
                 "content",
-                "New source code to insert. When editing symbol, do NOT include /// comments or #[derive].",
+                "New content. Must be a STRING. To delete, provide empty string \"\".",
             ))
             .with_param(ToolParameter::optional_string(
                 "mode",
-                "Edit mode: 'replace' (default), 'append' (adds to end).",
+                "Edit mode: 'replace' (default), 'append' (add to end of file).",
             ))
             .with_param(ToolParameter::optional_bool(
                 "preview",
-                "If true, shows diff without applying changes.",
+                "Show diff without applying. Default: false.",
                 false,
             ))
     }
