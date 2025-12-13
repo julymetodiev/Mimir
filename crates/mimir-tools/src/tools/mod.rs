@@ -22,10 +22,9 @@ use crate::ToolRegistry;
 pub fn create_default_registry() -> ToolRegistry {
     let mut registry = ToolRegistry::new();
     registry.register(SearchTool);
-    registry.register(ReadTool);
     registry.register(EditTool);
     registry.register(EditBatchTool);
-    registry.register(AppendTool);
     registry.register(ShellTool);
+    // ReadTool and AppendTool available but not in agent's default set
     registry
 }

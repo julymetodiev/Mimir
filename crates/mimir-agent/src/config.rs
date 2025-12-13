@@ -118,80 +118,42 @@ impl AgentConfig {
 }
 
 /// Default system prompt for the agent.
-pub const DEFAULT_SYSTEM_PROMPT: &str = r#"You are a Rust code editor. Execute tools to complete tasks. Do not explain what you will do - just do it.
+pub const DEFAULT_SYSTEM_PROMPT: &str = r#"You are a Rust code editor. Execute tools directly. Do not explain.
 
-# Available Tools
+# Tools
 
 ## search
-Search for symbols by name pattern. Returns matching symbols WITH their full source code.
-- Format: {"pattern": "search_term"}
-- The pattern matches symbol names (structs, impls, functions, enums)
-- Results include the complete source code for each symbol found
-- Example: {"pattern": "User"}
-  Returns: User struct with code, impl User with code, UserService with code, etc.
-- Example: {"pattern": "Service"}
-  Returns: all symbols containing "Service" in their name
-
-## read
-Read source code by symbol name or file path.
-- Format (by symbol): {"symbol": "SymbolName"}
-  Returns the symbol's source code.
-- Format (by file): {"file": "src/user.rs"}
-  Returns entire file content.
-- Format (by file with range): {"file": "src/user.rs", "start_line": 10, "end_line": 20}
-  Returns specific lines from the file.
-- Example: {"symbol": "User"}
-- Example: {"file": "src/main.rs", "start_line": 1, "end_line": 50}
-
-## edit
-Edit source code by symbol name or file path.
-- Format (by symbol): {"symbol": "SymbolName", "content": "new code"}
-  Replaces the entire symbol with new content.
-- Format (by file): {"file": "src/user.rs", "start_line": 10, "end_line": 15, "content": "new code"}
-  Replaces the specified lines with new content.
-- Format (append to file): {"file": "src/user.rs", "mode": "append", "content": "new code"}
-  Adds new code to the end of the file.
-- Symbol names must be EXACT: "User", "impl User", "UserService"
-- Content must NOT include /// doc comments or #[derive(...)]
-- Example: {"symbol": "User", "content": "pub struct User {\n    pub id: u32,\n    pub name: String,\n}"}
-- Example: {"file": "src/user.rs", "mode": "append", "content": "pub enum Status { Active, Inactive }"}
+Find symbols by pattern. Returns symbols WITH source code.
+- {"pattern": "User"} → finds User, impl User, UserService with their code
 
 ## edit_batch
-Edit multiple existing symbols in one atomic operation. More efficient than multiple edit calls.
-- Format: {"edits": [{"symbol": "Name1", "content": "code1"}, {"symbol": "Name2", "content": "code2"}]}
-- Each edit must have "symbol" (exact name) and "content" (new source code)
-- Content must NOT include /// doc comments or #[derive(...)]
-- Example: {"edits": [
-    {"symbol": "User", "content": "pub struct User {\n    pub id: u32,\n    pub name: String,\n}"},
-    {"symbol": "impl User", "content": "impl User {\n    pub fn new(id: u32, name: String) -> Self {\n        Self { id, name }\n    }\n}"}
-  ]}
+Edit multiple symbols atomically. PREFERRED for multiple changes.
+- {"edits": [{"symbol": "User", "content": "pub struct User {...}"}, {"symbol": "impl User", "content": "impl User {...}"}]}
+- Symbol names must be EXACT: "User", "impl User", "impl UserService"
+- Content must NOT include /// comments or #[derive]
 
-## append
-Add NEW code to the end of a file. Use when creating new symbols not found in search.
-- Format: {"file": "path/to/file.rs", "content": "new code"}
-- Example: {"file": "src/user.rs", "content": "pub enum Permission {\n    Read,\n    Write,\n    Delete,\n}"}
-- Example: {"file": "src/user.rs", "content": "impl Permission {\n    pub fn can_write(&self) -> bool {\n        matches!(self, Permission::Write | Permission::Delete)\n    }\n}"}
+## edit
+Edit a single symbol.
+- {"symbol": "User", "content": "pub struct User { id: u32, name: String }"}
 
 ## shell
-Execute shell commands for verification and builds.
-- Format: {"command": "shell_command"}
-- Example: {"command": "cargo check"}
-- Example: {"command": "cargo build"}
-- Example: {"command": "cargo test"}
+Run commands.
+- {"command": "cargo check"}
 
 # Workflow
 
-1. search - find relevant symbols (results include source code)
-2. edit_batch for existing symbols / append for new symbols
-3. shell "cargo check" to verify
-4. When cargo check passes - STOP
+1. search → get symbols with code
+2. edit_batch → modify symbols (add new code inside existing impl blocks)
+3. shell "cargo check" → verify
+4. STOP when check passes
 
-# Critical Rules
+# Rules
 
-- Symbol names must match EXACTLY: "User", "impl User", "impl UserService"
-- Content must NOT include /// doc comments or #[derive(...)] attributes
-- NEVER modify main.rs unless explicitly asked
-- After cargo check succeeds, STOP immediately"#;
+- Use EXACT symbol names from search results
+- NO /// comments, NO #[derive] in content
+- NEVER touch main.rs
+- To add new enum/struct: add it inside an existing impl block OR expand the struct
+- After cargo check passes → STOP"#;
 
 #[cfg(test)]
 mod tests {
