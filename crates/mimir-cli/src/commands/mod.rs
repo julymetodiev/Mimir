@@ -1,5 +1,6 @@
 //! CLI commands.
 
+pub mod agent;
 pub mod daemon;
 pub mod edit;
 pub mod init;
@@ -197,5 +198,44 @@ pub enum Commands {
         /// Output as JSON.
         #[arg(long)]
         json: bool,
+    },
+
+    /// Run an AI agent to perform coding tasks.
+    Agent {
+        /// The goal or task for the agent to accomplish.
+        goal: String,
+
+        /// Model to use (default: GLM-4.6).
+        #[arg(short, long)]
+        model: Option<String>,
+
+        /// Maximum iterations (tool call rounds).
+        #[arg(short = 'i', long, default_value = "50")]
+        max_iterations: u32,
+
+        /// Verbose output (show all tool calls and responses).
+        #[arg(short, long)]
+        verbose: bool,
+
+        /// Enable checkpoints for resumability.
+        #[arg(short, long)]
+        checkpoint: bool,
+    },
+
+    /// List agent tasks.
+    Tasks {
+        /// Filter by status (pending, running, paused, completed, failed, cancelled).
+        #[arg(short, long)]
+        status: Option<String>,
+    },
+
+    /// Resume a paused agent task.
+    Resume {
+        /// Task ID to resume.
+        task_id: String,
+
+        /// Verbose output.
+        #[arg(short, long)]
+        verbose: bool,
     },
 }

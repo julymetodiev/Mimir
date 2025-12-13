@@ -1,8 +1,10 @@
-//! Z.ai GLM provider (Anthropic-compatible API).
+//! Z.ai GLM provider (OpenAI-compatible API).
+//!
+//! Uses the Coding Plan endpoint for better tool-calling capabilities.
 
 use crate::{
     ChunkType, Completion, CompletionRequest, CompletionStream, ContentBlock, LlmError,
-    LlmProvider, LlmResult, Message, ProviderConfig, Role, StopReason, StreamChunk,
+    LlmProvider, LlmResult, Message, Role, StopReason, StreamChunk,
     ToolUseChunk, Usage,
 };
 use async_trait::async_trait;
@@ -11,29 +13,37 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-const ZAI_API_URL: &str = "https://api.z.ai/api/anthropic/v1/messages";
-const ANTHROPIC_VERSION: &str = "2023-06-01";
+/// Coding Plan endpoint (better for tool-calling).
+const ZAI_CODING_URL: &str = "https://api.z.ai/api/coding/paas/v4/chat/completions";
 
-/// Z.ai GLM provider (uses Anthropic-compatible API).
+/// General endpoint.
+const ZAI_GENERAL_URL: &str = "https://api.z.ai/api/paas/v4/chat/completions";
+
+/// Z.ai GLM provider (uses OpenAI-compatible API).
 pub struct ZaiProvider {
     client: Client,
-    config: ProviderConfig,
+    config: crate::ProviderConfig,
+    use_coding_endpoint: bool,
 }
 
 impl ZaiProvider {
     /// Create a new Z.ai provider.
-    pub fn new(config: ProviderConfig) -> Self {
+    pub fn new(config: crate::ProviderConfig) -> Self {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(config.timeout_secs))
             .build()
             .expect("Failed to create HTTP client");
 
-        Self { client, config }
+        Self {
+            client,
+            config,
+            use_coding_endpoint: true, // Default to coding endpoint
+        }
     }
 
     /// Create from API key.
     pub fn from_api_key(api_key: impl Into<String>) -> Self {
-        Self::new(ProviderConfig::new(api_key))
+        Self::new(crate::ProviderConfig::new(api_key))
     }
 
     /// Create from environment variable.
@@ -43,34 +53,68 @@ impl ZaiProvider {
         Ok(Self::from_api_key(api_key))
     }
 
-    fn base_url(&self) -> &str {
-        self.config
-            .base_url
-            .as_deref()
-            .unwrap_or(ZAI_API_URL)
+    /// Use the general endpoint instead of coding endpoint.
+    pub fn with_general_endpoint(mut self) -> Self {
+        self.use_coding_endpoint = false;
+        self
     }
 
-    fn build_request(&self, request: &CompletionRequest) -> ZaiRequest {
-        let messages: Vec<ZaiMessage> = request
-            .messages
-            .iter()
-            .map(|m| ZaiMessage::from_message(m))
-            .collect();
+    fn base_url(&self) -> &str {
+        if let Some(url) = &self.config.base_url {
+            return url;
+        }
+        if self.use_coding_endpoint {
+            ZAI_CODING_URL
+        } else {
+            ZAI_GENERAL_URL
+        }
+    }
 
-        let tools: Option<Vec<Value>> = if request.tools.is_empty() {
+    fn build_request(&self, request: &CompletionRequest) -> OpenAIRequest {
+        let mut messages: Vec<OpenAIMessage> = vec![];
+
+        // Add system message if present
+        if let Some(system) = &request.system {
+            messages.push(OpenAIMessage {
+                role: "system".to_string(),
+                content: Some(system.clone()),
+                tool_calls: None,
+                tool_call_id: None,
+            });
+        }
+
+        // Convert messages
+        for msg in &request.messages {
+            messages.push(OpenAIMessage::from_message(msg));
+        }
+
+        // Convert tools to OpenAI format
+        let tools: Option<Vec<OpenAITool>> = if request.tools.is_empty() {
             None
         } else {
-            Some(request.tools.iter().map(|t| t.to_anthropic_format()).collect())
+            Some(
+                request
+                    .tools
+                    .iter()
+                    .map(|t| OpenAITool {
+                        r#type: "function".to_string(),
+                        function: OpenAIFunction {
+                            name: t.name.clone(),
+                            description: Some(t.description.clone()),
+                            parameters: t.parameters.to_json_schema(),
+                        },
+                    })
+                    .collect(),
+            )
         };
 
-        ZaiRequest {
+        OpenAIRequest {
             model: request.model.clone(),
             messages,
-            system: request.system.clone(),
-            max_tokens: request.max_tokens,
+            max_tokens: Some(request.max_tokens),
             temperature: request.temperature,
             tools,
-            stop_sequences: if request.stop_sequences.is_empty() {
+            stop: if request.stop_sequences.is_empty() {
                 None
             } else {
                 Some(request.stop_sequences.clone())
@@ -87,18 +131,11 @@ impl LlmProvider for ZaiProvider {
     }
 
     fn models(&self) -> Vec<&str> {
-        vec![
-            "GLM-4.6",
-            "GLM-4.5",
-            "GLM-4.5-flash",
-        ]
+        vec!["GLM-4.6", "GLM-4.5", "GLM-4.5-flash"]
     }
 
     fn default_model(&self) -> &str {
-        self.config
-            .default_model
-            .as_deref()
-            .unwrap_or("GLM-4.6")
+        self.config.default_model.as_deref().unwrap_or("GLM-4.6")
     }
 
     fn is_ready(&self) -> bool {
@@ -111,9 +148,8 @@ impl LlmProvider for ZaiProvider {
         let response = self
             .client
             .post(self.base_url())
-            .header("x-api-key", &self.config.api_key)
-            .header("anthropic-version", ANTHROPIC_VERSION)
-            .header("content-type", "application/json")
+            .header("Authorization", format!("Bearer {}", self.config.api_key))
+            .header("Content-Type", "application/json")
             .json(&api_request)
             .send()
             .await?;
@@ -135,7 +171,7 @@ impl LlmProvider for ZaiProvider {
             });
         }
 
-        let api_response: ZaiResponse = response.json().await?;
+        let api_response: OpenAIResponse = response.json().await?;
         Ok(api_response.into_completion())
     }
 
@@ -146,9 +182,8 @@ impl LlmProvider for ZaiProvider {
         let response = self
             .client
             .post(self.base_url())
-            .header("x-api-key", &self.config.api_key)
-            .header("anthropic-version", ANTHROPIC_VERSION)
-            .header("content-type", "application/json")
+            .header("Authorization", format!("Bearer {}", self.config.api_key))
+            .header("Content-Type", "application/json")
             .json(&api_request)
             .send()
             .await?;
@@ -174,10 +209,9 @@ impl LlmProvider for ZaiProvider {
 }
 
 fn parse_sse_chunk(bytes: &[u8]) -> LlmResult<StreamChunk> {
-    let text = std::str::from_utf8(bytes)
-        .map_err(|e| LlmError::Stream(e.to_string()))?;
+    let text =
+        std::str::from_utf8(bytes).map_err(|e| LlmError::Stream(e.to_string()))?;
 
-    // Parse SSE format
     for line in text.lines() {
         if let Some(data) = line.strip_prefix("data: ") {
             if data == "[DONE]" {
@@ -188,65 +222,60 @@ fn parse_sse_chunk(bytes: &[u8]) -> LlmResult<StreamChunk> {
                 });
             }
 
-            let event: Value = serde_json::from_str(data)?;
-            let event_type = event["type"].as_str().unwrap_or("");
+            if let Ok(event) = serde_json::from_str::<Value>(data) {
+                if let Some(choices) = event["choices"].as_array() {
+                    if let Some(choice) = choices.first() {
+                        let delta = &choice["delta"];
 
-            match event_type {
-                "message_start" => {
-                    return Ok(StreamChunk {
-                        chunk_type: ChunkType::MessageStart,
-                        text: None,
-                        tool_use: None,
-                    });
-                }
-                "content_block_delta" => {
-                    let delta = &event["delta"];
-                    if let Some(text) = delta["text"].as_str() {
-                        return Ok(StreamChunk {
-                            chunk_type: ChunkType::ContentBlockDelta,
-                            text: Some(text.to_string()),
-                            tool_use: None,
-                        });
+                        // Text content
+                        if let Some(content) = delta["content"].as_str() {
+                            return Ok(StreamChunk {
+                                chunk_type: ChunkType::ContentBlockDelta,
+                                text: Some(content.to_string()),
+                                tool_use: None,
+                            });
+                        }
+
+                        // Tool calls
+                        if let Some(tool_calls) = delta["tool_calls"].as_array() {
+                            if let Some(tool_call) = tool_calls.first() {
+                                let id = tool_call["id"].as_str().map(String::from);
+                                let name = tool_call["function"]["name"]
+                                    .as_str()
+                                    .map(String::from);
+                                let args = tool_call["function"]["arguments"]
+                                    .as_str()
+                                    .map(String::from);
+
+                                if id.is_some() || name.is_some() {
+                                    return Ok(StreamChunk {
+                                        chunk_type: ChunkType::ToolUseStart,
+                                        text: None,
+                                        tool_use: Some(ToolUseChunk {
+                                            id,
+                                            name,
+                                            input_delta: args,
+                                        }),
+                                    });
+                                } else if args.is_some() {
+                                    return Ok(StreamChunk {
+                                        chunk_type: ChunkType::ToolUseInput,
+                                        text: None,
+                                        tool_use: Some(ToolUseChunk {
+                                            id: None,
+                                            name: None,
+                                            input_delta: args,
+                                        }),
+                                    });
+                                }
+                            }
+                        }
                     }
-                    if let Some(input) = delta["partial_json"].as_str() {
-                        return Ok(StreamChunk {
-                            chunk_type: ChunkType::ToolUseInput,
-                            text: None,
-                            tool_use: Some(ToolUseChunk {
-                                id: None,
-                                name: None,
-                                input_delta: Some(input.to_string()),
-                            }),
-                        });
-                    }
                 }
-                "content_block_start" => {
-                    let content_block = &event["content_block"];
-                    if content_block["type"] == "tool_use" {
-                        return Ok(StreamChunk {
-                            chunk_type: ChunkType::ToolUseStart,
-                            text: None,
-                            tool_use: Some(ToolUseChunk {
-                                id: content_block["id"].as_str().map(String::from),
-                                name: content_block["name"].as_str().map(String::from),
-                                input_delta: None,
-                            }),
-                        });
-                    }
-                }
-                "message_stop" => {
-                    return Ok(StreamChunk {
-                        chunk_type: ChunkType::MessageStop,
-                        text: None,
-                        tool_use: None,
-                    });
-                }
-                _ => {}
             }
         }
     }
 
-    // No meaningful data in this chunk
     Ok(StreamChunk {
         chunk_type: ChunkType::ContentBlockDelta,
         text: Some(String::new()),
@@ -254,110 +283,199 @@ fn parse_sse_chunk(bytes: &[u8]) -> LlmResult<StreamChunk> {
     })
 }
 
-// Z.ai API types (Anthropic-compatible)
+// OpenAI API types
 
 #[derive(Debug, Serialize)]
-struct ZaiRequest {
+struct OpenAIRequest {
     model: String,
-    messages: Vec<ZaiMessage>,
+    messages: Vec<OpenAIMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    system: Option<String>,
-    max_tokens: u32,
+    max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<Value>>,
+    tools: Option<Vec<OpenAITool>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    stop_sequences: Option<Vec<String>>,
+    stop: Option<Vec<String>>,
     stream: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct ZaiMessage {
+struct OpenAIMessage {
     role: String,
-    content: Vec<ZaiContent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<OpenAIToolCall>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_call_id: Option<String>,
 }
 
-impl ZaiMessage {
+impl OpenAIMessage {
     fn from_message(msg: &Message) -> Self {
         let role = match msg.role {
             Role::User => "user",
             Role::Assistant => "assistant",
-            Role::System => "user", // System handled separately
+            Role::System => "system",
         };
 
-        let content: Vec<ZaiContent> = msg
-            .content
-            .iter()
-            .map(|c| match c {
-                ContentBlock::Text { text } => ZaiContent::Text { text: text.clone() },
-                ContentBlock::ToolUse { id, name, input } => ZaiContent::ToolUse {
-                    id: id.clone(),
-                    name: name.clone(),
-                    input: input.clone(),
-                },
+        // Check for tool results
+        let mut tool_call_id = None;
+        let mut content_text = String::new();
+        let mut tool_calls = vec![];
+
+        for block in &msg.content {
+            match block {
+                ContentBlock::Text { text } => {
+                    content_text.push_str(text);
+                }
+                ContentBlock::ToolUse { id, name, input } => {
+                    tool_calls.push(OpenAIToolCall {
+                        id: id.clone(),
+                        r#type: "function".to_string(),
+                        function: OpenAIFunctionCall {
+                            name: name.clone(),
+                            arguments: input.to_string(),
+                        },
+                    });
+                }
                 ContentBlock::ToolResult {
                     tool_use_id,
                     content,
-                    is_error,
-                } => ZaiContent::ToolResult {
-                    tool_use_id: tool_use_id.clone(),
-                    content: content.clone(),
-                    is_error: *is_error,
-                },
-            })
-            .collect();
+                    ..
+                } => {
+                    tool_call_id = Some(tool_use_id.clone());
+                    content_text = content.clone();
+                }
+            }
+        }
 
+        // Tool result message
+        if tool_call_id.is_some() {
+            return Self {
+                role: "tool".to_string(),
+                content: Some(content_text),
+                tool_calls: None,
+                tool_call_id,
+            };
+        }
+
+        // Assistant message with tool calls
+        if !tool_calls.is_empty() {
+            return Self {
+                role: role.to_string(),
+                content: if content_text.is_empty() {
+                    None
+                } else {
+                    Some(content_text)
+                },
+                tool_calls: Some(tool_calls),
+                tool_call_id: None,
+            };
+        }
+
+        // Regular message
         Self {
             role: role.to_string(),
-            content,
+            content: Some(content_text),
+            tool_calls: None,
+            tool_call_id: None,
         }
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum ZaiContent {
-    Text { text: String },
-    ToolUse { id: String, name: String, input: Value },
-    ToolResult { tool_use_id: String, content: String, is_error: bool },
+struct OpenAITool {
+    r#type: String,
+    function: OpenAIFunction,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct OpenAIFunction {
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    parameters: Value,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct OpenAIToolCall {
+    id: String,
+    r#type: String,
+    function: OpenAIFunctionCall,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct OpenAIFunctionCall {
+    name: String,
+    arguments: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct ZaiResponse {
-    content: Vec<ZaiContent>,
+struct OpenAIResponse {
+    choices: Vec<OpenAIChoice>,
     model: String,
-    stop_reason: String,
-    usage: ZaiUsage,
+    usage: OpenAIUsage,
 }
 
-impl ZaiResponse {
-    fn into_completion(self) -> Completion {
-        let content: Vec<ContentBlock> = self
-            .content
-            .into_iter()
-            .map(|c| match c {
-                ZaiContent::Text { text } => ContentBlock::Text { text },
-                ZaiContent::ToolUse { id, name, input } => {
-                    ContentBlock::ToolUse { id, name, input }
-                }
-                ZaiContent::ToolResult {
-                    tool_use_id,
-                    content,
-                    is_error,
-                } => ContentBlock::ToolResult {
-                    tool_use_id,
-                    content,
-                    is_error,
-                },
-            })
-            .collect();
+#[derive(Debug, Deserialize)]
+struct OpenAIChoice {
+    message: OpenAIResponseMessage,
+    finish_reason: Option<String>,
+}
 
-        let stop_reason = match self.stop_reason.as_str() {
-            "end_turn" => StopReason::EndTurn,
-            "tool_use" => StopReason::ToolUse,
-            "max_tokens" => StopReason::MaxTokens,
-            "stop_sequence" => StopReason::StopSequence,
+#[derive(Debug, Deserialize)]
+struct OpenAIResponseMessage {
+    role: String,
+    content: Option<String>,
+    tool_calls: Option<Vec<OpenAIToolCall>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIUsage {
+    prompt_tokens: u32,
+    completion_tokens: u32,
+    #[serde(default)]
+    total_tokens: u32,
+}
+
+impl OpenAIResponse {
+    fn into_completion(self) -> Completion {
+        let choice = self.choices.into_iter().next().unwrap_or(OpenAIChoice {
+            message: OpenAIResponseMessage {
+                role: "assistant".to_string(),
+                content: None,
+                tool_calls: None,
+            },
+            finish_reason: Some("stop".to_string()),
+        });
+
+        let mut content = vec![];
+
+        // Add text content
+        if let Some(text) = choice.message.content {
+            if !text.is_empty() {
+                content.push(ContentBlock::Text { text });
+            }
+        }
+
+        // Add tool calls
+        if let Some(tool_calls) = choice.message.tool_calls {
+            for tc in tool_calls {
+                let input: Value =
+                    serde_json::from_str(&tc.function.arguments).unwrap_or(Value::Null);
+                content.push(ContentBlock::ToolUse {
+                    id: tc.id,
+                    name: tc.function.name,
+                    input,
+                });
+            }
+        }
+
+        let stop_reason = match choice.finish_reason.as_deref() {
+            Some("stop") => StopReason::EndTurn,
+            Some("tool_calls") => StopReason::ToolUse,
+            Some("length") => StopReason::MaxTokens,
             _ => StopReason::EndTurn,
         };
 
@@ -368,22 +486,14 @@ impl ZaiResponse {
             },
             stop_reason,
             usage: Usage {
-                input_tokens: self.usage.input_tokens,
-                output_tokens: self.usage.output_tokens,
-                cache_creation_input_tokens: self.usage.cache_creation_input_tokens.unwrap_or(0),
-                cache_read_input_tokens: self.usage.cache_read_input_tokens.unwrap_or(0),
+                input_tokens: self.usage.prompt_tokens,
+                output_tokens: self.usage.completion_tokens,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
             },
             model: self.model,
         }
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct ZaiUsage {
-    input_tokens: u32,
-    output_tokens: u32,
-    cache_creation_input_tokens: Option<u32>,
-    cache_read_input_tokens: Option<u32>,
 }
 
 #[cfg(test)]
@@ -404,6 +514,18 @@ mod tests {
     }
 
     #[test]
+    fn test_coding_endpoint() {
+        let provider = ZaiProvider::from_api_key("test-key");
+        assert!(provider.base_url().contains("coding"));
+    }
+
+    #[test]
+    fn test_general_endpoint() {
+        let provider = ZaiProvider::from_api_key("test-key").with_general_endpoint();
+        assert!(!provider.base_url().contains("coding"));
+    }
+
+    #[test]
     fn test_build_request() {
         let provider = ZaiProvider::from_api_key("test-key");
         let request = CompletionRequest::new("GLM-4.6", vec![Message::user("Hello")])
@@ -412,7 +534,7 @@ mod tests {
 
         let api_request = provider.build_request(&request);
         assert_eq!(api_request.model, "GLM-4.6");
-        assert_eq!(api_request.max_tokens, 1024);
-        assert_eq!(api_request.system, Some("Be helpful".to_string()));
+        assert_eq!(api_request.max_tokens, Some(1024));
+        assert_eq!(api_request.messages.len(), 2); // system + user
     }
 }
