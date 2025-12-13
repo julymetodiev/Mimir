@@ -68,6 +68,7 @@ impl Drop for Spinner {
 struct CliCallback {
     verbose: bool,
     spinner: std::sync::Mutex<Spinner>,
+    last_tokens: std::sync::atomic::AtomicU32,
 }
 
 impl CliCallback {
@@ -75,6 +76,7 @@ impl CliCallback {
         Self {
             verbose,
             spinner: std::sync::Mutex::new(Spinner::new()),
+            last_tokens: std::sync::atomic::AtomicU32::new(0),
         }
     }
 }
@@ -100,17 +102,15 @@ impl AgentCallback for CliCallback {
         if let Ok(mut spinner) = self.spinner.lock() {
             spinner.stop();
         }
-        if self.verbose {
-            println!(
-                "  ᛗ  oracle spoke ({} in, {} out)",
-                completion.usage.input_tokens, completion.usage.output_tokens
-            );
-        }
+        // Store tokens to display with tool action
+        let total = completion.usage.total_tokens();
+        self.last_tokens.store(total, Ordering::SeqCst);
     }
 
     fn on_tool_start(&self, name: &str, input: &serde_json::Value) {
         let (rune, desc) = format_tool_action(name, input);
-        println!("  {}  {}", rune, desc);
+        let tokens = self.last_tokens.load(Ordering::SeqCst);
+        println!("  {}  {} ({} tokens)", rune, desc, tokens);
 
         // Start spinner for shell commands (they can take a while)
         if name == "shell" {
@@ -151,10 +151,7 @@ impl AgentCallback for CliCallback {
         if let Ok(mut spinner) = self.spinner.lock() {
             spinner.stop();
         }
-        println!("\n  ᛏ  complete ({} actions)\n", task.tool_calls);
-        if self.verbose {
-            println!("     tokens: {}", task.tokens_used);
-        }
+        println!("\n  ᛏ  complete ({} actions, {} tokens)\n", task.tool_calls, task.tokens_used);
     }
 
     fn on_error(&self, error: &mimir_agent::AgentError) {
