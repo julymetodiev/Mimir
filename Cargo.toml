@@ -18,6 +18,8 @@ members = [
     "crates/mimir-edit",
     "crates/mimir-protocol",
     "crates/mimir-graph-actor",
+    # M4: Agent crates
+    "crates/mimir-tools",
     # CLI
     "crates/mimir-cli",
 ]
@@ -55,6 +57,9 @@ mimir-graph = { path = "crates/mimir-graph" }
 mimir-edit = { path = "crates/mimir-edit" }
 mimir-protocol = { path = "crates/mimir-protocol" }
 mimir-graph-actor = { path = "crates/mimir-graph-actor" }
+
+# Internal crates - Layer 4 (Agent)
+mimir-tools = { path = "crates/mimir-tools" }
 
 # Error handling
 thiserror = "2.0"

@@ -11,9 +11,9 @@ This document outlines the implementation plan in phases with milestones.
 | M1 | Storage + Init | `mimir init`, content store | ✅ Done |
 | M2 | Single-Language Graph | `mimir trace` for Rust | ✅ Done |
 | M3 | Actor + Sync | File watching, incremental sync | ✅ Done |
-| M4 | Multi-Language | TS, Python, Go + cross-language trace | ⏳ |
+| M4 | Agent | `mimir agent` autonomous coding | ⏳ |
 | M5 | Semantic Search | `mimir search` with embeddings | ⏳ |
-| M6 | Agent | `mimir agent` autonomous coding | ⏳ |
+| M6 | Multi-Language | TS, Python, Go + cross-language trace | ⏳ |
 
 ---
 
@@ -394,115 +394,7 @@ $ mimir edit -f src/lib.rs -m lines -s 5 -e 10 -c "// new lines\n" -b
 
 ---
 
-## Phase 4: Multi-Language (M4)
-
-**Focus**: TypeScript, Python, Go adapters + cross-language bridges
-
-### Part A: Language Adapters
-
-```
-Tasks:
-├── mimir-parse-ts
-│   ├── tree-sitter-typescript setup
-│   ├── Symbol extraction (functions, classes, interfaces)
-│   ├── Reference extraction
-│   ├── Import resolution
-│   ├── JSX support
-│   └── Tests: real TS/TSX files
-│
-├── mimir-parse-py
-│   ├── tree-sitter-python setup
-│   ├── Symbol extraction (functions, classes)
-│   ├── Reference extraction
-│   └── Tests: real Python files
-│
-└── mimir-parse-go
-    ├── tree-sitter-go setup
-    ├── Symbol extraction
-    ├── Reference extraction
-    └── Tests
-```
-
-### Part B: Cross-Language Bridges
-
-```
-Tasks:
-├── Bridge detection
-│   ├── Bridge enum (HttpEndpoint, HttpCall, etc.)
-│   ├── Rust: Axum/Actix endpoint detection
-│   ├── TypeScript: fetch/axios call detection
-│   ├── Bridge matching algorithm
-│   └── Confidence scoring
-│
-├── Cross-language trace
-│   ├── trace() with cross_language=true
-│   ├── Protocol detection (HTTP/gRPC)
-│   ├── CrossLanguageRef in TraceResult
-│   └── Tests: frontend→backend tracing
-│
-└── CLI enhancements
-    ├── `mimir trace --cross-language`
-    ├── Language filter options
-    └── Output formatting
-```
-
-**M4 Deliverables**:
-- Support for Rust, TypeScript, Python, Go
-- `mimir trace --cross-language` follows HTTP calls across frontend/backend
-
----
-
-## Phase 5: Semantic Search (M5)
-
-**Focus**: Vector embeddings and semantic search
-
-### Part A: Embedding Infrastructure
-
-```
-Tasks:
-├── mimir-embeddings
-│   ├── EmbeddingEncoder trait
-│   ├── Local encoder (ONNX Runtime)
-│   ├── API encoder (OpenAI)
-│   └── Tests: encode/compare
-│
-├── HNSW index
-│   ├── Index implementation
-│   ├── Add/remove/search
-│   ├── ArcSwap + append buffer pattern
-│   ├── Persistence
-│   └── Tests: recall accuracy
-│
-└── Embedding manager
-    ├── Background encoding queue
-    ├── Incremental updates on graph changes
-    └── Tests: large-scale indexing
-```
-
-### Part B: Semantic Search
-
-```
-Tasks:
-├── Search implementation
-│   ├── Query encoding
-│   ├── K-NN search
-│   ├── Filter by language/kind
-│   ├── SimilarSymbol in TraceResult
-│   └── Tests: search relevance
-│
-└── CLI integration
-    ├── `mimir search "validate user input"`
-    ├── `mimir trace --similar`
-    └── Output formatting
-```
-
-**M5 Deliverables**:
-- `mimir search "handle authentication"` finds semantically similar code
-- Trace results include similar implementations
-
----
-
-## Phase 6: Agent Integration (M6)
+## Phase 4: Agent Integration (M4)
 
 **Focus**: LLM orchestration, tools, agent loop
 
@@ -583,10 +475,118 @@ Tasks:
     └── Tests: escape attempts
 ```
 
-**M6 Deliverables**:
+**M4 Deliverables**:
 - `mimir agent` runs autonomous coding agent
 - Tasks with checkpointing and recovery
 - Sandboxed execution
+
+---
+
+## Phase 5: Semantic Search (M5)
+
+**Focus**: Vector embeddings and semantic search
+
+### Part A: Embedding Infrastructure
+
+```
+Tasks:
+├── mimir-embeddings
+│   ├── EmbeddingEncoder trait
+│   ├── Local encoder (ONNX Runtime)
+│   ├── API encoder (OpenAI)
+│   └── Tests: encode/compare
+│
+├── HNSW index
+│   ├── Index implementation
+│   ├── Add/remove/search
+│   ├── ArcSwap + append buffer pattern
+│   ├── Persistence
+│   └── Tests: recall accuracy
+│
+└── Embedding manager
+    ├── Background encoding queue
+    ├── Incremental updates on graph changes
+    └── Tests: large-scale indexing
+```
+
+### Part B: Semantic Search
+
+```
+Tasks:
+├── Search implementation
+│   ├── Query encoding
+│   ├── K-NN search
+│   ├── Filter by language/kind
+│   ├── SimilarSymbol in TraceResult
+│   └── Tests: search relevance
+│
+└── CLI integration
+    ├── `mimir search "validate user input"`
+    ├── `mimir trace --similar`
+    └── Output formatting
+```
+
+**M5 Deliverables**:
+- `mimir search "handle authentication"` finds semantically similar code
+- Trace results include similar implementations
+
+---
+
+## Phase 6: Multi-Language (M6)
+
+**Focus**: TypeScript, Python, Go adapters + cross-language bridges
+
+### Part A: Language Adapters
+
+```
+Tasks:
+├── mimir-parse-ts
+│   ├── tree-sitter-typescript setup
+│   ├── Symbol extraction (functions, classes, interfaces)
+│   ├── Reference extraction
+│   ├── Import resolution
+│   ├── JSX support
+│   └── Tests: real TS/TSX files
+│
+├── mimir-parse-py
+│   ├── tree-sitter-python setup
+│   ├── Symbol extraction (functions, classes)
+│   ├── Reference extraction
+│   └── Tests: real Python files
+│
+└── mimir-parse-go
+    ├── tree-sitter-go setup
+    ├── Symbol extraction
+    ├── Reference extraction
+    └── Tests
+```
+
+### Part B: Cross-Language Bridges
+
+```
+Tasks:
+├── Bridge detection
+│   ├── Bridge enum (HttpEndpoint, HttpCall, etc.)
+│   ├── Rust: Axum/Actix endpoint detection
+│   ├── TypeScript: fetch/axios call detection
+│   ├── Bridge matching algorithm
+│   └── Confidence scoring
+│
+├── Cross-language trace
+│   ├── trace() with cross_language=true
+│   ├── Protocol detection (HTTP/gRPC)
+│   ├── CrossLanguageRef in TraceResult
+│   └── Tests: frontend→backend tracing
+│
+└── CLI enhancements
+    ├── `mimir trace --cross-language`
+    ├── Language filter options
+    └── Output formatting
+```
+
+**M6 Deliverables**:
+- Support for Rust, TypeScript, Python, Go
+- `mimir trace --cross-language` follows HTTP calls across frontend/backend
 
 ---
 
