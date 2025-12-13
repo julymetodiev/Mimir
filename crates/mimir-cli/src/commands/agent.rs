@@ -5,17 +5,75 @@ use mimir_agent::{Agent, AgentCallback, AgentConfig};
 use mimir_llm::{Completion, Message, ZaiProvider};
 use mimir_tasks::{Checkpoint, FileTaskStore, Task, TaskStatus};
 use mimir_tools::ToolRegistry;
+use std::io::{self, Write};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
+
+/// Spinner animation frames (Nordic runes - mystical rotation)
+const SPINNER_FRAMES: &[&str] = &["ᚠ", "ᚢ", "ᚦ", "ᚨ", "ᚱ", "ᚲ", "ᚷ", "ᚹ", "ᚺ", "ᚾ", "ᛁ", "ᛃ", "ᛇ", "ᛈ", "ᛉ", "ᛊ"];
+
+/// Spinner controller for async operations.
+struct Spinner {
+    active: Arc<AtomicBool>,
+    handle: Option<thread::JoinHandle<()>>,
+}
+
+impl Spinner {
+    fn new() -> Self {
+        Self {
+            active: Arc::new(AtomicBool::new(false)),
+            handle: None,
+        }
+    }
+
+    fn start(&mut self, message: &str) {
+        self.active.store(true, Ordering::SeqCst);
+        let active = self.active.clone();
+        let msg = message.to_string();
+
+        self.handle = Some(thread::spawn(move || {
+            let mut i = 0;
+            while active.load(Ordering::SeqCst) {
+                print!("\r  {}  {} ", SPINNER_FRAMES[i % SPINNER_FRAMES.len()], msg);
+                let _ = io::stdout().flush();
+                thread::sleep(Duration::from_millis(80));
+                i += 1;
+            }
+            // Clear the spinner line
+            print!("\r{}\r", " ".repeat(60));
+            let _ = io::stdout().flush();
+        }));
+    }
+
+    fn stop(&mut self) {
+        self.active.store(false, Ordering::SeqCst);
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+impl Drop for Spinner {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
 
 /// Callback that prints agent progress to stdout.
 struct CliCallback {
     verbose: bool,
+    spinner: std::sync::Mutex<Spinner>,
 }
 
 impl CliCallback {
     fn new(verbose: bool) -> Self {
-        Self { verbose }
+        Self {
+            verbose,
+            spinner: std::sync::Mutex::new(Spinner::new()),
+        }
     }
 }
 
@@ -26,15 +84,23 @@ impl AgentCallback for CliCallback {
     }
 
     fn on_llm_request(&self, messages: &[Message]) {
-        if self.verbose {
-            println!("  ᛗ  consulting... ({} messages)", messages.len());
+        let msg = if self.verbose {
+            format!("consulting the oracle... ({} messages)", messages.len())
+        } else {
+            "consulting the oracle...".to_string()
+        };
+        if let Ok(mut spinner) = self.spinner.lock() {
+            spinner.start(&msg);
         }
     }
 
     fn on_llm_response(&self, completion: &Completion) {
+        if let Ok(mut spinner) = self.spinner.lock() {
+            spinner.stop();
+        }
         if self.verbose {
             println!(
-                "  ᛗ  received ({} in, {} out)",
+                "  ᛗ  oracle spoke ({} in, {} out)",
                 completion.usage.input_tokens, completion.usage.output_tokens
             );
         }
@@ -43,9 +109,23 @@ impl AgentCallback for CliCallback {
     fn on_tool_start(&self, name: &str, input: &serde_json::Value) {
         let (rune, desc) = format_tool_action(name, input);
         println!("  {}  {}", rune, desc);
+
+        // Start spinner for shell commands (they can take a while)
+        if name == "shell" {
+            if let Ok(mut spinner) = self.spinner.lock() {
+                spinner.start("executing...");
+            }
+        }
     }
 
     fn on_tool_result(&self, name: &str, result: &str, is_error: bool) {
+        // Stop spinner if it was running
+        if name == "shell" {
+            if let Ok(mut spinner) = self.spinner.lock() {
+                spinner.stop();
+            }
+        }
+
         if is_error {
             let preview = &result[..result.len().min(80)];
             println!("  ᚦ  {} failed: {}", name, preview);
@@ -65,6 +145,10 @@ impl AgentCallback for CliCallback {
     }
 
     fn on_complete(&self, task: &Task) {
+        // Make sure spinner is stopped
+        if let Ok(mut spinner) = self.spinner.lock() {
+            spinner.stop();
+        }
         println!("\n  ᛏ  complete ({} actions)\n", task.tool_calls);
         if self.verbose {
             println!("     tokens: {}", task.tokens_used);
@@ -72,6 +156,10 @@ impl AgentCallback for CliCallback {
     }
 
     fn on_error(&self, error: &mimir_agent::AgentError) {
+        // Make sure spinner is stopped
+        if let Ok(mut spinner) = self.spinner.lock() {
+            spinner.stop();
+        }
         eprintln!("\n  ᚦ  {:?}", error);
     }
 
@@ -83,20 +171,22 @@ impl AgentCallback for CliCallback {
 /// Format tool action with Nordic rune and description.
 fn format_tool_action(name: &str, input: &serde_json::Value) -> (&'static str, String) {
     match name {
-        "read_file" => {
-            let path = input.get("path")
+        "read" | "read_file" => {
+            let path = input.get("file")
+                .or_else(|| input.get("path"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("?");
             // Show just filename or last path component
             let short = path.rsplit('/').next().unwrap_or(path);
-            ("ᚲ", format!("read {}", short))
+            ("ᚲ ", format!("read {}", short))
         }
-        "edit_file" => {
-            let path = input.get("path")
+        "edit" | "edit_file" => {
+            let path = input.get("file")
+                .or_else(|| input.get("path"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("?");
             let short = path.rsplit('/').next().unwrap_or(path);
-            ("ᛟ", format!("edit {}", short))
+            ("ᛟ ", format!("edit {}", short))
         }
         "shell" => {
             let cmd = input.get("command")
@@ -108,21 +198,21 @@ fn format_tool_action(name: &str, input: &serde_json::Value) -> (&'static str, S
             } else {
                 cmd.to_string()
             };
-            ("ᛊ", format!("shell {}", preview))
+            ("ᛊ ", format!("shell {}", preview))
         }
         "search" | "search_symbol" => {
             let pattern = input.get("pattern")
                 .and_then(|v| v.as_str())
                 .unwrap_or("?");
-            ("ᚱ", format!("search \"{}\"", pattern))
+            ("ᚱ ", format!("search \"{}\"", pattern))
         }
         "trace" | "trace_symbol" => {
             let symbol = input.get("symbol")
                 .and_then(|v| v.as_str())
                 .unwrap_or("?");
-            ("ᚠ", format!("trace {}", symbol))
+            ("ᚠ ", format!("trace {}", symbol))
         }
-        _ => ("᛫", format!("{}", name))
+        _ => ("᛫ ", format!("{}", name))
     }
 }
 
