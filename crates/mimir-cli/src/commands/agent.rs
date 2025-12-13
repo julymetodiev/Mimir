@@ -185,12 +185,14 @@ fn format_tool_action(name: &str, input: &serde_json::Value) -> (&'static str, S
             ("ᚲ ", format!("read {}", short))
         }
         "edit" | "edit_file" => {
-            let path = input.get("file")
+            // Check for file/path first, then symbol for symbol-based editing
+            let target = input.get("file")
                 .or_else(|| input.get("path"))
                 .and_then(|v| v.as_str())
-                .unwrap_or("?");
-            let short = path.rsplit('/').next().unwrap_or(path);
-            ("ᛟ ", format!("edit {}", short))
+                .map(|p| p.rsplit('/').next().unwrap_or(p).to_string())
+                .or_else(|| input.get("symbol").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                .unwrap_or_else(|| "?".to_string());
+            ("ᛟ ", format!("edit {}", target))
         }
         "shell" => {
             let cmd = input.get("command")

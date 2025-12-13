@@ -72,7 +72,17 @@ async fn main() -> anyhow::Result<()> {
             json,
             preview,
             backup,
-        } => commands::edit::execute_batch_symbols(&json, preview, backup).await?,
+        } => {
+            let json_content = if json == "-" {
+                use std::io::Read;
+                let mut buffer = String::new();
+                std::io::stdin().read_to_string(&mut buffer)?;
+                buffer
+            } else {
+                json
+            };
+            commands::edit::execute_batch_symbols(&json_content, preview, backup).await?
+        }
         commands::Commands::Search {
             pattern,
             kind,

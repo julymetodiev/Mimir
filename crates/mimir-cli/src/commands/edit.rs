@@ -2,8 +2,8 @@
 
 use anyhow::{Context, Result};
 use mimir_edit::{EditOp, Editor};
-use mimir_protocol::FindOptions;
-use mimir_types::Span;
+use mimir_protocol::{FindOptions, SymbolInfo};
+use mimir_types::{Span, SymbolKind};
 use std::path::PathBuf;
 
 use crate::app::{Config, find_project_root};
@@ -88,7 +88,7 @@ pub async fn execute(
             anyhow::bail!("Symbol '{}' not found", sym_name);
         }
 
-        let sym = &result.symbols[0];
+        let sym = select_best_symbol(&result.symbols, sym_name);
         if sym.file_path.as_os_str().is_empty() {
             anyhow::bail!("Symbol '{}' has no file path. Cannot edit.", sym_name);
         }
@@ -189,6 +189,41 @@ pub async fn execute(
     Ok(())
 }
 
+/// Select the best symbol match when multiple candidates exist.
+/// Prioritizes: impl > struct > function/method > enum > field > enum_variant
+fn select_best_symbol<'a>(symbols: &'a [SymbolInfo], query: &str) -> &'a SymbolInfo {
+    // Priority order (lower = better)
+    fn kind_priority(kind: &SymbolKind) -> u8 {
+        match kind {
+            SymbolKind::Impl => 0,        // impl blocks highest priority
+            SymbolKind::Struct => 1,      // structs next
+            SymbolKind::Class => 1,
+            SymbolKind::Function => 2,
+            SymbolKind::Method => 2,
+            SymbolKind::Enum => 3,
+            SymbolKind::Trait => 3,
+            SymbolKind::Interface => 3,
+            SymbolKind::Field => 4,
+            SymbolKind::EnumVariant => 5, // enum variants lowest
+            _ => 3,
+        }
+    }
+
+    symbols.iter().min_by(|a, b| {
+        // First: prefer exact name match
+        let a_exact = a.name == query;
+        let b_exact = b.name == query;
+        if a_exact != b_exact {
+            return b_exact.cmp(&a_exact);
+        }
+
+        // Second: prefer by kind priority
+        let a_priority = kind_priority(&a.kind);
+        let b_priority = kind_priority(&b.kind);
+        a_priority.cmp(&b_priority)
+    }).unwrap_or(&symbols[0])
+}
+
 /// Symbol batch edit operation.
 #[derive(serde::Deserialize)]
 pub struct SymbolEdit {
@@ -231,7 +266,8 @@ pub async fn execute_batch_symbols(json_input: &str, preview: bool, backup: bool
             anyhow::bail!("Symbol '{}' not found", edit.symbol);
         }
 
-        let sym = &result.symbols[0];
+        // Select best match: prioritize struct/impl/function over enum_variant/field
+        let sym = select_best_symbol(&result.symbols, &edit.symbol);
         if sym.file_path.as_os_str().is_empty() {
             anyhow::bail!("Symbol '{}' has no file path", edit.symbol);
         }

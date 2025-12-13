@@ -140,8 +140,9 @@ pub enum Commands {
 
     /// Apply batch symbol edits from JSON.
     /// JSON format: [{"symbol": "name", "content": "new code"}, ...]
+    /// Use --json=- to read from stdin.
     EditSymbols {
-        /// JSON string containing symbol edit operations.
+        /// JSON string or "-" to read from stdin.
         #[arg(short, long)]
         json: String,
 

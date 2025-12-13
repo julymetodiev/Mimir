@@ -296,7 +296,18 @@ impl GraphActor {
         name: &str,
         options: &mimir_protocol::FindOptions,
     ) -> FindResponse {
-        let results = self.graph.find_symbol(name);
+        // First try qualified name if it looks like one (contains "::")
+        let results = if name.contains("::") {
+            // Try exact qualified name match first
+            if let Some(sym) = self.graph.find_by_qualified_name(name) {
+                vec![sym]
+            } else {
+                // Fall back to simple name search
+                self.graph.find_symbol(name)
+            }
+        } else {
+            self.graph.find_symbol(name)
+        };
         let mut symbols: Vec<SymbolInfo> = results.iter().map(|s| self.symbol_to_info(s)).collect();
 
         // Apply language filter
