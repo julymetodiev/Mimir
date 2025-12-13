@@ -118,29 +118,31 @@ impl AgentConfig {
 }
 
 /// Default system prompt for the agent.
-pub const DEFAULT_SYSTEM_PROMPT: &str = r##"You are a Rust code editor. Use tools to complete tasks.
+pub const DEFAULT_SYSTEM_PROMPT: &str = r##"You are a Rust code editor. Complete tasks efficiently with minimal tool calls.
 
-CRITICAL: ALWAYS use tools. NEVER ask questions - explore the codebase with search/read first.
-IMPORTANT: All tool parameters must be valid JSON. The "content" field must ALWAYS be a STRING, never an array.
+CRITICAL: ALWAYS use tools. NEVER ask questions - explore with search/read first.
+IMPORTANT: All "content" fields must be a STRING, never an array.
 
 # Tools (JSON format)
 
 ## search - Find symbols by pattern
-{"pattern": "Config"}
+{"pattern": "User"}
 {"pattern": "handle", "limit": 20}
+Search ONCE with the main keyword from the task.
 
 ## read - Read symbol source code
 {"symbol": "MyStruct"}
 {"symbol": "impl MyStruct"}
+Only read what you need to modify.
 
 ## trace - Show callers/callees
 {"symbol": "process"}
 {"symbol": "save", "callers_only": true}
-{"symbol": "init", "callees_only": true}
 
 ## edit - Modify EXISTING symbol ONLY
-{"symbol": "MyStruct", "content": "pub struct MyStruct {\n    pub field: Type,\n}"}
-- ONLY replaces the exact symbol, nothing else
+{"symbol": "MyStruct", "content": "pub struct MyStruct {\n    pub field: Type,\n}", "preview": true}
+- ALWAYS use "preview": true FIRST to see the diff
+- Then call again WITHOUT preview to apply changes
 - content MUST be a STRING
 - Do NOT include /// comments or #[derive] - they are preserved
 - NEVER use edit to add new code - use append instead!
@@ -149,7 +151,8 @@ IMPORTANT: All tool parameters must be valid JSON. The "content" field must ALWA
 {"edits": [
   {"symbol": "MyStruct", "content": "pub struct MyStruct { ... }"},
   {"symbol": "impl MyStruct", "content": "impl MyStruct { ... }"}
-]}
+], "preview": true}
+- Use "preview": true FIRST, then apply
 - Use for struct field changes: edit struct AND impl together
 
 ## append - Add NEW code (enums, structs, functions)
@@ -162,19 +165,22 @@ IMPORTANT: All tool parameters must be valid JSON. The "content" field must ALWA
 {"command": "cargo test"}
 
 # Workflow
-1. search → find relevant symbols
-2. read → understand current code
-3. edit/edit_batch → modify (use edit_batch for struct+impl changes)
-4. append → add new types/functions
-5. shell → cargo check to verify
-6. If errors → fix and repeat. If passes → STOP
+1. search ONCE → find relevant symbols
+2. read → only what you'll modify
+3. edit with preview:true → verify the diff looks correct
+4. edit without preview → apply changes
+5. append → for new types/functions
+6. cargo check ONCE → if pass, STOP immediately
 
 # Rules
-- edit = modify EXISTING symbols only
-- append = add NEW code (enums, structs, fns)
-- NEVER add new types/enums by editing existing symbols!
+- Be efficient: 1 search, minimal reads, 1 cargo check
+- ALWAYS preview before applying edits
+- edit = EXISTING symbols only
+- append = NEW code (enums, structs, fns)
+- NEVER add new types by editing existing symbols!
 - For struct+impl changes: use edit_batch
-- Always verify with cargo check"##;
+- Don't re-read after editing
+- STOP immediately when cargo check passes"##;
 
 #[cfg(test)]
 mod tests {
