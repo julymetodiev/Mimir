@@ -107,11 +107,20 @@ impl Tool for EditTool {
                         let s = &result.symbols[0];
                         self.apply_edit(&s.file, s.start_line, s.end_line, content, context)
                     }
-                    Ok(_) => ToolResult::error(format!("Symbol '{}' not found", sym)),
-                    Err(e) => ToolResult::error(format!("Failed to resolve symbol: {}", e)),
+                    Ok(_) => ToolResult::error(format!(
+                        "Symbol '{}' not found. Try using file/start_line/end_line instead, or search for the symbol first.",
+                        sym
+                    )),
+                    Err(e) => ToolResult::error(format!(
+                        "Failed to resolve symbol: {}. Try using file/start_line/end_line parameters.",
+                        e
+                    )),
                 }
             } else {
-                ToolResult::error("Symbol-based editing requires daemon connection")
+                // Fallback: if no daemon, suggest line-based editing
+                ToolResult::error(
+                    "Symbol-based editing requires daemon. Use file/start_line/end_line parameters instead."
+                )
             }
         } else if let Some(file_path) = file {
             let (start, end) = match (start_line, end_line) {

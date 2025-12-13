@@ -5,6 +5,15 @@ pub struct User {
     name: String,
     email: String,
 }
+
+/// Struct for partial updates to a user
+#[derive(Debug, Default)]
+pub struct UserUpdate {
+    pub name: Option<String>,
+    pub email: Option<String>,
+}
+
+impl User {
     /// Create a new user.
     pub fn new(id: u32, name: &str, email: &str) -> Self {
         Self {
@@ -23,6 +32,12 @@ pub struct User {
     pub fn name(&self) -> &str {
         &self.name
     }
+
+    /// Get the user's email.
+    pub fn email(&self) -> &str {
+        &self.email
+    }
+
     /// Check if email matches.
     pub fn has_email(&self, email: &str) -> bool {
         self.email == email
@@ -33,12 +48,13 @@ pub struct User {
         self.id == id
     }
 
-    /// Check if email matches.
-    pub fn has_email(&self, email: &str) -> bool {
-        self.email == email
+    /// Update the user with partial data.
+    pub fn update(&mut self, update: UserUpdate) {
+        if let Some(name) = update.name {
+            self.name = name;
+        }
+        if let Some(email) = update.email {
+            self.email = email;
+        }
     }
-
-    /// Update the user email.
-    pub fn set_email(&mut self, email: &str) {
-        self.email = email.to_string();
-    }
+}

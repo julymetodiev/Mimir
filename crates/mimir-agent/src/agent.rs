@@ -1,12 +1,51 @@
 //! Core agent implementation.
 
 use crate::{AgentConfig, AgentError, AgentResult, DEFAULT_SYSTEM_PROMPT, ToolExecutor};
+use futures::future::join_all;
 use mimir_llm::{Completion, CompletionRequest, ContentBlock, LlmProvider, Message, Role};
 use mimir_tasks::{Checkpoint, CheckpointManager, ConversationMessage, Task};
 use mimir_tools::{GraphClient, ToolContext, ToolRegistry};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
+
+/// Maximum size for tool results before compression (in chars).
+const MAX_RESULT_SIZE: usize = 8000;
+
+/// Compress large tool results to save tokens.
+fn compress_result(content: &str) -> String {
+    if content.len() <= MAX_RESULT_SIZE {
+        return content.to_string();
+    }
+
+    // Try to parse as JSON array (common for search results)
+    if let Ok(arr) = serde_json::from_str::<serde_json::Value>(content) {
+        if let Some(items) = arr.get("matches").and_then(|m| m.as_array()) {
+            if items.len() > 10 {
+                // Truncate to first 10 matches
+                let mut compressed = arr.clone();
+                if let Some(matches) = compressed.get_mut("matches") {
+                    if let Some(arr) = matches.as_array_mut() {
+                        arr.truncate(10);
+                    }
+                }
+                let note = format!("\n... ({} more results truncated)", items.len() - 10);
+                return compressed.to_string() + &note;
+            }
+        }
+    }
+
+    // Fallback: simple truncation with indicator
+    let half = MAX_RESULT_SIZE / 2;
+    let start = &content[..half];
+    let end = &content[content.len() - half..];
+    format!(
+        "{}\n\n... ({} chars truncated) ...\n\n{}",
+        start,
+        content.len() - MAX_RESULT_SIZE,
+        end
+    )
+}
 
 /// Cache for tool call results to avoid duplicate executions.
 #[derive(Debug, Default)]
@@ -91,15 +130,37 @@ impl ToolCache {
         self.entries.is_empty()
     }
 
+    /// Invalidate cache entries for a specific file.
+    /// Called after edit operations to only clear affected entries.
+    pub fn invalidate_file(&mut self, file_path: &str) {
+        // Extract just the filename for matching
+        let filename = file_path.rsplit('/').next().unwrap_or(file_path);
+        self.entries.retain(|key, _| !key.contains(filename));
+    }
+
     /// Invalidate all cache entries.
-    /// Should be called after any mutating operation (edit, shell).
-    pub fn invalidate(&mut self) {
+    /// Called after shell commands which may affect any file.
+    pub fn invalidate_all(&mut self) {
         self.entries.clear();
     }
 
     /// Check if a tool is a mutating operation that should invalidate the cache.
     pub fn is_mutating(tool_name: &str) -> bool {
         matches!(tool_name, "edit" | "edit_file" | "shell")
+    }
+
+    /// Check if tool is an edit operation (not shell).
+    pub fn is_edit(tool_name: &str) -> bool {
+        matches!(tool_name, "edit" | "edit_file")
+    }
+
+    /// Extract file path from tool input if present.
+    pub fn extract_file(input: &serde_json::Value) -> Option<String> {
+        input
+            .get("file")
+            .or_else(|| input.get("path"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
     }
 }
 
@@ -270,74 +331,149 @@ impl<P: LlmProvider> Agent<P> {
 
             // Check if we need to execute tools
             if completion.wants_tool_use() {
-                let tool_uses: Vec<&ContentBlock> = completion
+                let tool_uses: Vec<(String, String, serde_json::Value)> = completion
                     .message
                     .content
                     .iter()
-                    .filter(|c| matches!(c, ContentBlock::ToolUse { .. }))
+                    .filter_map(|c| {
+                        if let ContentBlock::ToolUse { id, name, input } = c {
+                            Some((id.clone(), name.clone(), input.clone()))
+                        } else {
+                            None
+                        }
+                    })
                     .collect();
+
+                // Separate into read-only (parallelizable) and mutating (sequential)
+                let (read_only, mutating): (Vec<_>, Vec<_>) = tool_uses
+                    .iter()
+                    .partition(|(_, name, _)| !ToolCache::is_mutating(name));
 
                 let mut tool_results = vec![];
 
-                for tool_use in tool_uses {
-                    if let ContentBlock::ToolUse { id, name, input } = tool_use {
-                        // Check cache first for read-only tools
-                        if let Some((cached_content, cached_is_error)) = tool_cache.get(name, input)
-                        {
-                            debug!("Cache hit for tool {}", name);
-                            self.callback.on_tool_cache_hit(name, input);
-                            self.callback
-                                .on_tool_result(name, &cached_content, cached_is_error);
+                // Execute read-only tools in parallel
+                if !read_only.is_empty() {
+                    let parallel_futures: Vec<_> = read_only
+                        .iter()
+                        .filter_map(|(id, name, input)| {
+                            // Check cache first
+                            if let Some((cached_content, cached_is_error)) =
+                                tool_cache.get(name, input)
+                            {
+                                debug!("Cache hit for tool {}", name);
+                                self.callback.on_tool_cache_hit(name, input);
+                                self.callback
+                                    .on_tool_result(name, &cached_content, cached_is_error);
+                                tool_results.push(ContentBlock::ToolResult {
+                                    tool_use_id: id.clone(),
+                                    content: cached_content,
+                                    is_error: cached_is_error,
+                                });
+                                return None;
+                            }
 
-                            tool_results.push(ContentBlock::ToolResult {
-                                tool_use_id: id.clone(),
-                                content: cached_content,
-                                is_error: cached_is_error,
-                            });
-                            continue;
-                        }
+                            self.callback.on_tool_start(name, input);
 
-                        self.callback.on_tool_start(name, input);
+                            // Check approval
+                            if !self.config.auto_approve && !self.callback.approve_tool(name, input)
+                            {
+                                warn!("Tool {} not approved", name);
+                                tool_results.push(ContentBlock::ToolResult {
+                                    tool_use_id: id.clone(),
+                                    content: "Tool execution not approved by user".to_string(),
+                                    is_error: true,
+                                });
+                                return None;
+                            }
 
-                        // Check approval
-                        if !self.config.auto_approve && !self.callback.approve_tool(name, input) {
-                            warn!("Tool {} not approved", name);
-                            tool_results.push(ContentBlock::ToolResult {
-                                tool_use_id: id.clone(),
-                                content: "Tool execution not approved by user".to_string(),
-                                is_error: true,
-                            });
-                            continue;
-                        }
+                            let id = id.clone();
+                            let name = name.clone();
+                            let input = input.clone();
+                            let exec = &executor;
 
-                        // Execute tool
-                        let result = executor.execute_tool(name, input.clone()).await;
+                            Some(async move {
+                                let result = exec.execute_tool(&name, input.clone()).await;
+                                (id, name, input, result)
+                            })
+                        })
+                        .collect();
+
+                    // Execute in parallel
+                    let parallel_results = join_all(parallel_futures).await;
+
+                    for (id, name, input, result) in parallel_results {
                         let is_error = !result.success;
-                        let content = if result.success {
+                        let raw_content = if result.success {
                             result.output.to_string()
                         } else {
-                            result
-                                .error
-                                .clone()
-                                .unwrap_or_else(|| "Unknown error".to_string())
+                            result.error.clone().unwrap_or_else(|| "Unknown error".to_string())
                         };
+                        let content = compress_result(&raw_content);
 
-                        // Store in cache (only for read-only tools)
-                        tool_cache.store(name, input, content.clone(), is_error);
-
-                        // Invalidate cache after mutating operations
-                        if ToolCache::is_mutating(name) {
-                            tool_cache.invalidate();
-                        }
-
-                        self.callback.on_tool_result(name, &content, is_error);
+                        tool_cache.store(&name, &input, content.clone(), is_error);
+                        self.callback.on_tool_result(&name, &content, is_error);
 
                         tool_results.push(ContentBlock::ToolResult {
-                            tool_use_id: id.clone(),
+                            tool_use_id: id,
                             content,
                             is_error,
                         });
                     }
+                }
+
+                // Execute mutating tools sequentially
+                for (id, name, input) in &mutating {
+                    // Check cache (unlikely for mutating, but check anyway)
+                    if let Some((cached_content, cached_is_error)) = tool_cache.get(name, input) {
+                        debug!("Cache hit for tool {}", name);
+                        self.callback.on_tool_cache_hit(name, input);
+                        self.callback
+                            .on_tool_result(name, &cached_content, cached_is_error);
+                        tool_results.push(ContentBlock::ToolResult {
+                            tool_use_id: id.clone(),
+                            content: cached_content,
+                            is_error: cached_is_error,
+                        });
+                        continue;
+                    }
+
+                    self.callback.on_tool_start(name, input);
+
+                    if !self.config.auto_approve && !self.callback.approve_tool(name, input) {
+                        warn!("Tool {} not approved", name);
+                        tool_results.push(ContentBlock::ToolResult {
+                            tool_use_id: id.clone(),
+                            content: "Tool execution not approved by user".to_string(),
+                            is_error: true,
+                        });
+                        continue;
+                    }
+
+                    let result = executor.execute_tool(name, input.clone()).await;
+                    let is_error = !result.success;
+                    let raw_content = if result.success {
+                        result.output.to_string()
+                    } else {
+                        result.error.clone().unwrap_or_else(|| "Unknown error".to_string())
+                    };
+                    let content = compress_result(&raw_content);
+
+                    // Smart cache invalidation
+                    if ToolCache::is_edit(name) {
+                        if let Some(file) = ToolCache::extract_file(input) {
+                            tool_cache.invalidate_file(&file);
+                        }
+                    } else {
+                        tool_cache.invalidate_all();
+                    }
+
+                    self.callback.on_tool_result(name, &content, is_error);
+
+                    tool_results.push(ContentBlock::ToolResult {
+                        tool_use_id: id.clone(),
+                        content,
+                        is_error,
+                    });
                 }
 
                 // Add tool results as user message
