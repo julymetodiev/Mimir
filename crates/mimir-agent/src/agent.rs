@@ -35,16 +35,20 @@ fn compress_result(content: &str) -> String {
         }
     }
 
-    // Fallback: simple truncation with indicator
-    let half = MAX_RESULT_SIZE / 2;
-    let start = &content[..half];
-    let end = &content[content.len() - half..];
-    format!(
-        "{}\n\n... ({} chars truncated) ...\n\n{}",
-        start,
-        content.len() - MAX_RESULT_SIZE,
-        end
-    )
+    // Fallback: smart truncation keeping start and end (crucial for error logs)
+    let keep_len = MAX_RESULT_SIZE / 2;
+    if content.len() > MAX_RESULT_SIZE {
+        let start = &content[..keep_len];
+        let end = &content[content.len() - keep_len..];
+        return format!(
+            "{}\n\n... ({} chars truncated) ...\n\n{}",
+            start,
+            content.len() - MAX_RESULT_SIZE,
+            end
+        );
+    }
+
+    content.to_string()
 }
 
 /// Cache for tool call results to avoid duplicate executions.
@@ -275,6 +279,7 @@ impl<P: LlmProvider> Agent<P> {
         let mut checkpoint_manager = CheckpointManager::new(task.id.clone());
         let mut messages = initial_messages;
         let mut tool_cache = ToolCache::new();
+        let mut consecutive_errors = 0;
 
         let system_prompt = self
             .config
@@ -479,8 +484,30 @@ impl<P: LlmProvider> Agent<P> {
                 // Add tool results as user message
                 messages.push(Message {
                     role: Role::User,
-                    content: tool_results,
+                    content: tool_results.clone(),
                 });
+
+                // Check for consecutive errors
+                let has_success = tool_results.iter().any(|block| {
+                    if let ContentBlock::ToolResult { is_error, .. } = block {
+                        !*is_error
+                    } else {
+                        false
+                    }
+                });
+
+                if !tool_results.is_empty() {
+                    if has_success {
+                        consecutive_errors = 0;
+                    } else {
+                        consecutive_errors += 1;
+                    }
+                }
+
+                if consecutive_errors >= 3 {
+                    messages.push(Message::user("SYSTEM WARNING: You have failed 3 times in a row. Stop and reflect. Read the file again. Verify your parameters. Do NOT repeat the same mistake."));
+                    consecutive_errors = 0;
+                }
 
                 // Create checkpoint if enabled
                 if self.config.checkpoint_enabled {

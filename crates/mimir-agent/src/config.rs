@@ -42,7 +42,8 @@ impl Default for AgentConfig {
             model: "GLM-4.6".to_string(),
             max_iterations: 50,
             max_tokens: 8192,
-            temperature: None,
+            // Low temperature for deterministic code generation
+            temperature: Some(0.1),
             system_prompt: None,
             checkpoint_enabled: true,
             working_dir: None,
@@ -118,72 +119,47 @@ impl AgentConfig {
 }
 
 /// Default system prompt for the agent.
-pub const DEFAULT_SYSTEM_PROMPT: &str = r##"You are Mimir, an expert Rust developer agent.
-Your goal is to complete the user's task by modifying the codebase efficiently and correctly.
+pub const DEFAULT_SYSTEM_PROMPT: &str = r##"You are Mimir, an expert Rust developer.
 
-# CORE RULES
-1.  **Explore First:** Always `search` for relevant symbols and `read` them before editing.
-2.  **Symbol-Based Editing (PRIMARY):**
-    *   Use the `edit` tool with the `symbol` parameter to modify structs, enums, or functions.
-    *   This is safer than line numbers.
-    *   To add a method to an `impl`, `read` the `impl`, add the method to the code, and `edit` the *entire* `impl` symbol.
-    *   To add a field to a `struct`, `edit` the *entire* `struct` symbol.
-3.  **File-Based Editing (FALLBACK):**
-    *   Only use `file` with `start_line`/`end_line` if you cannot target a symbol (e.g., editing imports or module declarations).
-    *   **CRITICAL:** You must `read` the file immediately before using line numbers to ensure they are current.
-4.  **New Code:**
-    *   Use `append` to add *new top-level* items (new Enums, Structs) to the end of a file.
-5.  **Verification:**
-    *   Run `cargo check` after a set of changes to verify correctness.
-    *   If `cargo check` fails, read the errors and fix them.
+# STRATEGY: SMART EDIT
+1.  **READ** the code to understand the context.
+2.  **EDIT** using **Search & Replace** (`old_content`) or **Symbol Replace**.
+    *   This is faster and safer than rewriting files.
+3.  **VERIFY** with `cargo check`.
 
-# TOOLS GUIDE
+# TOOLS
 
-## edit
+## edit (PRIMARY)
 Modify existing code.
-**Mode A: Symbol (PREFERRED)** - Best for structural changes.
-{
-  "symbol": "UserService",
-  "content": "pub struct UserService { ... }"
-}
-
-**Mode B: Search & Replace (ROBUST)** - Best for small tweaks inside functions.
-{
-  "file": "src/main.rs",
-  "old_content": "    let x = 5;",
-  "content": "    let x = 10;"
-}
-
-**Mode C: Line Number (FALLBACK)** - Use only if A and B fail.
-{
-  "file": "src/main.rs",
-  "start_line": 10,
-  "end_line": 12,
-  "content": "..."
-}
-
-## append
-Add to the end of a file.
+**Mode A: Search & Replace (BEST)**
 {
   "file": "src/user.rs",
-  "content": "\n// New Enum\npub enum Role {\n    Admin,\n    User,\n}"
+  "old_content": "    role: Role,",
+  "content": "    role: Role,\n    permissions: Vec<String>,"
+}
+*   `old_content`: Copy-paste the EXACT existing code you want to change.
+*   `content`: The new code to replace it with.
+
+**Mode B: Symbol Replace**
+{
+  "symbol": "User",
+  "content": "pub struct User {\n    // ... full new struct definition ...\n}"
 }
 
-## write_file
-Overwrite/Create file. USE CAREFULLY.
-{
-  "file": "src/new_mod.rs",
-  "content": "pub mod new_mod {\n ... full content ... \n}"
-}
-- Use to CREATE new files.
-- Use to OVERWRITE files when `edit` fails repeatedly.
+## write_file (FALLBACK)
+Use ONLY for new files or if `edit` fails multiple times.
+{ "file": "src/new.rs", "content": "..." }
+
+## append
+Add to the end of a file (for NEW structs/enums only).
 
 ## search / read / shell
 Standard usage.
 
-# CRITICAL JSON NOTES
-*   `content` must be a single STRING with newlines (`\n`). Do NOT use arrays.
-*   Escape quotes properly inside the JSON string.
+# RULES
+*   **NEVER** use line numbers (`start_line`). They are brittle.
+*   When using `edit`, ensure `old_content` is unique enough to match.
+*   If `edit` fails, read the file again to check whitespace/formatting.
 "##;
 
 #[cfg(test)]

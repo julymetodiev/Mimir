@@ -14,6 +14,8 @@ pub struct EditOutput {
     pub end_line: u32,
     pub lines_changed: i32,
     pub preview: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warnings: Option<Vec<String>>,
 }
 
 /// Tool for editing source code.
@@ -246,6 +248,22 @@ impl EditTool {
         }
     }
 
+    fn check_syntax_balance(content: &str) -> Option<String> {
+        let mut brace_count = 0;
+        for c in content.chars() {
+            match c {
+                '{' => brace_count += 1,
+                '}' => brace_count -= 1,
+                _ => {}
+            }
+        }
+        if brace_count != 0 {
+            Some(format!("Unbalanced braces detected (net count: {}). This edit might break the file structure.", brace_count))
+        } else {
+            None
+        }
+    }
+
     async fn handle_text_replace(
         &self,
         file_path: &str,
@@ -329,11 +347,16 @@ impl EditTool {
                 end_line,
                 lines_changed: 0, // Approximate
                 preview: Some(diff),
+                warnings: None,
             });
         }
 
         // Apply replacement
         let new_file_content = original.replace(old_content, new_content);
+
+        // Check for basic syntax errors (unbalanced braces)
+        let warnings = Self::check_syntax_balance(&new_file_content)
+            .map(|w| vec![w]);
 
         if let Err(e) = fs::write(&path, &new_file_content) {
             return ToolResult::error(format!("Failed to write file: {}", e));
@@ -348,6 +371,7 @@ impl EditTool {
             end_line,
             lines_changed: new_lines_count - old_lines_cnt,
             preview: None,
+            warnings,
         })
     }
 
@@ -412,6 +436,7 @@ impl EditTool {
             end_line,
             lines_changed: new_lines.len() as i32 - old_lines.len() as i32,
             preview: Some(diff),
+            warnings: None,
         };
 
         ToolResult::success(output)
@@ -460,6 +485,10 @@ impl EditTool {
 
         let new_file_content = result.join("\n");
 
+        // Check for basic syntax errors (unbalanced braces)
+        let warnings = Self::check_syntax_balance(&new_file_content)
+            .map(|w| vec![w]);
+
         // Write back
         if let Err(e) = fs::write(&path, &new_file_content) {
             return ToolResult::error(format!("Failed to write file: {}", e));
@@ -474,6 +503,7 @@ impl EditTool {
             end_line,
             lines_changed: new_len as i32 - old_len as i32,
             preview: None,
+            warnings,
         };
 
         ToolResult::success(output)
