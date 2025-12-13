@@ -1,12 +1,8 @@
 //! Core agent implementation.
 
-use crate::{AgentConfig, AgentError, AgentResult, ToolExecutor, DEFAULT_SYSTEM_PROMPT};
-use mimir_llm::{
-    Completion, CompletionRequest, ContentBlock, LlmProvider, Message, Role,
-};
-use mimir_tasks::{
-    Checkpoint, CheckpointManager, ConversationMessage, Task,
-};
+use crate::{AgentConfig, AgentError, AgentResult, DEFAULT_SYSTEM_PROMPT, ToolExecutor};
+use mimir_llm::{Completion, CompletionRequest, ContentBlock, LlmProvider, Message, Role};
+use mimir_tasks::{Checkpoint, CheckpointManager, ConversationMessage, Task};
 use mimir_tools::{GraphClient, ToolContext, ToolRegistry};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
@@ -132,11 +128,18 @@ impl<P: LlmProvider> Agent<P> {
             iteration += 1;
             if iteration > self.config.max_iterations {
                 warn!("Max iterations reached: {}", self.config.max_iterations);
-                task.fail(format!("Max iterations reached: {}", self.config.max_iterations));
+                task.fail(format!(
+                    "Max iterations reached: {}",
+                    self.config.max_iterations
+                ));
                 return Err(AgentError::MaxIterations(self.config.max_iterations));
             }
 
-            debug!("Iteration {}: sending {} messages", iteration, messages.len());
+            debug!(
+                "Iteration {}: sending {} messages",
+                iteration,
+                messages.len()
+            );
             self.callback.on_llm_request(&messages);
 
             // Build request
@@ -197,7 +200,10 @@ impl<P: LlmProvider> Agent<P> {
                         let content = if result.success {
                             result.output.to_string()
                         } else {
-                            result.error.clone().unwrap_or_else(|| "Unknown error".to_string())
+                            result
+                                .error
+                                .clone()
+                                .unwrap_or_else(|| "Unknown error".to_string())
                         };
 
                         self.callback.on_tool_result(name, &content, is_error);
@@ -234,16 +240,12 @@ impl<P: LlmProvider> Agent<P> {
         task.complete();
         self.callback.on_complete(task);
 
-        info!("Agent completed task in {} iterations", iteration);
+        debug!("Agent completed task in {} iterations", iteration);
         Ok(final_response)
     }
 
     /// Resume a task from a checkpoint.
-    pub async fn resume(
-        &self,
-        task: &mut Task,
-        checkpoint: Checkpoint,
-    ) -> AgentResult<String> {
+    pub async fn resume(&self, task: &mut Task, checkpoint: Checkpoint) -> AgentResult<String> {
         info!(
             "Resuming task {} from checkpoint {} (sequence {})",
             task.id, checkpoint.id, checkpoint.sequence
@@ -265,12 +267,18 @@ impl<P: LlmProvider> Agent<P> {
                 };
 
                 // Try to restore full content structure
-                let content = if let Ok(blocks) = serde_json::from_value::<Vec<ContentBlock>>(m.content.clone()) {
+                let content = if let Ok(blocks) =
+                    serde_json::from_value::<Vec<ContentBlock>>(m.content.clone())
+                {
                     blocks
                 } else if let Some(text) = m.content.as_str() {
-                    vec![ContentBlock::Text { text: text.to_string() }]
+                    vec![ContentBlock::Text {
+                        text: text.to_string(),
+                    }]
                 } else {
-                    vec![ContentBlock::Text { text: m.content.to_string() }]
+                    vec![ContentBlock::Text {
+                        text: m.content.to_string(),
+                    }]
                 };
 
                 Some(Message { role, content })
@@ -286,7 +294,8 @@ impl<P: LlmProvider> Agent<P> {
         info!("Restored {} messages from checkpoint", messages.len());
 
         // Continue from where we left off
-        self.run_with_messages(task, messages, checkpoint.sequence).await
+        self.run_with_messages(task, messages, checkpoint.sequence)
+            .await
     }
 
     fn create_checkpoint(
