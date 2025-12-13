@@ -112,6 +112,21 @@ impl AgentCallback for CliCallback {
         let tokens = self.last_tokens.load(Ordering::SeqCst);
         println!("  {}  {} ({} tokens)", rune, desc, tokens);
 
+        // In verbose mode, show edit_batch contents
+        if self.verbose && name == "edit_batch" {
+            if let Some(edits) = input.get("edits").and_then(|v| v.as_array()) {
+                for edit in edits {
+                    if let Some(symbol) = edit.get("symbol").and_then(|v| v.as_str()) {
+                        let content_len = edit.get("content")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.len())
+                            .unwrap_or(0);
+                        println!("       → {} ({} chars)", symbol, content_len);
+                    }
+                }
+            }
+        }
+
         // Start spinner for shell commands (they can take a while)
         if name == "shell" {
             if let Ok(mut spinner) = self.spinner.lock() {
@@ -193,6 +208,13 @@ fn format_tool_action(name: &str, input: &serde_json::Value) -> (&'static str, S
                 .or_else(|| input.get("symbol").and_then(|v| v.as_str()).map(|s| s.to_string()))
                 .unwrap_or_else(|| "?".to_string());
             ("ᛟ ", format!("edit {}", target))
+        }
+        "edit_batch" => {
+            let edits = input.get("edits")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.len())
+                .unwrap_or(0);
+            ("᛫ ", format!("edit_batch ({} edits)", edits))
         }
         "shell" => {
             let cmd = input.get("command")

@@ -73,8 +73,9 @@ impl Tool for SearchTool {
             None => return ToolResult::error("Search requires daemon. Start with: mimir daemon start"),
         };
 
-        // Search with higher limit to account for filtering
-        let search_limit = if definitions_only { limit * 5 } else { limit };
+        // Search with much higher limit to account for filtering
+        // Definitions (struct/impl/enum) are often buried under methods/fields
+        let search_limit = if definitions_only { 200 } else { limit };
 
         match client.search(pattern, None, search_limit).await {
             Ok(result) => {

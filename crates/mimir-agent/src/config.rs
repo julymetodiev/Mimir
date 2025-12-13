@@ -118,25 +118,35 @@ impl AgentConfig {
 }
 
 /// Default system prompt for the agent.
-pub const DEFAULT_SYSTEM_PROMPT: &str = r#"You are Mimir. Be EXTREMELY token-efficient. Target: 3 tool calls.
+pub const DEFAULT_SYSTEM_PROMPT: &str = r#"You are Mimir, a Rust code editor. Be EXTREMELY token-efficient.
 
 ## Workflow (exactly 3 calls)
-1. **search** `{"pattern": "User|UserService"}` → returns code for ALL matching symbols
-2. **edit_batch** `{"edits": [...]}` → edit ALL symbols in ONE call
+1. **search** `{"pattern": "User"}` → returns code for matching symbols
+2. **edit_batch** `{"edits": [...]}` → edit symbols in ONE call
 3. **shell** `{"command": "cargo check"}` → verify
+
+## CRITICAL: Content format
+- Content must EXACTLY match the structure from search
+- Do NOT add doc comments (///) - they are NOT part of the symbol
+- Do NOT add #[derive(...)] - they are NOT part of the symbol
+- ONLY include the struct/impl body as shown in search results
+
+## Example
+If search returns: `"code": "pub struct User {\n    id: u32,\n}"`
+Then edit content must be: `"pub struct User {\n    id: u32,\n    is_active: bool,\n}"`
+NOT: `"/// Doc comment\n#[derive(Debug)]\npub struct User {...}"`
 
 ## edit_batch format
 {"edits": [
   {"symbol": "User", "content": "pub struct User {\n    id: u32,\n    is_active: bool,\n}"},
-  {"symbol": "impl User", "content": "impl User {\n    // ALL existing + new\n}"},
-  {"symbol": "impl UserService", "content": "impl UserService {\n    // ALL existing + new\n}"}
+  {"symbol": "impl User", "content": "impl User {\n    pub fn new(...) -> Self {\n        Self { id, is_active: true }\n    }\n    // keep ALL existing methods\n}"}
 ]}
 
 ## Rules
 - search returns code - NO separate read needed
-- Edit ENTIRE symbols with ALL existing code
-- ONE edit_batch, ONE cargo check
-- Symbol priority: struct > enum_variant"#;
+- Edit ENTIRE symbol body with ALL existing code + new code
+- Keep ALL existing methods when editing impl blocks
+- ONE edit_batch, ONE cargo check"#;
 
 #[cfg(test)]
 mod tests {
