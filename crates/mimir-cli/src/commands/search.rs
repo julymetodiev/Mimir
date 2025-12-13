@@ -62,10 +62,21 @@ pub async fn execute(
                 sym.file_path.display().to_string()
             };
 
+            // Show qualified name if different from name
+            let display_name = if let Some(ref qn) = sym.qualified_name {
+                if qn != &sym.name {
+                    format!("{} ({})", sym.name, qn)
+                } else {
+                    sym.name.clone()
+                }
+            } else {
+                sym.name.clone()
+            };
+
             println!(
-                "{:3}. {} ({}) - {}:{}",
+                "{:3}. {} [{}] - {}:{}",
                 i + 1,
-                sym.name,
+                display_name,
                 kind_str,
                 file_display,
                 sym.start_line

@@ -68,7 +68,17 @@ pub enum Commands {
 
         /// Show source code snippet.
         #[arg(short, long)]
+        /// Show source code snippet.
+        #[arg(short, long)]
         code: bool,
+
+        /// Show only callers (who calls this symbol).
+        #[arg(long)]
+        callers: bool,
+
+        /// Show only callees (what this symbol calls).
+        #[arg(long)]
+        callees: bool,
     },
 
     /// Edit a file with conflict detection.

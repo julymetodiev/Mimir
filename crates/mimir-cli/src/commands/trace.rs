@@ -14,16 +14,19 @@ use crate::commands::sync::{load_graph, sync_project};
 use crate::daemon::{check_daemon_running, DaemonClient};
 
 /// Execute the trace command.
+/// Execute the trace command.
 pub async fn execute(
     file: Option<&Path>,
     symbol_name: &str,
     depth: usize,
     json: bool,
     show_code: bool,
+    callers_only: bool,
+    callees_only: bool,
 ) -> Result<()> {
     match file {
-        Some(f) => execute_single_file(f, symbol_name, depth, json, show_code).await,
-        None => execute_from_graph(symbol_name, depth, json, show_code).await,
+        Some(f) => execute_single_file(f, symbol_name, depth, json, show_code, callers_only, callees_only).await,
+        None => execute_from_graph(symbol_name, depth, json, show_code, callers_only, callees_only).await,
     }
 }
 
@@ -34,6 +37,8 @@ async fn execute_single_file(
     depth: usize,
     json: bool,
     show_code: bool,
+    callers_only: bool,
+    callees_only: bool,
 ) -> Result<()> {
     // Verify file exists
     if !file.exists() {
@@ -105,11 +110,11 @@ async fn execute_single_file(
     }
 
     // Find and trace the symbol
-    trace_symbol(&graph, symbol_name, depth, json, show_code, Some(file))
+    trace_symbol(&graph, symbol_name, depth, json, show_code, callers_only, callees_only, Some(file))
 }
 
 /// Execute trace from the synced graph.
-async fn execute_from_graph(symbol_name: &str, depth: usize, json: bool, show_code: bool) -> Result<()> {
+async fn execute_from_graph(symbol_name: &str, depth: usize, json: bool, show_code: bool, callers_only: bool, callees_only: bool) -> Result<()> {
     // Find project root
     let root = find_project_root().context("Not in a Mimir project. Run 'mimir init' first.")?;
     let config = Config::new(&root);
@@ -120,7 +125,7 @@ async fn execute_from_graph(symbol_name: &str, depth: usize, json: bool, show_co
 
     // Check if daemon is running - use it for automatic updates
     if check_daemon_running(&config.agent_dir) {
-        return execute_via_daemon(&config, symbol_name, depth, json, show_code).await;
+        return execute_via_daemon(&config, symbol_name, depth, json, show_code, callers_only, callees_only).await;
     }
 
     // Fallback: sync and query locally
@@ -137,17 +142,17 @@ async fn execute_from_graph(symbol_name: &str, depth: usize, json: bool, show_co
     };
 
     // Find and trace the symbol
-    trace_symbol(&graph, symbol_name, depth, json, show_code, None)
+    trace_symbol(&graph, symbol_name, depth, json, show_code, callers_only, callees_only, None)
 }
 
 /// Execute trace via the daemon.
-async fn execute_via_daemon(config: &Config, symbol_name: &str, depth: usize, json: bool, show_code: bool) -> Result<()> {
+async fn execute_via_daemon(config: &Config, symbol_name: &str, depth: usize, json: bool, show_code: bool, callers_only: bool, callees_only: bool) -> Result<()> {
     let mut client = DaemonClient::connect(&config.agent_dir).await?;
 
     let options = IpcTraceOptions {
         max_depth: Some(depth as u32),
-        callers_only: false,
-        callees_only: false,
+        callers_only,
+        callees_only,
         cross_language: false,
     };
 
@@ -179,7 +184,7 @@ async fn execute_via_daemon(config: &Config, symbol_name: &str, depth: usize, js
         }
         println!();
 
-        if !result.callers.is_empty() {
+        if !callees_only && !result.callers.is_empty() {
             println!("Callers ({}):", result.callers.len());
             for node in &result.callers {
                 let indent = "  ".repeat(node.depth as usize);
@@ -188,7 +193,7 @@ async fn execute_via_daemon(config: &Config, symbol_name: &str, depth: usize, js
             println!();
         }
 
-        if !result.callees.is_empty() {
+        if !callers_only && !result.callees.is_empty() {
             println!("Callees ({}):", result.callees.len());
             for node in &result.callees {
                 let indent = "  ".repeat(node.depth as usize);
@@ -213,6 +218,8 @@ fn trace_symbol(
     depth: usize,
     json: bool,
     show_code: bool,
+    callers_only: bool,
+    callees_only: bool,
     file: Option<&Path>,
 ) -> Result<()> {
     // Find the target symbol
@@ -263,7 +270,7 @@ fn trace_symbol(
         }
         println!();
 
-        if !result.callers.is_empty() {
+        if !callees_only && !result.callers.is_empty() {
             println!("Callers ({}):", result.callers.len());
             for node in &result.callers {
                 let indent = "  ".repeat(node.depth);
@@ -272,7 +279,7 @@ fn trace_symbol(
             println!();
         }
 
-        if !result.callees.is_empty() {
+        if !callers_only && !result.callees.is_empty() {
             println!("Callees ({}):", result.callees.len());
             for node in &result.callees {
                 let indent = "  ".repeat(node.depth);
