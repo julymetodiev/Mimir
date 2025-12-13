@@ -2,11 +2,13 @@
 
 use anyhow::{Context, Result};
 use mimir_edit::{EditOp, Editor};
+use mimir_protocol::FindOptions;
 use mimir_types::Span;
 use std::path::PathBuf;
 
 use crate::app::{Config, find_project_root};
 use crate::commands::sync::sync_project;
+use crate::daemon::{check_daemon_running, DaemonClient};
 
 /// Edit mode specifying the type of edit operation.
 #[derive(Debug, Clone, Copy)]
@@ -40,7 +42,8 @@ impl std::str::FromStr for EditMode {
 
 /// Execute the edit command.
 pub async fn execute(
-    file: PathBuf,
+    file: Option<PathBuf>,
+    symbol: Option<String>,
     mode: EditMode,
     start: u32,
     end: Option<u32>,
@@ -56,36 +59,79 @@ pub async fn execute(
         anyhow::bail!("Project not initialized. Run 'mimir init' first.");
     }
 
-    // Resolve file path
-    let file_path = if file.is_absolute() {
-        file
-    } else {
-        root.join(&file)
+    // Resolve file path and line offset based on symbol or file
+    let (file_path, line_offset) = match (&symbol, &file) {
+        (Some(sym_name), _) => {
+            // Symbol-based editing: look up symbol via daemon
+            if !check_daemon_running(&config.agent_dir) {
+                anyhow::bail!("Daemon not running. Start with 'mimir daemon start' for symbol-based editing.");
+            }
+
+            let mut client = DaemonClient::connect(&config.agent_dir).await?;
+            let options = FindOptions::default();
+            let result = client.find_symbol(sym_name, options).await?;
+
+            if result.symbols.is_empty() {
+                anyhow::bail!("Symbol '{}' not found", sym_name);
+            }
+
+            let sym = &result.symbols[0];
+            if sym.file_path.as_os_str().is_empty() {
+                anyhow::bail!("Symbol '{}' has no file path. Cannot edit.", sym_name);
+            }
+
+            let resolved_path = root.join(&sym.file_path);
+            println!("Resolved symbol '{}' to {}:{}", sym_name, sym.file_path.display(), sym.start_line);
+
+            // Line offset is the symbol's start line (1-based) minus 1
+            (resolved_path, sym.start_line.saturating_sub(1))
+        }
+        (None, Some(f)) => {
+            // File-based editing: use provided file directly
+            let resolved = if f.is_absolute() {
+                f.clone()
+            } else {
+                root.join(f)
+            };
+            (resolved, 0)
+        }
+        (None, None) => {
+            anyhow::bail!("Either --file or --symbol must be provided");
+        }
     };
 
     if !file_path.exists() {
         anyhow::bail!("File not found: {}", file_path.display());
     }
 
+    // Convert relative lines to absolute lines when using symbol
+    let (abs_start, abs_end) = if symbol.is_some() {
+        let abs_start = start + line_offset;
+        let abs_end = end.map(|e| e + line_offset);
+        (abs_start, abs_end)
+    } else {
+        (start, end)
+    };
+
     // Build the edit operation
     let op = match mode {
         EditMode::Replace => {
-            let end = end.context("Replace mode requires --end parameter")?;
+            let end_val = abs_end.context("Replace mode requires --end parameter")?;
             let content = content.context("Replace mode requires --content parameter")?;
-            EditOp::replace(&file_path, Span::new(start, end), content)
+            EditOp::replace(&file_path, Span::new(abs_start, end_val), content)
         }
         EditMode::Insert => {
             let content = content.context("Insert mode requires --content parameter")?;
-            EditOp::insert(&file_path, start, content)
+            EditOp::insert(&file_path, abs_start, content)
         }
         EditMode::Delete => {
-            let end = end.context("Delete mode requires --end parameter")?;
-            EditOp::delete(&file_path, Span::new(start, end))
+            let end_val = abs_end.context("Delete mode requires --end parameter")?;
+            EditOp::delete(&file_path, Span::new(abs_start, end_val))
         }
         EditMode::Lines => {
-            let end = end.context("Lines mode requires --end parameter")?;
+            let end_val = abs_end.context("Lines mode requires --end parameter")?;
             let content = content.context("Lines mode requires --content parameter")?;
-            EditOp::replace_lines(&file_path, start, end, content)
+            EditOp::replace_lines(&file_path, abs_start, end_val, content)
         }
     };
 

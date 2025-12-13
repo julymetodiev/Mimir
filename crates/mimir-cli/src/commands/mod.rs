@@ -83,19 +83,25 @@ pub enum Commands {
 
     /// Edit a file with conflict detection.
     Edit {
-        /// File to edit.
+        /// File to edit (optional if --symbol is provided).
         #[arg(short, long)]
-        file: PathBuf,
+        file: Option<PathBuf>,
+
+        /// Symbol name to edit (resolves file and line automatically).
+        #[arg(long)]
+        symbol: Option<String>,
 
         /// Edit mode: replace, insert, delete, lines.
         #[arg(short, long, default_value = "replace")]
         mode: String,
 
         /// Start position (byte offset for replace/insert/delete, line number for lines).
+        /// When --symbol is used, this is relative to the symbol's start line.
         #[arg(short, long)]
         start: u32,
 
         /// End position (byte offset for replace/delete, line number for lines).
+        /// When --symbol is used, this is relative to the symbol's start line.
         #[arg(short, long)]
         end: Option<u32>,
 
