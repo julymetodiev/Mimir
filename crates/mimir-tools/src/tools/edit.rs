@@ -37,11 +37,15 @@ impl Tool for EditTool {
             ))
             .with_param(ToolParameter::optional_string(
                 "file",
-                "File path to edit. Required if symbol is not provided. Example: 'src/user.rs'",
+                "File path to edit. Required if symbol is not provided.",
+            ))
+            .with_param(ToolParameter::optional_string(
+                "old_content",
+                "Exact content to replace. If provided, performs a text-based search and replace. Supersedes line numbers.",
             ))
             .with_param(ToolParameter::optional_integer(
                 "start_line",
-                "Start line number (1-based). Used with file parameter.",
+                "Start line number (1-based). Used with file parameter if old_content is NOT provided.",
             ))
             .with_param(ToolParameter::optional_integer(
                 "end_line",
@@ -53,7 +57,7 @@ impl Tool for EditTool {
             ))
             .with_param(ToolParameter::optional_string(
                 "mode",
-                "Edit mode: 'replace' (default) replaces lines, 'append' adds to end of file, 'insert' inserts before start_line.",
+                "Edit mode: 'replace' (default), 'append' (adds to end).",
             ))
             .with_param(ToolParameter::optional_bool(
                 "preview",
@@ -65,16 +69,17 @@ impl Tool for EditTool {
     async fn execute(&self, params: Value, context: &ToolContext) -> ToolResult {
         let symbol = params["symbol"].as_str();
         let file = params["file"].as_str();
+        let old_content = params["old_content"].as_str();
         let start_line = params["start_line"].as_u64().map(|n| n as u32);
         let end_line = params["end_line"].as_u64().map(|n| n as u32);
-        // Handle content - can be string or (erroneously) array from some models
+        
+        // Handle content extraction (handling array edge case)
         let content_value = &params["content"];
         let content_string: String;
         let content: &str = if let Some(c) = content_value.as_str() {
             content_string = c.to_string();
             &content_string
         } else if let Some(arr) = content_value.as_array() {
-            // Some models send content as array - join it
             content_string = arr.iter()
                 .filter_map(|v| v.as_str())
                 .collect::<Vec<_>>()
@@ -86,25 +91,29 @@ impl Tool for EditTool {
         } else {
             return ToolResult::error("'content' parameter is required");
         };
+
         let mode = params["mode"].as_str().unwrap_or("replace");
         let preview = params["preview"].as_bool().unwrap_or(false);
 
-        // Handle symbol-based editing first
+        // 1. Symbol-based editing (Primary)
         if let Some(sym) = symbol {
             return self.handle_symbol_edit(sym, content, preview, context).await;
         }
 
-        // File-based editing
         let file_path = match file {
             Some(f) => f,
             None => return ToolResult::error(
-                "Either 'symbol' or 'file' must be provided. Examples:\n\
-                 - symbol: 'UserService' (edits entire struct/impl)\n\
-                 - file: 'src/user.rs' with start_line/end_line"
+                "One of 'symbol', 'file' (with old_content), or 'file' (with start_line) is required."
             ),
         };
 
-        // Resolve file path and get file info
+        // 2. Text-based Search & Replace (Secondary - Robust)
+        if let Some(old) = old_content {
+            return self.handle_text_replace(file_path, old, content, preview, context).await;
+        }
+
+        // 3. Line-based editing (Fallback - Brittle)
+        // ... existing line logic ...
         let path = if std::path::Path::new(file_path).is_absolute() {
             std::path::PathBuf::from(file_path)
         } else {
@@ -117,28 +126,23 @@ impl Tool for EditTool {
         };
         let total_lines = file_content.lines().count() as u32;
 
-        // Determine start and end lines based on mode
         let (start, end) = match mode {
-            "append" => {
-                // Append mode: add to end of file
-                (total_lines + 1, total_lines)
-            }
+            "append" => (total_lines + 1, total_lines),
             "insert" => {
-                // Insert mode: insert before start_line
                 let line = start_line.unwrap_or(1);
                 (line, line.saturating_sub(1))
             }
             "replace" | _ => {
-                // Replace mode: need start_line, end_line defaults to start_line
-                // If no start_line given, auto-fallback to append mode
                 match start_line {
-                    Some(s) => {
-                        let e = end_line.unwrap_or(s);
-                        (s, e)
-                    }
+                    Some(s) => (s, end_line.unwrap_or(s)),
                     None => {
-                        // Auto-fallback to append mode for convenience
-                        (total_lines + 1, total_lines)
+                        // If neither symbol, old_content, nor start_line is provided, assume append if mode is not explicit, 
+                        // or error out. But since default mode is "replace", we should error if no target specified.
+                         if mode == "append" {
+                             (total_lines + 1, total_lines)
+                         } else {
+                             return ToolResult::error("Missing 'start_line' for file replacement. Use 'append' mode, 'old_content', or 'symbol'.");
+                         }
                     }
                 }
             }
@@ -168,20 +172,31 @@ impl EditTool {
             ),
         };
 
-        // Try exact match first, then fuzzy search
-        let search_result = client.search(symbol, None, 5).await;
+        // Try exact match first, then fuzzy search. Increase limit to ensure we find it.
+        let search_result = client.search(symbol, None, 50).await;
 
         match search_result {
             Ok(result) if !result.symbols.is_empty() => {
                 // Find best match (prefer exact name match)
                 let best_match = result.symbols.iter()
-                    .find(|s| s.name == symbol || s.name.ends_with(symbol))
-                    .unwrap_or(&result.symbols[0]);
+                    .find(|s| s.name == symbol || s.name.ends_with(symbol));
 
-                if preview || context.dry_run {
-                    self.preview_edit(&best_match.file, best_match.start_line, best_match.end_line, content, context)
-                } else {
-                    self.apply_edit(&best_match.file, best_match.start_line, best_match.end_line, content, context)
+                match best_match {
+                    Some(m) => {
+                        if preview || context.dry_run {
+                            self.preview_edit(&m.file, m.start_line, m.end_line, content, context)
+                        } else {
+                            self.apply_edit(&m.file, m.start_line, m.end_line, content, context)
+                        }
+                    }
+                    None => {
+                         ToolResult::error(format!(
+                            "Symbol '{}' not found exactly. Did you mean one of these? {:?}\n\
+                             Please use the exact symbol name.",
+                            symbol,
+                            result.symbols.iter().map(|s| &s.name).take(5).collect::<Vec<_>>()
+                        ))
+                    }
                 }
             }
             Ok(result) => {
@@ -205,6 +220,108 @@ impl EditTool {
                 symbol, e
             )),
         }
+    }
+
+    async fn handle_text_replace(
+        &self,
+        file_path: &str,
+        old_content: &str,
+        new_content: &str,
+        preview: bool,
+        context: &ToolContext,
+    ) -> ToolResult {
+        let path = if std::path::Path::new(file_path).is_absolute() {
+            std::path::PathBuf::from(file_path)
+        } else {
+            context.project_root.join(file_path)
+        };
+
+        let original = match fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) => return ToolResult::error(format!("Failed to read file: {}", e)),
+        };
+
+        // Normalize line endings to LF for comparison if needed, but for now stick to exact match
+        // Count occurrences
+        let matches: Vec<_> = original.match_indices(old_content).collect();
+
+        if matches.is_empty() {
+             // Try to be helpful: check if it matches ignoring whitespace
+             let clean_old = old_content.split_whitespace().collect::<Vec<_>>().join(" ");
+             let clean_orig = original.split_whitespace().collect::<Vec<_>>().join(" ");
+             
+             if clean_orig.contains(&clean_old) {
+                 return ToolResult::error(
+                     "Exact match not found, but similar content exists (whitespace differences). \n\
+                      Please read the file again and provide the EXACT content including indentation and newlines."
+                 );
+             }
+
+            return ToolResult::error(format!(
+                "Content to replace not found in '{}'. Please make sure 'old_content' matches exactly.",
+                file_path
+            ));
+        }
+
+        if matches.len() > 1 {
+            return ToolResult::error(format!(
+                "Content found {} times in '{}'. Please provide more context in 'old_content' to make it unique.",
+                matches.len(),
+                file_path
+            ));
+        }
+
+        let (start_byte, _) = matches[0];
+        
+        // Calculate line numbers for reporting
+        let pre_match = &original[..start_byte];
+        let start_line = pre_match.lines().count() as u32 + 1;
+        let old_lines_count = old_content.lines().count() as u32;
+        let end_line = start_line + old_lines_count.saturating_sub(1);
+
+        if preview || context.dry_run {
+            // Generate diff
+            let lines: Vec<&str> = original.lines().collect();
+             // Just reuse preview_edit logic if it maps to full lines, otherwise manual diff
+             // For simplicity, let's just show a unified diff of the replacement
+             let mut diff = String::new();
+             diff.push_str(&format!("--- {}\n", file_path));
+             diff.push_str(&format!("+++ {}\n", file_path));
+             diff.push_str(&format!("@@ -{},{} +{},? @@\n", start_line, old_lines_count, start_line));
+             
+             for line in old_content.lines() {
+                 diff.push_str(&format!("-{}\n", line));
+             }
+             for line in new_content.lines() {
+                 diff.push_str(&format!("+{}\n", line));
+             }
+
+            return ToolResult::success(EditOutput {
+                file: file_path.to_string(),
+                start_line,
+                end_line,
+                lines_changed: 0, // Approximate
+                preview: Some(diff),
+            });
+        }
+
+        // Apply replacement
+        let new_file_content = original.replace(old_content, new_content);
+
+        if let Err(e) = fs::write(&path, &new_file_content) {
+            return ToolResult::error(format!("Failed to write file: {}", e));
+        }
+
+        let new_lines_count = new_content.lines().count() as i32;
+        let old_lines_cnt = old_content.lines().count() as i32;
+
+        ToolResult::success(EditOutput {
+            file: file_path.to_string(),
+            start_line,
+            end_line,
+            lines_changed: new_lines_count - old_lines_cnt,
+            preview: None,
+        })
     }
 
     fn preview_edit(
@@ -232,7 +349,9 @@ impl EditTool {
 
         if start >= lines.len() {
             return ToolResult::error(format!(
-                "Start line {} is beyond file length {}",
+                "Start line {} is beyond file length {}. \n\
+                 - To ADD new code to the end: Use mode='append' or the 'append' tool.\n\
+                 - To EDIT existing code: Re-read the file to check line numbers, or use symbol-based editing (PREFERRED).",
                 start_line,
                 lines.len()
             ));
@@ -290,7 +409,9 @@ impl EditTool {
 
         if start >= lines.len() {
             return ToolResult::error(format!(
-                "Start line {} is beyond file length {}",
+                "Start line {} is beyond file length {}. \n\
+                 - To ADD new code to the end: Use mode='append' or the 'append' tool.\n\
+                 - To EDIT existing code: Re-read the file to check line numbers, or use symbol-based editing (PREFERRED).",
                 start_line,
                 lines.len()
             ));
