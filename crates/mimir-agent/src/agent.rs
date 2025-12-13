@@ -146,12 +146,12 @@ impl ToolCache {
 
     /// Check if a tool is a mutating operation that should invalidate the cache.
     pub fn is_mutating(tool_name: &str) -> bool {
-        matches!(tool_name, "edit" | "edit_file" | "shell")
+        matches!(tool_name, "edit" | "edit_batch" | "edit_file" | "shell")
     }
 
     /// Check if tool is an edit operation (not shell).
     pub fn is_edit(tool_name: &str) -> bool {
-        matches!(tool_name, "edit" | "edit_file")
+        matches!(tool_name, "edit" | "edit_batch" | "edit_file")
     }
 
     /// Extract file path from tool input if present.

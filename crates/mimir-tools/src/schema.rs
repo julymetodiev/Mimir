@@ -201,6 +201,24 @@ impl ToolParameter {
             required: false,
         }
     }
+
+    /// Create a required array parameter.
+    pub fn required_array(name: impl Into<String>, description: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            schema: JsonSchema::array(JsonSchema::object()).with_description(description),
+            required: true,
+        }
+    }
+
+    /// Create an optional array parameter.
+    pub fn optional_array(name: impl Into<String>, description: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            schema: JsonSchema::array(JsonSchema::object()).with_description(description),
+            required: false,
+        }
+    }
 }
 
 /// Complete tool schema including name, description, and parameters.

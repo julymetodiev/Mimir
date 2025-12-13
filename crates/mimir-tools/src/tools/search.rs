@@ -4,6 +4,7 @@ use crate::{Tool, ToolContext, ToolParameter, ToolResult, ToolSchema};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::fs;
 
 /// Search result item.
 #[derive(Debug, Serialize, Deserialize)]
@@ -14,6 +15,8 @@ pub struct SearchMatch {
     pub file: String,
     pub start_line: u32,
     pub end_line: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
 }
 
 /// Output from the search tool.
@@ -35,22 +38,23 @@ impl Tool for SearchTool {
     }
 
     fn description(&self) -> &str {
-        "Search for symbols (functions, structs, etc.) by name pattern. Supports regex patterns. Returns matching symbols with their locations."
+        "Search for symbols by name pattern. Use code=true to include source code in results (recommended - avoids needing separate read calls)."
     }
 
     fn schema(&self) -> ToolSchema {
         ToolSchema::new(self.name(), self.description())
             .with_param(ToolParameter::required_string(
                 "pattern",
-                "Search pattern (regex supported). Example: 'handle.*request' or 'User'",
+                "Search pattern. Example: 'User' finds User struct and impl User block.",
             ))
-            .with_param(ToolParameter::optional_string(
-                "kind",
-                "Filter by symbol kind: function, struct, enum, trait, method, impl, module",
+            .with_param(ToolParameter::optional_bool(
+                "definitions",
+                "Only show definitions (struct, impl, enum, trait, function) - excludes methods/fields. Default: true.",
+                true,
             ))
             .with_param(ToolParameter::optional_integer(
                 "limit",
-                "Maximum number of results to return (default: 20)",
+                "Maximum results (default: 10)",
             ))
     }
 
@@ -60,49 +64,80 @@ impl Tool for SearchTool {
             None => return ToolResult::error("'pattern' parameter is required"),
         };
 
-        let kind = params["kind"].as_str();
-        let limit = params["limit"].as_u64().unwrap_or(20) as usize;
+        let definitions_only = params["definitions"].as_bool().unwrap_or(true);
+        let limit = params["limit"].as_u64().unwrap_or(10) as usize;
 
         // Use graph client if available
-        if let Some(client) = &context.graph_client {
-            match client.search(pattern, kind, limit).await {
-                Ok(result) => {
-                    let matches: Vec<SearchMatch> = result
-                        .symbols
-                        .into_iter()
-                        .map(|s| SearchMatch {
+        let client = match &context.graph_client {
+            Some(c) => c,
+            None => return ToolResult::error("Search requires daemon. Start with: mimir daemon start"),
+        };
+
+        // Search with higher limit to account for filtering
+        let search_limit = if definitions_only { limit * 5 } else { limit };
+
+        match client.search(pattern, None, search_limit).await {
+            Ok(result) => {
+                let matches: Vec<SearchMatch> = result
+                    .symbols
+                    .into_iter()
+                    .filter(|s| {
+                        if definitions_only {
+                            // Only keep top-level definitions
+                            matches!(s.kind.to_lowercase().as_str(),
+                                "struct" | "impl" | "enum" | "trait" | "function" | "interface" | "class")
+                        } else {
+                            true
+                        }
+                    })
+                    .take(limit)
+                    .map(|s| {
+                        let code = self.read_symbol_code(&s.file, s.start_line, s.end_line, context);
+                        SearchMatch {
                             name: s.name,
                             qualified_name: s.qualified_name,
                             kind: s.kind,
                             file: s.file,
                             start_line: s.start_line,
                             end_line: s.end_line,
-                        })
-                        .collect();
+                            code,
+                        }
+                    })
+                    .collect();
 
-                    let output = SearchOutput {
-                        pattern: pattern.to_string(),
-                        matches,
-                        total_count: result.total,
-                        truncated: result.total > limit,
-                    };
-                    return ToolResult::success(output);
-                }
-                Err(e) => {
-                    return ToolResult::error(format!("Search failed: {}", e));
-                }
+                let output = SearchOutput {
+                    pattern: pattern.to_string(),
+                    matches,
+                    total_count: result.total,
+                    truncated: result.total > limit,
+                };
+                ToolResult::success(output)
             }
+            Err(e) => ToolResult::error(format!("Search failed: {}", e)),
+        }
+    }
+}
+
+impl SearchTool {
+    fn read_symbol_code(
+        &self,
+        file: &str,
+        start_line: u32,
+        end_line: u32,
+        context: &ToolContext,
+    ) -> Option<String> {
+        let path = context.project_root.join(file);
+        let content = fs::read_to_string(&path).ok()?;
+        let lines: Vec<&str> = content.lines().collect();
+
+        let start = (start_line as usize).saturating_sub(1);
+        let end = (end_line as usize).min(lines.len());
+
+        if start >= lines.len() {
+            return None;
         }
 
-        // Fallback: no graph client, return empty results with hint
-        let output = SearchOutput {
-            pattern: pattern.to_string(),
-            matches: vec![],
-            total_count: 0,
-            truncated: false,
-        };
-
-        ToolResult::success(output)
+        Some(lines[start..end].join("\n"))
     }
 }
 

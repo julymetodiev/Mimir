@@ -21,6 +21,9 @@ pub struct SymbolInfo {
     pub start_line: u32,
     /// End line (1-based).
     pub end_line: u32,
+    /// Source code (optional, included when requested).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
 }
 
 /// Result of a symbol search.

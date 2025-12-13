@@ -66,6 +66,7 @@ impl GraphClient for DaemonGraphClient {
                 file: s.file_path.to_string_lossy().to_string(),
                 start_line: s.start_line,
                 end_line: s.end_line,
+                code: None,
             })
             .collect();
 
@@ -99,6 +100,7 @@ impl GraphClient for DaemonGraphClient {
             file: root.file_path.to_string_lossy().to_string(),
             start_line: root.start_line,
             end_line: root.end_line,
+            code: None,
         };
 
         // Convert callers
@@ -112,6 +114,7 @@ impl GraphClient for DaemonGraphClient {
                 file: node.symbol.file_path.to_string_lossy().to_string(),
                 start_line: node.symbol.start_line,
                 end_line: node.symbol.end_line,
+                code: None,
             })
             .collect();
 
@@ -126,6 +129,7 @@ impl GraphClient for DaemonGraphClient {
                 file: node.symbol.file_path.to_string_lossy().to_string(),
                 start_line: node.symbol.start_line,
                 end_line: node.symbol.end_line,
+                code: None,
             })
             .collect();
 
@@ -158,6 +162,7 @@ impl GraphClient for DaemonGraphClient {
             file: s.file_path.to_string_lossy().to_string(),
             start_line: s.start_line,
             end_line: s.end_line,
+            code: None,
         }))
     }
 
