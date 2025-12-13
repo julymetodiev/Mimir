@@ -1,6 +1,6 @@
 //! Batch edit tool - edit multiple symbols in one call.
 
-use crate::{Tool, ToolContext, ToolParameter, ToolResult, ToolSchema};
+use crate::{JsonSchema, Tool, ToolContext, ToolParameter, ToolResult, ToolSchema};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -58,10 +58,17 @@ impl Tool for EditBatchTool {
     }
 
     fn schema(&self) -> ToolSchema {
+        // Define the structure of each edit item
+        let edit_item_schema = JsonSchema::object()
+            .with_property("symbol", JsonSchema::string().with_description("Exact symbol name to edit, e.g. 'User' or 'impl User'"))
+            .with_property("content", JsonSchema::string().with_description("New source code for the symbol (no /// comments, no #[derive])"))
+            .with_required(vec!["symbol", "content"]);
+
         ToolSchema::new(self.name(), self.description())
-            .with_param(ToolParameter::required_array(
+            .with_param(ToolParameter::required_array_of(
                 "edits",
-                "Array of symbol edits. Each edit has 'symbol' (name) and 'content' (new code).",
+                "Array of edits. Each must have 'symbol' and 'content' fields.",
+                edit_item_schema,
             ))
             .with_param(ToolParameter::optional_bool(
                 "preview",

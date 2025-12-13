@@ -26,38 +26,38 @@ impl Tool for EditTool {
     }
 
     fn description(&self) -> &str {
-        "Edit source code by replacing lines or entire symbols. Supports editing by line numbers or by symbol name. Always use preview mode first to verify changes."
+        "Edit source code by symbol name or file path. When editing by symbol, replaces the entire symbol. When editing by file, can specify line range or append to end."
     }
 
     fn schema(&self) -> ToolSchema {
         ToolSchema::new(self.name(), self.description())
             .with_param(ToolParameter::optional_string(
                 "symbol",
-                "Symbol name to edit (e.g., 'UserService', 'impl User'). Replaces the entire symbol.",
+                "Symbol name to edit (e.g., 'User', 'impl User', 'UserService'). Replaces entire symbol with new content.",
             ))
             .with_param(ToolParameter::optional_string(
                 "file",
-                "File path to edit. Required if symbol is not provided.",
+                "File path to edit. Required if symbol is not provided. Example: 'src/user.rs'",
             ))
             .with_param(ToolParameter::optional_integer(
                 "start_line",
-                "Start line (1-based). If omitted with 'append' mode, appends to end of file.",
+                "Start line number (1-based). Used with file parameter.",
             ))
             .with_param(ToolParameter::optional_integer(
                 "end_line",
-                "End line (1-based, inclusive). If omitted, defaults to start_line (single line edit).",
+                "End line number (1-based, inclusive). Used with file parameter. Defaults to start_line.",
             ))
             .with_param(ToolParameter::required_string(
                 "content",
-                "New content to insert/replace.",
+                "New source code to insert. When editing symbol, do NOT include /// comments or #[derive].",
             ))
             .with_param(ToolParameter::optional_string(
                 "mode",
-                "Edit mode: 'replace' (default), 'append' (add to end), 'insert' (insert before start_line).",
+                "Edit mode: 'replace' (default) replaces lines, 'append' adds to end of file, 'insert' inserts before start_line.",
             ))
             .with_param(ToolParameter::optional_bool(
                 "preview",
-                "If true, only shows diff without applying.",
+                "If true, shows diff without applying changes.",
                 false,
             ))
     }
