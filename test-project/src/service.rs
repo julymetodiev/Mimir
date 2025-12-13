@@ -23,11 +23,6 @@ impl UserService {
         self.users.last().unwrap()
     }
 
-    /// CREATE: Add a user to the service (with existing User)
-    pub fn add_user(&mut self, user: User) {
-        self.users.push(user);
-    }
-
     /// READ: Find a user by email.
     pub fn find_by_email(&self, email: &str) -> Option<&User> {
         self.users.iter().find(|u| u.has_email(email))
@@ -51,11 +46,6 @@ impl UserService {
     /// READ: Count users.
     pub fn count(&self) -> usize {
         self.users.len()
-    }
-
-    /// READ: Get all emails from all users.
-    pub fn get_all_emails(&self) -> Vec<String> {
-        self.users.iter().map(|user| user.email().to_string()).collect()
     }
 
     /// UPDATE: Update a user by id with partial data

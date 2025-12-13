@@ -1,5 +1,5 @@
-mod user;
 mod service;
+mod user;
 
 use service::UserService;
 use user::UserUpdate;
@@ -45,7 +45,6 @@ fn main() {
     let update_data = UserUpdate {
         name: Some("Alice Smith".to_string()),
         email: None,
-        role: None,
     };
 
     match service.update_user(user1_id, update_data) {
