@@ -101,7 +101,7 @@ impl ZaiProvider {
                         function: OpenAIFunction {
                             name: t.name.clone(),
                             description: Some(t.description.clone()),
-                            parameters: t.parameters.to_json_schema(),
+                            parameters: serde_json::to_value(&t.parameters).unwrap_or(Value::Object(Default::default())),
                         },
                     })
                     .collect(),
