@@ -588,11 +588,11 @@ $ mimir task "Split the auth module into separate crates for JWT, OAuth, and ses
 ╭──────────────────────────────────────────────────────────────────────────╮
 │ Task: refactor-auth-module (ID: task_a1b2c3)                             │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ Status: PLANNING                                                          │
+│ Status: PLANNING                                                         │
 │                                                                          │
 │ Analyzing current auth module structure...                               │
 │                                                                          │
-│ Found:                                                                    │
+│ Found:                                                                   │
 │   • src/auth/mod.rs (450 lines)                                          │
 │   • src/auth/jwt.rs (280 lines)                                          │
 │   • src/auth/oauth.rs (520 lines)                                        │
@@ -628,7 +628,7 @@ $ y
 │   • JwtClaims → crates/jwt/src/claims.rs                                 │
 │   • encode_jwt → crates/jwt/src/encode.rs                                │
 │   • decode_jwt → crates/jwt/src/decode.rs                                │
-│ ✓ Checkpoint saved                                                        │
+│ ✓ Checkpoint saved                                                       │
 │                                                                          │
 │ Progress: ████░░░░░░░░░░░░░░░░ 17%                                       │
 ╰──────────────────────────────────────────────────────────────────────────╯
@@ -647,14 +647,14 @@ $ y
 $ mimir status
 
 ╭──────────────────────────────────────────────────────────────────────────╮
-│ Active Tasks                                                              │
+│ Active Tasks                                                             │
 ├──────────────────────────────────────────────────────────────────────────┤
 │ 1. refactor-auth-module (task_a1b2c3)                                    │
 │    Status: PAUSED at step 3/6                                            │
 │    Last activity: 2 hours ago                                            │
 │    Files modified: 8                                                     │
 │    Files pending: 15                                                     │
-│    Checkpoint: cp_x7y8z9                                                  │
+│    Checkpoint: cp_x7y8z9                                                 │
 ╰──────────────────────────────────────────────────────────────────────────╯
 
 $ mimir resume
@@ -664,17 +664,17 @@ $ mimir resume
 ├──────────────────────────────────────────────────────────────────────────┤
 │ Restoring context from checkpoint cp_x7y8z9...                           │
 │                                                                          │
-│ Previously completed:                                                     │
+│ Previously completed:                                                    │
 │   ✓ Step 1: Created crates/jwt                                           │
 │   ✓ Step 2: Created crates/oauth                                         │
 │   → Step 3: Creating crates/sessions (in progress)                       │
 │                                                                          │
-│ Key decisions made:                                                       │
-│   • JWT crate uses jsonwebtoken v9.2                                      │
-│   • OAuth crate depends on oauth2 v4.4                                    │
+│ Key decisions made:                                                      │
+│   • JWT crate uses jsonwebtoken v9.2                                     │
+│   • OAuth crate depends on oauth2 v4.4                                   │
 │   • Keeping backward-compatible re-exports in src/auth                   │
 │                                                                          │
-│ Continuing from step 3...                                                 │
+│ Continuing from step 3...                                                │
 ╰──────────────────────────────────────────────────────────────────────────╯
 
 [Step 3/6] Creating crates/sessions... (continuing)
@@ -690,13 +690,13 @@ $ mimir resume
 │   Cannot resolve import: `use crate::auth::JwtValidator`                 │
 │   JwtValidator was moved but has private dependencies                    │
 │                                                                          │
-│ Options:                                                                  │
+│ Options:                                                                 │
 │   [1] Make JwtValidator dependencies public                              │
-│   [2] Keep JwtValidator in auth module                                    │
+│   [2] Keep JwtValidator in auth module                                   │
 │   [3] Rollback to checkpoint and try different approach                  │
 │   [4] Pause and let me investigate manually                              │
 │                                                                          │
-│ Choice [1/2/3/4]:                                                         │
+│ Choice [1/2/3/4]:                                                        │
 ╰──────────────────────────────────────────────────────────────────────────╯
 
 $ 3
@@ -729,7 +729,7 @@ validation logic. This maintains the public API while improving organization.
 │     delete_user, get_user, list_users                  │
 │                                                        │
 │ In progress:                                           │
-│   → Writing tests for: validate_user (3/7 cases done) │
+│   → Writing tests for: validate_user (3/7 cases done)  │
 │                                                        │
 │ Remaining:                                             │
 │   • Tests for: authenticate, refresh_token             │
@@ -739,7 +739,7 @@ validation logic. This maintains the public API while improving organization.
 │ Time elapsed: 4m 32s                                   │
 │ Checkpoints: 4 (last: 30s ago)                         │
 │                                                        │
-│ [p]ause  [c]ancel  [d]etails  [Enter] continue        │
+│ [p]ause  [c]ancel  [d]etails  [Enter] continue         │
 ╰────────────────────────────────────────────────────────╯
 ```
 
