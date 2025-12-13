@@ -68,12 +68,15 @@ impl UserService {
         }
     }
 
-    /// DELETE: Remove a user by email.
-    pub fn remove_by_email(&mut self, email: &str) -> bool {
-        if let Some(pos) = self.users.iter().position(|u| u.has_email(email)) {
-            self.users.remove(pos);
-            true
+    /// UPDATE: Deactivate a user by id
+    pub fn deactivate_user(&mut self, id: u32) -> Result<(), String> {
+        if let Some(user) = self.find_by_id_mut(id) {
+            user.deactivate();
+            Ok(())
         } else {
+            Err(format!("User with id {} not found", id))
+        }
+    }
             false
         }
     }

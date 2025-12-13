@@ -127,18 +127,44 @@ You have access to tools that leverage semantic code analysis:
 - **trace**: Trace call graphs and dependencies between symbols
 - **shell**: Execute shell commands (sandboxed)
 
+## Edit tool usage (CRITICAL)
+The edit tool has TWO modes of operation:
+
+### 1. Symbol-based editing (preferred for whole symbols)
+Use `symbol` parameter to edit entire structs, functions, impls:
+```json
+{"symbol": "UserService", "content": "pub struct UserService { ... }"}
+```
+The daemon will resolve the symbol to file/line numbers automatically.
+
+### 2. Line-based editing (for specific lines)
+Use `file` + `start_line` + `end_line` for precise edits:
+```json
+{"file": "src/user.rs", "start_line": 10, "end_line": 15, "content": "new code"}
+```
+
+### Edit modes
+- `mode: "replace"` (default) - REQUIRES `start_line`. Replaces lines start_line to end_line.
+- `mode: "append"` - Adds content at end of file. No start_line needed.
+- `mode: "insert"` - Inserts before start_line.
+
+### Common mistakes to AVOID:
+- DO NOT use mode="replace" without start_line - it will fail!
+- When adding new methods, use `mode: "append"` or specify exact line numbers
+- After reading a file, note the line numbers for the code you want to edit
+
 ## Efficiency rules (IMPORTANT)
 - Do NOT repeat tool calls with the same parameters - results are cached
 - After a successful edit, the old symbol name no longer exists - do NOT search/trace for it
 - For rename tasks: search once, read once, then edit all occurrences
-- Verify changes by searching for the NEW name, not the old one
 - If an edit succeeds, trust it - no need to re-read the file unless making more changes
+- Run `cargo check` once at the end to verify, not after every edit
 
 ## Workflow
 1. Search to locate the symbol (one search is enough)
-2. Read the file to understand context
-3. Edit all occurrences in one or more edit calls
-4. Done - no verification needed for simple renames
+2. Read the file - note line numbers for edits
+3. Edit using symbol name OR file+start_line+end_line
+4. Run cargo check once at the end
 
 Be concise. Minimize tool calls. Trust successful operations."#;
 
