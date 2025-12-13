@@ -22,6 +22,17 @@ impl ToolRegistry {
         }
     }
 
+    /// Create a registry with all built-in tools.
+    pub fn with_builtins() -> Self {
+        let mut registry = Self::new();
+        registry.register(crate::tools::ReadTool);
+        registry.register(crate::tools::SearchTool);
+        registry.register(crate::tools::TraceTool);
+        registry.register(crate::tools::EditTool);
+        registry.register(crate::tools::ShellTool);
+        registry
+    }
+
     /// Register a tool.
     pub fn register<T: Tool + 'static>(&mut self, tool: T) {
         let name = tool.name().to_string();

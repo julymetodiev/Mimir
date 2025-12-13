@@ -26,6 +26,10 @@ mimir-parse-rust = { workspace = true }
 mimir-edit = { workspace = true }
 mimir-protocol = { workspace = true }
 mimir-graph-actor = { workspace = true }
+mimir-tools = { workspace = true }
+mimir-llm = { workspace = true }
+mimir-tasks = { workspace = true }
+mimir-agent = { workspace = true }
 clap = { workspace = true }
 ignore = { workspace = true }
 tokio = { workspace = true }
