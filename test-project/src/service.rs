@@ -48,7 +48,7 @@ impl UserService {
     }
 
     /// Check if service is empty.
-    pub fn is_empty(&self) -> bool {
+    pub fn is_empty_new(&self) -> bool {
         self.users.is_empty()
     }
 }

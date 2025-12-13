@@ -4,8 +4,104 @@ use crate::{AgentConfig, AgentError, AgentResult, DEFAULT_SYSTEM_PROMPT, ToolExe
 use mimir_llm::{Completion, CompletionRequest, ContentBlock, LlmProvider, Message, Role};
 use mimir_tasks::{Checkpoint, CheckpointManager, ConversationMessage, Task};
 use mimir_tools::{GraphClient, ToolContext, ToolRegistry};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
+
+/// Cache for tool call results to avoid duplicate executions.
+#[derive(Debug, Default)]
+pub struct ToolCache {
+    /// Cached results: (tool_name, input_json) -> (output, is_error)
+    entries: HashMap<String, CacheEntry>,
+    /// Tools that are safe to cache (read-only operations)
+    cacheable_tools: Vec<String>,
+    /// Number of cache hits
+    hits: usize,
+}
+
+#[derive(Debug, Clone)]
+struct CacheEntry {
+    content: String,
+    is_error: bool,
+}
+
+impl ToolCache {
+    /// Create a new tool cache with default cacheable tools.
+    pub fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+            cacheable_tools: vec![
+                "search".to_string(),
+                "read".to_string(),
+                "trace".to_string(),
+            ],
+            hits: 0,
+        }
+    }
+
+    /// Check if a tool is cacheable.
+    fn is_cacheable(&self, tool_name: &str) -> bool {
+        self.cacheable_tools.iter().any(|t| t == tool_name)
+    }
+
+    /// Generate cache key from tool name and input.
+    fn cache_key(tool_name: &str, input: &serde_json::Value) -> String {
+        format!("{}:{}", tool_name, input.to_string())
+    }
+
+    /// Get cached result if available.
+    pub fn get(&mut self, tool_name: &str, input: &serde_json::Value) -> Option<(String, bool)> {
+        if !self.is_cacheable(tool_name) {
+            return None;
+        }
+        let key = Self::cache_key(tool_name, input);
+        self.entries.get(&key).map(|e| {
+            self.hits += 1;
+            (e.content.clone(), e.is_error)
+        })
+    }
+
+    /// Store result in cache.
+    pub fn store(
+        &mut self,
+        tool_name: &str,
+        input: &serde_json::Value,
+        content: String,
+        is_error: bool,
+    ) {
+        if !self.is_cacheable(tool_name) {
+            return;
+        }
+        let key = Self::cache_key(tool_name, input);
+        self.entries.insert(key, CacheEntry { content, is_error });
+    }
+
+    /// Get number of cache hits.
+    pub fn hits(&self) -> usize {
+        self.hits
+    }
+
+    /// Get number of cached entries.
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Check if cache is empty.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Invalidate all cache entries.
+    /// Should be called after any mutating operation (edit, shell).
+    pub fn invalidate(&mut self) {
+        self.entries.clear();
+    }
+
+    /// Check if a tool is a mutating operation that should invalidate the cache.
+    pub fn is_mutating(tool_name: &str) -> bool {
+        matches!(tool_name, "edit" | "edit_file" | "shell")
+    }
+}
 
 /// Callback for agent events.
 pub trait AgentCallback: Send + Sync {
@@ -23,6 +119,9 @@ pub trait AgentCallback: Send + Sync {
 
     /// Called after tool execution.
     fn on_tool_result(&self, _name: &str, _result: &str, _is_error: bool) {}
+
+    /// Called when a tool result is served from cache.
+    fn on_tool_cache_hit(&self, _name: &str, _input: &serde_json::Value) {}
 
     /// Called when a checkpoint is created.
     fn on_checkpoint(&self, _checkpoint: &Checkpoint) {}
@@ -78,7 +177,7 @@ impl<P: LlmProvider> Agent<P> {
 
     /// Run the agent on a task.
     pub async fn run(&self, task: &mut Task) -> AgentResult<String> {
-        info!("Starting agent for task: {}", task.goal);
+        debug!("Starting agent for task: {}", task.goal);
         self.callback.on_start(task);
 
         task.start();
@@ -114,6 +213,7 @@ impl<P: LlmProvider> Agent<P> {
 
         let mut checkpoint_manager = CheckpointManager::new(task.id.clone());
         let mut messages = initial_messages;
+        let mut tool_cache = ToolCache::new();
 
         let system_prompt = self
             .config
@@ -181,6 +281,22 @@ impl<P: LlmProvider> Agent<P> {
 
                 for tool_use in tool_uses {
                     if let ContentBlock::ToolUse { id, name, input } = tool_use {
+                        // Check cache first for read-only tools
+                        if let Some((cached_content, cached_is_error)) = tool_cache.get(name, input)
+                        {
+                            debug!("Cache hit for tool {}", name);
+                            self.callback.on_tool_cache_hit(name, input);
+                            self.callback
+                                .on_tool_result(name, &cached_content, cached_is_error);
+
+                            tool_results.push(ContentBlock::ToolResult {
+                                tool_use_id: id.clone(),
+                                content: cached_content,
+                                is_error: cached_is_error,
+                            });
+                            continue;
+                        }
+
                         self.callback.on_tool_start(name, input);
 
                         // Check approval
@@ -205,6 +321,14 @@ impl<P: LlmProvider> Agent<P> {
                                 .clone()
                                 .unwrap_or_else(|| "Unknown error".to_string())
                         };
+
+                        // Store in cache (only for read-only tools)
+                        tool_cache.store(name, input, content.clone(), is_error);
+
+                        // Invalidate cache after mutating operations
+                        if ToolCache::is_mutating(name) {
+                            tool_cache.invalidate();
+                        }
 
                         self.callback.on_tool_result(name, &content, is_error);
 
@@ -240,7 +364,16 @@ impl<P: LlmProvider> Agent<P> {
         task.complete();
         self.callback.on_complete(task);
 
-        debug!("Agent completed task in {} iterations", iteration);
+        if tool_cache.hits() > 0 {
+            info!(
+                "Agent completed task in {} iterations ({} cache hits, {} cached entries)",
+                iteration,
+                tool_cache.hits(),
+                tool_cache.len()
+            );
+        } else {
+            debug!("Agent completed task in {} iterations", iteration);
+        }
         Ok(final_response)
     }
 

@@ -140,6 +140,11 @@ impl AgentCallback for CliCallback {
         }
     }
 
+    fn on_tool_cache_hit(&self, name: &str, input: &serde_json::Value) {
+        let (rune, desc) = format_tool_action(name, input);
+        println!("  {}  {} (cached)", rune, desc);
+    }
+
     fn on_checkpoint(&self, checkpoint: &Checkpoint) {
         if self.verbose {
             println!("  ᛉ  checkpoint {}", checkpoint.sequence);
