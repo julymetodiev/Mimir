@@ -79,6 +79,23 @@ impl<P: LlmProvider> Agent<P> {
 
         task.start();
 
+        // Build initial message
+        let initial_message = if let Some(context) = &task.context {
+            Message::user(format!("{}\n\nContext: {}", task.goal, context))
+        } else {
+            Message::user(&task.goal)
+        };
+
+        self.run_with_messages(task, vec![initial_message], 0).await
+    }
+
+    /// Internal method to run agent with given initial messages.
+    async fn run_with_messages(
+        &self,
+        task: &mut Task,
+        initial_messages: Vec<Message>,
+        start_iteration: u32,
+    ) -> AgentResult<String> {
         let working_dir = task
             .working_dir
             .clone()
@@ -89,11 +106,7 @@ impl<P: LlmProvider> Agent<P> {
         let executor = ToolExecutor::new(self.tool_registry.clone(), tool_context);
 
         let mut checkpoint_manager = CheckpointManager::new(task.id.clone());
-        let mut messages = vec![Message::user(&task.goal)];
-
-        if let Some(context) = &task.context {
-            messages[0] = Message::user(format!("{}\n\nContext: {}", task.goal, context));
-        }
+        let mut messages = initial_messages;
 
         let system_prompt = self
             .config
@@ -101,7 +114,7 @@ impl<P: LlmProvider> Agent<P> {
             .clone()
             .unwrap_or_else(|| DEFAULT_SYSTEM_PROMPT.to_string());
 
-        let mut iteration = 0;
+        let mut iteration = start_iteration;
         let mut final_response = String::new();
 
         loop {
@@ -220,33 +233,49 @@ impl<P: LlmProvider> Agent<P> {
         task: &mut Task,
         checkpoint: Checkpoint,
     ) -> AgentResult<String> {
-        info!("Resuming task {} from checkpoint {}", task.id, checkpoint.id);
+        info!(
+            "Resuming task {} from checkpoint {} (sequence {})",
+            task.id, checkpoint.id, checkpoint.sequence
+        );
+        self.callback.on_start(task);
+
+        task.start();
 
         // Restore messages from checkpoint
         let messages: Vec<Message> = checkpoint
             .messages
             .iter()
-            .map(|m| {
+            .filter_map(|m| {
                 let role = match m.role.as_str() {
                     "user" => Role::User,
                     "assistant" => Role::Assistant,
+                    "system" => return None, // System messages are handled separately
                     _ => Role::User,
                 };
-                Message {
-                    role,
-                    content: vec![ContentBlock::Text {
-                        text: m.content.as_str().unwrap_or("").to_string(),
-                    }],
-                }
+
+                // Try to restore full content structure
+                let content = if let Ok(blocks) = serde_json::from_value::<Vec<ContentBlock>>(m.content.clone()) {
+                    blocks
+                } else if let Some(text) = m.content.as_str() {
+                    vec![ContentBlock::Text { text: text.to_string() }]
+                } else {
+                    vec![ContentBlock::Text { text: m.content.to_string() }]
+                };
+
+                Some(Message { role, content })
             })
             .collect();
 
-        // Continue execution with restored state
-        task.start();
+        if messages.is_empty() {
+            // No messages to restore, start fresh
+            warn!("No messages in checkpoint, starting fresh");
+            return self.run(task).await;
+        }
 
-        // For now, just run normally from the goal
-        // TODO: Implement proper checkpoint restoration with full message history
-        self.run(task).await
+        info!("Restored {} messages from checkpoint", messages.len());
+
+        // Continue from where we left off
+        self.run_with_messages(task, messages, checkpoint.sequence).await
     }
 
     fn create_checkpoint(

@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 use mimir_agent::{Agent, AgentCallback, AgentConfig};
-use mimir_llm::{Completion, LlmProvider, Message, ZaiProvider};
+use mimir_llm::{Completion, Message, ZaiProvider};
 use mimir_tasks::{Checkpoint, FileTaskStore, Task, TaskStatus};
 use mimir_tools::ToolRegistry;
 use std::path::Path;

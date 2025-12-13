@@ -3,7 +3,7 @@
 //! Run with: ZAI_API_KEY=your-key cargo run -p mimir-agent --example test_agent
 
 use mimir_agent::{Agent, AgentCallback, AgentConfig};
-use mimir_llm::{Completion, ContentBlock, LlmProvider, Message, ZaiProvider};
+use mimir_llm::{Completion, LlmProvider, Message, ZaiProvider};
 use mimir_tasks::Task;
 use mimir_tools::ToolRegistry;
 use std::sync::Arc;

@@ -426,6 +426,7 @@ struct OpenAIChoice {
 
 #[derive(Debug, Deserialize)]
 struct OpenAIResponseMessage {
+    #[allow(dead_code)]
     role: String,
     content: Option<String>,
     tool_calls: Option<Vec<OpenAIToolCall>>,
@@ -436,6 +437,7 @@ struct OpenAIUsage {
     prompt_tokens: u32,
     completion_tokens: u32,
     #[serde(default)]
+    #[allow(dead_code)]
     total_tokens: u32,
 }
 
