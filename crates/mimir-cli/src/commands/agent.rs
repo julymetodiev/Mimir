@@ -83,7 +83,6 @@ impl CliCallback {
 
 impl AgentCallback for CliCallback {
     fn on_start(&self, task: &Task) {
-        println!("\n  ᛗ  Mímir awakens\n");
         println!("  {}  {}\n", "◈", task.goal);
     }
 
@@ -292,6 +291,10 @@ pub async fn run_agent(
         .with_max_tokens(8192)
         .with_auto_approve(true)
         .with_checkpoints(checkpoint);
+
+    // Show provider and model info
+    println!("\n  ᛗ  Mímir awakens");
+    println!("  ◇  {} / {}\n", provider_name, model);
 
     // Create agent with CLI callback
     let mut agent = Agent::new(provider, config, registry)
