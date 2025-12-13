@@ -105,6 +105,7 @@ pub async fn execute_status() -> Result<()> {
 }
 
 /// Trigger a manual sync via daemon.
+#[allow(dead_code)]
 pub async fn execute_sync_via_daemon() -> Result<()> {
     let root = find_project_root().context("Not in a Mimir project. Run 'mimir init' first.")?;
     let config = Config::new(&root);

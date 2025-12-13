@@ -45,6 +45,71 @@ Last sync: 2 minutes ago
 
 ---
 
+## Daemon Commands
+
+The daemon runs as a background process that keeps the graph in sync with file changes automatically.
+
+### Start Daemon
+
+```bash
+# Start in background
+$ mimir daemon start
+Daemon started (PID: 12345)
+
+# Start in foreground (for debugging)
+$ mimir daemon start --foreground
+Starting daemon in foreground mode...
+INFO Starting Mimir daemon for: /home/user/projects/my-project
+INFO Graph actor starting for root: /home/user/projects/my-project
+INFO File watcher started for: /home/user/projects/my-project
+INFO Performing initial sync...
+INFO Scanned 342 files in 45ms
+INFO Sync completed: 342 added, 0 updated, 0 removed in 120ms
+INFO Initial sync complete: 342 files, 1847 symbols
+INFO Daemon listening on: .agent/daemon.sock
+```
+
+### Check Daemon Status
+
+```bash
+$ mimir daemon status
+
+Daemon running (PID: 12345)
+Uptime: 2h 15m
+Socket: .agent/daemon.sock
+Files indexed: 342
+Symbols: 1847
+```
+
+### Stop Daemon
+
+```bash
+$ mimir daemon stop
+Daemon stopped
+```
+
+### Auto-Detection
+
+When the daemon is running, CLI commands automatically use it:
+
+```bash
+$ mimir trace -f src/main.rs -s process_data
+
+Trace for: process_data (function) (via daemon)
+  File: src/main.rs:42
+
+Callers (3):
+  ← handle_request (function)
+  ← batch_process (function)
+  ← test_process (function)
+
+Total: 4 symbols, max depth: 1
+```
+
+The `(via daemon)` indicator shows the query used the daemon's live graph.
+
+---
+
 ## Tracing Symbols
 
 ### Basic Trace
@@ -490,8 +555,10 @@ USAGE:
 COMMANDS:
     init        Initialize Mímir in current directory
     status      Show project status
+    daemon      Manage background daemon (start, stop, status)
     trace       Trace a symbol (show callers, callees, similar)
     search      Semantic code search
+    edit        Edit files with conflict detection
     task        Start a new task
     resume      Resume paused task
     recover     Recover from crash
@@ -507,4 +574,16 @@ OPTIONS:
     -q, --quiet      Quiet output
     --json           JSON output
     --version        Show version
+
+$ mimir daemon --help
+
+Manage background daemon
+
+USAGE:
+    mimir daemon <COMMAND>
+
+COMMANDS:
+    start       Start daemon (use --foreground for debug mode)
+    stop        Stop running daemon
+    status      Show daemon status
 ```

@@ -27,6 +27,7 @@ struct PersistedGraph {
 
 /// Sync result statistics.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SyncStats {
     /// Number of files processed.
     pub files_count: usize,

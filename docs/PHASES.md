@@ -270,7 +270,8 @@ Tasks:
 │   ├── GraphEvent enum (FileAdded, FileUpdated, FileRemoved, SyncStarted, SyncCompleted)
 │   ├── FindOptions, TraceOptions configuration
 │   ├── Response types (FindResponse, TraceResponse, StatsResponse, SyncResult)
-│   └── Typed channel wrappers (CommandSender, EventSender, etc.)
+│   ├── Typed channel wrappers (CommandSender, EventSender, etc.)
+│   └── IPC protocol (IpcCommand, IpcResponse) for daemon communication
 │
 ├── mimir-graph-actor ✅ (14 tests: 10 unit + 4 integration)
 │   ├── GraphActor (owns graph, registry, file tracking)
@@ -285,12 +286,19 @@ Tasks:
 │   ├── Clone is O(1), Send + Sync
 │   └── Tests: multiple clients
 │
-└── File watcher ✅
-    ├── notify + notify-debouncer-mini integration
-    ├── 100ms debouncing by default
-    ├── Configurable ignore patterns (target/, node_modules/, .git/)
-    ├── Language detection for watched files
-    └── Tests: configuration, ignore patterns
+├── File watcher ✅
+│   ├── notify + notify-debouncer-mini integration
+│   ├── 100ms debouncing by default
+│   ├── Configurable ignore patterns (target/, node_modules/, .git/)
+│   ├── Language detection for watched files
+│   └── Tests: configuration, ignore patterns
+│
+└── Daemon architecture ✅
+    ├── DaemonServer (runs GraphActor + FileWatcher)
+    ├── DaemonClient (Unix socket IPC)
+    ├── CLI commands: daemon start, stop, status
+    ├── Auto-detection: CLI uses daemon when available
+    └── Background mode with PID file management
 ```
 
 ### Part B: Sync & Edit ✅
@@ -332,26 +340,50 @@ Tasks:
 - ✅ Incremental sync (only changed files via content hash)
 - ✅ Safe concurrent access (actor pattern with channels)
 - ✅ Edit operations with conflict detection
+- ✅ Daemon mode with auto-sync (background process with Unix socket IPC)
 
 **Implemented Crates**:
-- `mimir-protocol` - GraphCommand, GraphEvent, Response types, typed channels
+- `mimir-protocol` - GraphCommand, GraphEvent, Response types, typed channels, IPC protocol
 - `mimir-graph-actor` - GraphActor, GraphHandle, FileWatcher with debouncing
 - `mimir-edit` - EditOp, EditError, Editor, Diff with optimistic locking
+- `mimir-cli` - Daemon server/client, daemon commands (start, stop, status)
 
 **Example Usage**:
 ```bash
-# Trigger sync via API
+# Start daemon (background process with file watcher)
+$ mimir daemon start
+Daemon started (PID: 12345)
+
+# Start daemon in foreground (for debugging)
+$ mimir daemon start --foreground
+Starting daemon in foreground mode...
+INFO Starting Mimir daemon for: /path/to/project
+INFO File watcher started
+INFO Daemon listening on: .agent/daemon.sock
+
+# Check daemon status
+$ mimir daemon status
+Daemon running (PID: 12345)
+Uptime: 2h 15m
+Files indexed: 342
+Symbols: 1847
+
+# Stop daemon
+$ mimir daemon stop
+Daemon stopped
+
+# Trace command auto-detects daemon
+$ mimir trace -f src/main.rs -s process_data
+Trace for: process_data (function) (via daemon)
+  File: src/main.rs:42
+...
+
+# Programmatic usage via GraphHandle
 let sync_result = handle.sync().await?;
 println!("Added: {}, Updated: {}, Removed: {}",
     sync_result.files_added,
     sync_result.files_updated,
     sync_result.files_removed);
-
-# Find symbols after sync
-let result = handle.find_symbol("process_data").await?;
-for sym in result.symbols {
-    println!("{}: {} at line {}", sym.name, sym.kind, sym.start_line);
-}
 
 # Preview a replace operation
 $ mimir edit -f src/main.rs -m replace -s 10 -e 20 -c "new_code" -p

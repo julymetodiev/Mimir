@@ -117,7 +117,8 @@ mimir/
 │   │       ├── command.rs          # GraphCommand (AddFile, RemoveFile, FindSymbol, Trace, Stats, Sync, Shutdown)
 │   │       ├── event.rs            # GraphEvent (FileAdded, FileUpdated, FileRemoved, SyncStarted, SyncCompleted)
 │   │       ├── response.rs         # FindResponse, TraceResponse, StatsResponse, SyncResult
-│   │       └── channel.rs          # Typed channels (CommandSender, EventSender, etc.)
+│   │       ├── channel.rs          # Typed channels (CommandSender, EventSender, etc.)
+│   │       └── ipc.rs              # IPC protocol (IpcCommand, IpcResponse) for daemon communication
 │   │
 │   │  ╔═══════════════════════════════════════════════════════════╗
 │   │  ║                    LAYER 1: STORAGE                       ║
@@ -311,9 +312,14 @@ mimir/
 │   ├── mimir-cli/                   # Command-line interface
 │   │   └── src/
 │   │       ├── main.rs
+│   │       ├── daemon/
+│   │       │   ├── mod.rs           # Daemon module
+│   │       │   ├── server.rs        # DaemonServer (GraphActor + FileWatcher)
+│   │       │   └── client.rs        # DaemonClient (Unix socket IPC)
 │   │       └── commands/
 │   │           ├── init.rs
-│   │           ├── trace.rs
+│   │           ├── trace.rs         # Auto-detects daemon
+│   │           ├── daemon.rs        # start, stop, status
 │   │           ├── search.rs
 │   │           ├── task.rs
 │   │           ├── status.rs
@@ -560,6 +566,8 @@ SYSTEM EVENTS
 
 ## Channel Topology
 
+### Without Daemon (Direct Mode)
+
 ```
                               COMMANDS (bounded mpsc)
     ┌──────────────────────────────────────────────────────────────────┐
@@ -595,6 +603,74 @@ SYSTEM EVENTS
     │  Embedding  │    │    Task     │    │    CLI      │
     │  Updater    │    │   Manager   │    │  Progress   │
     └─────────────┘    └─────────────┘    └─────────────┘
+```
+
+### With Daemon (Recommended)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           DAEMON PROCESS                                     │
+│                                                                             │
+│  ┌─────────────┐     ┌────────────────────────────────────────────────┐    │
+│  │ FileWatcher │     │              GraphActor                         │    │
+│  │  (notify)   │────►│  ┌────────────┐    ┌──────────┐                │    │
+│  └─────────────┘     │  │SymbolTable │    │ CodeGraph│                │    │
+│                      │  │  (DashMap) │    │(petgraph)│                │    │
+│                      │  └────────────┘    └──────────┘                │    │
+│                      └─────────────────────────▲───────────────────────┘    │
+│                                                │                             │
+│                                         Command Channel                      │
+│                                                │                             │
+│  ┌─────────────────────────────────────────────┴───────────────────────────┐│
+│  │                        Unix Socket Server                               ││
+│  │                     (.agent/daemon.sock)                                ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                              IPC Protocol
+                         (bincode serialized)
+                                    │
+           ┌────────────────────────┼────────────────────────┐
+           ▼                        ▼                        ▼
+    ┌─────────────┐          ┌─────────────┐          ┌─────────────┐
+    │ CLI Client  │          │ CLI Client  │          │ Agent       │
+    │ (mimir      │          │ (mimir      │          │ (future)    │
+    │  trace)     │          │  status)    │          │             │
+    └─────────────┘          └─────────────┘          └─────────────┘
+```
+
+### IPC Protocol (mimir-protocol/src/ipc.rs)
+
+```rust
+// Request types (CLI → Daemon)
+enum IpcCommand {
+    Ping,
+    AddFile { path, content, language },
+    RemoveFile { file_id },
+    FindSymbol { name, options },
+    Trace { symbol_id, options },
+    TraceByName { name, options },
+    Stats,
+    Sync,
+    Shutdown,
+}
+
+// Response types (Daemon → CLI)
+enum IpcResponse {
+    Ok(IpcData),
+    Error { message },
+}
+
+enum IpcData {
+    Pong,
+    FileAdded { file_id },
+    FileRemoved { removed },
+    FindResult(FindResponse),
+    TraceResult(TraceResponse),
+    Stats(StatsResponse),
+    SyncResult(SyncResult),
+    ShutdownAck,
+}
 ```
 
 ---

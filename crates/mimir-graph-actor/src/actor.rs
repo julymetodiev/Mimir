@@ -16,6 +16,7 @@ use std::time::Instant;
 use tracing::{debug, info, warn};
 
 /// Tracked file info.
+#[derive(Clone)]
 struct TrackedFile {
     file_id: FileId,
     content_hash: ContentHash,
@@ -132,6 +133,12 @@ impl GraphActor {
         events: &EventSender,
     ) -> Result<FileId, GraphError> {
         debug!("Adding file: {}", path.display());
+
+        // If file already exists, remove old version first (for updates)
+        if let Some(tracked) = self.files.get(&path).cloned() {
+            debug!("File already exists, removing old version: {:?}", tracked.file_id);
+            let _ = self.handle_remove_file(tracked.file_id, events);
+        }
 
         // Get adapter for this language
         let adapter = self.registry.get_by_language(language).ok_or_else(|| {

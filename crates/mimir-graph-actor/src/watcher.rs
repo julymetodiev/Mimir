@@ -285,7 +285,7 @@ impl FileWatcher {
                     if let Ok(Ok(file_id)) = reply_rx.await {
                         let mut ids = file_ids.write().await;
                         ids.insert(path.clone(), file_id);
-                        debug!("Added/updated file: {} -> {:?}", path.display(), file_id);
+                        info!("File changed: {}", path.display());
                     }
                 }
             }
@@ -304,7 +304,7 @@ impl FileWatcher {
                             reply: reply_tx,
                         })
                         .await;
-                    debug!("Removed file: {} -> {:?}", path.display(), file_id);
+                    info!("File removed: {}", path.display());
                 }
             }
 

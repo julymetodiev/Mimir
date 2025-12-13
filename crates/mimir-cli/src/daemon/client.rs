@@ -38,6 +38,7 @@ impl DaemonClient {
     }
 
     /// Check if daemon is running.
+    #[allow(dead_code)]
     pub fn is_daemon_running(agent_dir: &Path) -> bool {
         let socket = socket_path(agent_dir);
         if !socket.exists() {
@@ -82,6 +83,7 @@ impl DaemonClient {
     }
 
     /// Find symbols by name.
+    #[allow(dead_code)]
     pub async fn find_symbol(
         &mut self,
         name: &str,
@@ -133,6 +135,7 @@ impl DaemonClient {
     }
 
     /// Trigger a sync.
+    #[allow(dead_code)]
     pub async fn sync(&mut self) -> Result<mimir_protocol::SyncResult> {
         let response = self.send_command(IpcCommand::Sync).await?;
 

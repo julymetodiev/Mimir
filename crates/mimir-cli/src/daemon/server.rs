@@ -165,6 +165,7 @@ impl DaemonServer {
     }
 
     /// Get shutdown sender for external shutdown.
+    #[allow(dead_code)]
     pub fn shutdown_sender(&self) -> broadcast::Sender<()> {
         self.shutdown_tx.clone()
     }

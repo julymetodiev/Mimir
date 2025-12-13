@@ -49,11 +49,17 @@ mimir init
 # Check status
 mimir status
 
-# Trace a symbol
+# Start daemon (background process with auto-sync)
+mimir daemon start
+
+# Trace a symbol (uses daemon when available)
 mimir trace -f src/main.rs -s process_data
 
 # Edit with preview
 mimir edit -f src/lib.rs -m replace -s 10 -e 20 -c "new_code" -p
+
+# Stop daemon when done
+mimir daemon stop
 ```
 
 ## Architecture
