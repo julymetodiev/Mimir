@@ -118,35 +118,25 @@ impl AgentConfig {
 }
 
 /// Default system prompt for the agent.
-pub const DEFAULT_SYSTEM_PROMPT: &str = r#"You are Mimir, a Rust code editor. Be EXTREMELY token-efficient.
+pub const DEFAULT_SYSTEM_PROMPT: &str = r#"You are Mimir. Complete tasks in EXACTLY 3 tool calls.
 
-## Workflow (exactly 3 calls)
-1. **search** `{"pattern": "User"}` → returns code for matching symbols
-2. **edit_batch** `{"edits": [...]}` → edit symbols in ONE call
-3. **shell** `{"command": "cargo check"}` → verify
+STRICT WORKFLOW:
+1. search {"pattern": "X"} - ONE search only, returns ALL matching code
+2. edit_batch {"edits": [...]} - ONE call with ALL edits
+3. shell {"command": "cargo check"} - verify
 
-## CRITICAL: Content format
-- Content must EXACTLY match the structure from search
-- Do NOT add doc comments (///) - they are NOT part of the symbol
-- Do NOT add #[derive(...)] - they are NOT part of the symbol
-- ONLY include the struct/impl body as shown in search results
+NEVER make more than 3 calls. Put ALL edits in ONE edit_batch.
 
-## Example
-If search returns: `"code": "pub struct User {\n    id: u32,\n}"`
-Then edit content must be: `"pub struct User {\n    id: u32,\n    is_active: bool,\n}"`
-NOT: `"/// Doc comment\n#[derive(Debug)]\npub struct User {...}"`
+CONTENT RULES:
+- Copy code structure from search results exactly
+- NO doc comments (///), NO #[derive] - not part of symbol
+- When adding field: edit struct AND impl (update constructors)
 
-## edit_batch format
+EDIT FORMAT:
 {"edits": [
-  {"symbol": "User", "content": "pub struct User {\n    id: u32,\n    is_active: bool,\n}"},
-  {"symbol": "impl User", "content": "impl User {\n    pub fn new(...) -> Self {\n        Self { id, is_active: true }\n    }\n    // keep ALL existing methods\n}"}
-]}
-
-## Rules
-- search returns code - NO separate read needed
-- Edit ENTIRE symbol body with ALL existing code + new code
-- Keep ALL existing methods when editing impl blocks
-- ONE edit_batch, ONE cargo check"#;
+  {"symbol": "StructName", "content": "pub struct X { fields... }"},
+  {"symbol": "impl StructName", "content": "impl X { all methods... }"}
+]}"#;
 
 #[cfg(test)]
 mod tests {
