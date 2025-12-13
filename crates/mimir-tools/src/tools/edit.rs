@@ -53,8 +53,8 @@ impl Tool for EditTool {
             ))
             .with_param(ToolParameter::optional_bool(
                 "preview",
-                "If true, only shows what would change without applying. Always preview first!",
-                true,
+                "If true, only shows diff without applying. Set to false to apply changes.",
+                false,
             ))
     }
 
@@ -67,12 +67,24 @@ impl Tool for EditTool {
             Some(c) => c,
             None => return ToolResult::error("'content' parameter is required"),
         };
-        let preview = params["preview"].as_bool().unwrap_or(true);
+        let preview = params["preview"].as_bool().unwrap_or(false);
 
         if context.dry_run || preview {
             // Preview mode - just show what would happen
-            if symbol.is_some() {
-                return ToolResult::error("Symbol-based edit preview requires daemon integration (TODO)");
+            if let Some(sym) = symbol {
+                // Resolve symbol to location for preview
+                if let Some(client) = &context.graph_client {
+                    match client.search(sym, None, 1).await {
+                        Ok(result) if !result.symbols.is_empty() => {
+                            let s = &result.symbols[0];
+                            return self.preview_edit(&s.file, s.start_line, s.end_line, content, context);
+                        }
+                        Ok(_) => return ToolResult::error(format!("Symbol '{}' not found", sym)),
+                        Err(e) => return ToolResult::error(format!("Failed to resolve symbol: {}", e)),
+                    }
+                } else {
+                    return ToolResult::error("Symbol-based editing requires daemon connection");
+                }
             }
 
             if let Some(file_path) = file {
@@ -87,8 +99,20 @@ impl Tool for EditTool {
         }
 
         // Actual edit
-        if symbol.is_some() {
-            ToolResult::error("Symbol-based editing requires daemon integration (TODO)")
+        if let Some(sym) = symbol {
+            // Symbol-based editing: resolve symbol to file location via daemon
+            if let Some(client) = &context.graph_client {
+                match client.search(sym, None, 1).await {
+                    Ok(result) if !result.symbols.is_empty() => {
+                        let s = &result.symbols[0];
+                        self.apply_edit(&s.file, s.start_line, s.end_line, content, context)
+                    }
+                    Ok(_) => ToolResult::error(format!("Symbol '{}' not found", sym)),
+                    Err(e) => ToolResult::error(format!("Failed to resolve symbol: {}", e)),
+                }
+            } else {
+                ToolResult::error("Symbol-based editing requires daemon connection")
+            }
         } else if let Some(file_path) = file {
             let (start, end) = match (start_line, end_line) {
                 (Some(s), Some(e)) => (s, e),
