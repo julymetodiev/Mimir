@@ -39,4 +39,5 @@ TODO.md
 PROJECT.md
 GEMINI.md
 .mimir/
-test-project/
+# test-project/
+test-project/target

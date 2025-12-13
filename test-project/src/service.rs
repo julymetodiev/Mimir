@@ -9,7 +9,7 @@ pub struct UserService {
 impl UserService {
     /// Create a new user service.
     pub fn new() -> Self {
-        Self { 
+        Self {
             users: Vec::new(),
             next_id: 1,
         }
@@ -68,15 +68,12 @@ impl UserService {
         }
     }
 
-    /// UPDATE: Deactivate a user by id
-    pub fn deactivate_user(&mut self, id: u32) -> Result<(), String> {
-        if let Some(user) = self.find_by_id_mut(id) {
-            user.deactivate();
-            Ok(())
+    /// DELETE: Remove a user by email.
+    pub fn remove_by_email(&mut self, email: &str) -> bool {
+        if let Some(pos) = self.users.iter().position(|u| u.has_email(email)) {
+            self.users.remove(pos);
+            true
         } else {
-            Err(format!("User with id {} not found", id))
-        }
-    }
             false
         }
     }

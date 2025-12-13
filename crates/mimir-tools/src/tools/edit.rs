@@ -115,17 +115,15 @@ impl Tool for EditTool {
             }
             "replace" | _ => {
                 // Replace mode: need start_line, end_line defaults to start_line
+                // If no start_line given, auto-fallback to append mode
                 match start_line {
                     Some(s) => {
                         let e = end_line.unwrap_or(s);
                         (s, e)
                     }
                     None => {
-                        return ToolResult::error(format!(
-                            "'start_line' is required for replace mode. File '{}' has {} lines.\n\
-                             Hint: Use mode='append' to add to end, or specify start_line.",
-                            file_path, total_lines
-                        ));
+                        // Auto-fallback to append mode for convenience
+                        (total_lines + 1, total_lines)
                     }
                 }
             }
