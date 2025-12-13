@@ -7,7 +7,7 @@ use mimir_llm::{
 use mimir_tasks::{
     Checkpoint, CheckpointManager, ConversationMessage, Task,
 };
-use mimir_tools::{ToolContext, ToolRegistry};
+use mimir_tools::{GraphClient, ToolContext, ToolRegistry};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
@@ -53,6 +53,7 @@ pub struct Agent<P: LlmProvider> {
     config: AgentConfig,
     tool_registry: Arc<ToolRegistry>,
     callback: Arc<dyn AgentCallback>,
+    graph_client: Option<Arc<dyn GraphClient>>,
 }
 
 impl<P: LlmProvider> Agent<P> {
@@ -63,12 +64,19 @@ impl<P: LlmProvider> Agent<P> {
             config,
             tool_registry: Arc::new(tool_registry),
             callback: Arc::new(NoOpCallback),
+            graph_client: None,
         }
     }
 
     /// Set a callback for agent events.
     pub fn with_callback(mut self, callback: Arc<dyn AgentCallback>) -> Self {
         self.callback = callback;
+        self
+    }
+
+    /// Set the graph client for semantic operations.
+    pub fn with_graph_client(mut self, client: Arc<dyn GraphClient>) -> Self {
+        self.graph_client = Some(client);
         self
     }
 
@@ -102,7 +110,10 @@ impl<P: LlmProvider> Agent<P> {
             .or_else(|| self.config.working_dir.clone())
             .unwrap_or_else(|| ".".to_string());
 
-        let tool_context = ToolContext::new(&working_dir);
+        let mut tool_context = ToolContext::new(&working_dir);
+        if let Some(client) = &self.graph_client {
+            tool_context = tool_context.with_graph_client(client.clone());
+        }
         let executor = ToolExecutor::new(self.tool_registry.clone(), tool_context);
 
         let mut checkpoint_manager = CheckpointManager::new(task.id.clone());

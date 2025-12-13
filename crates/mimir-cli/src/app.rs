@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tokio::fs;
 
 /// The name of the Mimir data directory.
-pub const MIMIR_DIR: &str = ".agent";
+pub const MIMIR_DIR: &str = ".mimir";
 
 /// Sync configuration.
 #[derive(Debug, Clone)]
@@ -35,7 +35,7 @@ pub struct Config {
     /// Root directory of the project.
     pub root: PathBuf,
 
-    /// Path to the .agent directory.
+    /// Path to the .mimir directory.
     pub agent_dir: PathBuf,
 
     /// Path to the objects directory.
@@ -84,7 +84,7 @@ impl Config {
     pub async fn create_directories(&self) -> Result<()> {
         fs::create_dir_all(&self.agent_dir)
             .await
-            .context("Failed to create .agent directory")?;
+            .context("Failed to create .mimir directory")?;
         fs::create_dir_all(&self.objects_dir)
             .await
             .context("Failed to create objects directory")?;
@@ -156,13 +156,13 @@ impl Default for App {
     }
 }
 
-/// Find the project root by looking for .agent or .git directories.
+/// Find the project root by looking for .mimir or .git directories.
 pub fn find_project_root() -> Option<PathBuf> {
     let current = std::env::current_dir().ok()?;
     let mut path = current.as_path();
 
     loop {
-        // Check for .agent directory
+        // Check for .mimir directory
         if path.join(MIMIR_DIR).exists() {
             return Some(path.to_path_buf());
         }

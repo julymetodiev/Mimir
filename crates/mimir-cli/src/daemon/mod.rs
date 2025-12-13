@@ -33,7 +33,9 @@
 //! ```
 
 mod client;
+mod graph_client;
 mod server;
 
 pub use client::{check_daemon_running, DaemonClient};
+pub use graph_client::DaemonGraphClient;
 pub use server::DaemonServer;

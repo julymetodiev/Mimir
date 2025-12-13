@@ -54,17 +54,47 @@ impl Tool for SearchTool {
             ))
     }
 
-    async fn execute(&self, params: Value, _context: &ToolContext) -> ToolResult {
+    async fn execute(&self, params: Value, context: &ToolContext) -> ToolResult {
         let pattern = match params["pattern"].as_str() {
             Some(p) => p,
             None => return ToolResult::error("'pattern' parameter is required"),
         };
 
-        let _kind = params["kind"].as_str();
-        let _limit = params["limit"].as_u64().unwrap_or(20) as usize;
+        let kind = params["kind"].as_str();
+        let limit = params["limit"].as_u64().unwrap_or(20) as usize;
 
-        // TODO: Integrate with daemon client for actual search
-        // For now, return a placeholder
+        // Use graph client if available
+        if let Some(client) = &context.graph_client {
+            match client.search(pattern, kind, limit).await {
+                Ok(result) => {
+                    let matches: Vec<SearchMatch> = result
+                        .symbols
+                        .into_iter()
+                        .map(|s| SearchMatch {
+                            name: s.name,
+                            qualified_name: s.qualified_name,
+                            kind: s.kind,
+                            file: s.file,
+                            start_line: s.start_line,
+                            end_line: s.end_line,
+                        })
+                        .collect();
+
+                    let output = SearchOutput {
+                        pattern: pattern.to_string(),
+                        matches,
+                        total_count: result.total,
+                        truncated: result.total > limit,
+                    };
+                    return ToolResult::success(output);
+                }
+                Err(e) => {
+                    return ToolResult::error(format!("Search failed: {}", e));
+                }
+            }
+        }
+
+        // Fallback: no graph client, return empty results with hint
         let output = SearchOutput {
             pattern: pattern.to_string(),
             matches: vec![],

@@ -12,6 +12,8 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use crate::daemon::{check_daemon_running, DaemonGraphClient};
+
 /// Spinner animation frames (Nordic runes - mystical rotation)
 const SPINNER_FRAMES: &[&str] = &["ᚠ", "ᚢ", "ᚦ", "ᚨ", "ᚱ", "ᚲ", "ᚷ", "ᚹ", "ᚺ", "ᚾ", "ᛁ", "ᛃ", "ᛇ", "ᛈ", "ᛉ", "ᛊ"];
 
@@ -240,14 +242,34 @@ pub async fn run_agent(
         .with_checkpoints(checkpoint);
 
     // Create agent with CLI callback
-    let agent = Agent::new(provider, config, registry)
+    let mut agent = Agent::new(provider, config, registry)
         .with_callback(Arc::new(CliCallback::new(verbose)));
+
+    // Try to connect to daemon for semantic operations
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let agent_dir = cwd.join(".mimir");
+
+    if check_daemon_running(&agent_dir) {
+        match DaemonGraphClient::connect(&agent_dir, cwd.clone()).await {
+            Ok(client) => {
+                if verbose {
+                    println!("  ᛗ  connected to daemon\n");
+                }
+                agent = agent.with_graph_client(Arc::new(client));
+            }
+            Err(e) => {
+                if verbose {
+                    eprintln!("  ᚦ  daemon connection failed: {}", e);
+                }
+            }
+        }
+    } else if verbose {
+        println!("  ᛗ  daemon not running (semantic tools disabled)\n");
+    }
 
     // Create task
     let mut task = Task::new(goal);
-    if let Ok(cwd) = std::env::current_dir() {
-        task = task.with_working_dir(cwd.to_string_lossy().to_string());
-    }
+    task = task.with_working_dir(cwd.to_string_lossy().to_string());
 
     // Run the agent
     match agent.run(&mut task).await {
@@ -344,8 +366,18 @@ pub async fn resume_task(
         .with_checkpoints(true);
 
     // Create agent with CLI callback
-    let agent = Agent::new(provider, config, registry)
+    let mut agent = Agent::new(provider, config, registry)
         .with_callback(Arc::new(CliCallback::new(verbose)));
+
+    // Try to connect to daemon for semantic operations
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let agent_dir = cwd.join(".mimir");
+
+    if check_daemon_running(&agent_dir) {
+        if let Ok(client) = DaemonGraphClient::connect(&agent_dir, cwd).await {
+            agent = agent.with_graph_client(Arc::new(client));
+        }
+    }
 
     // Resume or run
     let result = if let Some(cp) = checkpoint {

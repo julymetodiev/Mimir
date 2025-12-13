@@ -3,10 +3,12 @@
 //! This crate provides the core abstraction for tools that the agent can use,
 //! including the Tool trait, ToolRegistry, and built-in tool implementations.
 
+mod graph_client;
 mod registry;
 mod schema;
 mod tools;
 
+pub use graph_client::{GraphClient, GraphError, SearchResult, SymbolInfo, TraceResult};
 pub use registry::ToolRegistry;
 pub use schema::{JsonSchema, ToolParameter, ToolSchema};
 pub use tools::*;
@@ -57,28 +59,54 @@ impl ToolResult {
 }
 
 /// Context provided to tools during execution.
-#[derive(Debug, Clone)]
 pub struct ToolContext {
     /// Project root directory.
     pub project_root: std::path::PathBuf,
-    /// Agent directory (.agent/).
+    /// Mimir directory (.mimir/).
     pub agent_dir: std::path::PathBuf,
     /// Whether to run in dry-run mode.
     pub dry_run: bool,
     /// Additional context values.
     pub extra: HashMap<String, Value>,
+    /// Optional graph client for semantic operations.
+    pub graph_client: Option<Arc<dyn GraphClient>>,
+}
+
+impl std::fmt::Debug for ToolContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ToolContext")
+            .field("project_root", &self.project_root)
+            .field("agent_dir", &self.agent_dir)
+            .field("dry_run", &self.dry_run)
+            .field("extra", &self.extra)
+            .field("graph_client", &self.graph_client.is_some())
+            .finish()
+    }
+}
+
+impl Clone for ToolContext {
+    fn clone(&self) -> Self {
+        Self {
+            project_root: self.project_root.clone(),
+            agent_dir: self.agent_dir.clone(),
+            dry_run: self.dry_run,
+            extra: self.extra.clone(),
+            graph_client: self.graph_client.clone(),
+        }
+    }
 }
 
 impl ToolContext {
     /// Create a new tool context.
     pub fn new(project_root: impl Into<std::path::PathBuf>) -> Self {
         let root = project_root.into();
-        let agent_dir = root.join(".agent");
+        let agent_dir = root.join(".mimir");
         Self {
             project_root: root,
             agent_dir,
             dry_run: false,
             extra: HashMap::new(),
+            graph_client: None,
         }
     }
 
@@ -86,6 +114,17 @@ impl ToolContext {
     pub fn with_dry_run(mut self, dry_run: bool) -> Self {
         self.dry_run = dry_run;
         self
+    }
+
+    /// Set graph client for semantic operations.
+    pub fn with_graph_client(mut self, client: Arc<dyn GraphClient>) -> Self {
+        self.graph_client = Some(client);
+        self
+    }
+
+    /// Check if graph client is available.
+    pub fn has_graph(&self) -> bool {
+        self.graph_client.is_some()
     }
 }
 

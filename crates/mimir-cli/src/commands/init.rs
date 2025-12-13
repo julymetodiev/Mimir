@@ -30,7 +30,7 @@ pub async fn execute(force: bool) -> Result<()> {
     println!();
 
     // Step 1: Create directory structure
-    print_step(1, 5, "Creating .agent/ directory structure...");
+    print_step(1, 5, "Creating .mimir/ directory structure...");
     app.config.create_directories().await?;
     println!(" done");
 

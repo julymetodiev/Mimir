@@ -100,7 +100,7 @@ async fn main() -> anyhow::Result<()> {
         commands::Commands::Tasks { status } => {
             let task_dir = app::find_project_root()
                 .unwrap_or_else(|| std::env::current_dir().unwrap())
-                .join(".agent")
+                .join(".mimir")
                 .join("tasks");
             let status = status.and_then(|s| match s.as_str() {
                 "pending" => Some(mimir_tasks::TaskStatus::Pending),
@@ -116,7 +116,7 @@ async fn main() -> anyhow::Result<()> {
         commands::Commands::Resume { task_id, verbose } => {
             let task_dir = app::find_project_root()
                 .unwrap_or_else(|| std::env::current_dir().unwrap())
-                .join(".agent")
+                .join(".mimir")
                 .join("tasks");
             commands::agent::resume_task(&task_id, &task_dir, verbose).await?
         }
