@@ -45,37 +45,37 @@ Semantic Code Intelligence Engine - gives AI agents structured understanding of 
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  LAYER 7: APPLICATION                                                        │
-│  mimir-cli, mimir-tui                                                        │
-│  Entry points. Wires everything together.                                    │
+│  LAYER 7: APPLICATION                                                       │
+│  mimir-cli, mimir-tui                                                       │
+│  Entry points. Wires everything together.                                   │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  LAYER 6: AGENT                                                              │
-│  mimir-llm, mimir-tools, mimir-agent                                         │
-│  LLM orchestration, tool definitions, agent loop.                            │
+│  LAYER 6: AGENT                                                             │
+│  mimir-llm, mimir-tools, mimir-agent                                        │
+│  LLM orchestration, tool definitions, agent loop.                           │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  LAYER 5: EXECUTION                                                          │
-│  mimir-edit, mimir-tasks, mimir-context, mimir-executor                      │
-│  Task lifecycle, editing, recovery, LLM context management.                  │
+│  LAYER 5: EXECUTION                                                         │
+│  mimir-edit, mimir-tasks, mimir-context, mimir-executor                     │
+│  Task lifecycle, editing, recovery, LLM context management.                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  LAYER 4: GRAPH                                                              │
-│  mimir-graph, mimir-graph-actor                                              │
-│  Facade over indexes. Unified query interface. Coordinates sync.             │
+│  LAYER 4: GRAPH                                                             │
+│  mimir-graph, mimir-graph-actor                                             │
+│  Facade over indexes. Unified query interface. Coordinates sync.            │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  LAYER 3: INDEX                                                              │
-│  mimir-symbols, mimir-relations, mimir-files, mimir-embeddings               │
-│  Stateful. Lock-free reads, channel writes. Each exposes Handle.             │
+│  LAYER 3: INDEX                                                             │
+│  mimir-symbols, mimir-relations, mimir-files, mimir-embeddings              │
+│  Stateful. Lock-free reads, channel writes. Each exposes Handle.            │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  LAYER 2: PARSING                                                            │
-│  mimir-parse-core, mimir-parse-rust, mimir-parse-ts, mimir-parse-py, ...     │
-│  Stateless. parse(source) → tree + symbols. Fully parallelizable.            │
+│  LAYER 2: PARSING                                                           │
+│  mimir-parse-core, mimir-parse-rust, mimir-parse-ts, mimir-parse-py, ...    │
+│  Stateless. parse(source) → tree + symbols. Fully parallelizable.           │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  LAYER 1: STORAGE                                                            │
-│  mimir-content, mimir-cache, mimir-persist, mimir-snapshot                   │
-│  I/O operations. Lock-free where possible. No business logic.                │
+│  LAYER 1: STORAGE                                                           │
+│  mimir-content, mimir-cache, mimir-persist, mimir-snapshot                  │
+│  I/O operations. Lock-free where possible. No business logic.               │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  LAYER 0: PRIMITIVES                                                         │
-│  mimir-types, mimir-error, mimir-protocol                                    │
-│  Pure data types. No logic. No async. No channels.                           │
+│  LAYER 0: PRIMITIVES                                                        │
+│  mimir-types, mimir-error, mimir-protocol                                   │
+│  Pure data types. No logic. No async. No channels.                          │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -344,21 +344,21 @@ Used for: **Fine-grained, high-frequency lookups**
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  SYMBOL TABLE                                                    │
-│  DashMap<SymbolId, Arc<Symbol>>                                  │
-│                                                                  │
+│  SYMBOL TABLE                                                   │
+│  DashMap<SymbolId, Arc<Symbol>>                                 │
+│                                                                 │
 │  Read:  dashmap.get(&id) → директно, lock-free                  │
-│  Write: През канал → coordinator insert/remove                   │
-│                                                                  │
-│  Why: Sharded locks. Update на един символ не блокира друг.      │
+│  Write: През канал → coordinator insert/remove                  │
+│                                                                 │
+│  Why: Sharded locks. Update на един символ не блокира друг.     │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
-│  FILE INDEX                                                      │
-│  DashMap<PathBuf, FileEntry>                                     │
-│                                                                  │
+│  FILE INDEX                                                     │
+│  DashMap<PathBuf, FileEntry>                                    │
+│                                                                 │
 │  Read:  dashmap.get(&path) → директно                           │
-│  Write: През канал при file system events                        │
+│  Write: През канал при file system events                       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -368,23 +368,23 @@ Used for: **Complex structures requiring consistent traversal**
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  RELATIONSHIP GRAPH                                              │
-│  ArcSwap<petgraph::Graph>                                        │
-│                                                                  │
+│  RELATIONSHIP GRAPH                                             │
+│  ArcSwap<petgraph::Graph>                                       │
+│                                                                 │
 │  Read:  arc_swap.load() → получаваш Arc<Graph>, traverse free   │
-│  Write: Coordinator builds new graph, arc_swap.store()           │
-│                                                                  │
-│  Why: Graph traversal needs consistent snapshot.                 │
+│  Write: Coordinator builds new graph, arc_swap.store()          │
+│                                                                 │
+│  Why: Graph traversal needs consistent snapshot.                │
 │       Batch updates са по-ефективни от fine-grained.            │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
-│  EMBEDDING INDEX                                                 │
-│  ArcSwap<HnswIndex> + append-only buffer                         │
-│                                                                  │
+│  EMBEDDING INDEX                                                │
+│  ArcSwap<HnswIndex> + append-only buffer                        │
+│                                                                 │
 │  Read:  arc_swap.load() → search в snapshot                     │
-│  Write: Append to buffer → периодично rebuild + swap             │
-│                                                                  │
+│  Write: Append to buffer → периодично rebuild + swap            │
+│                                                                 │
 │  Why: HNSW не е лесно mutable. Batch rebuild е по-ефективен.    │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -393,12 +393,12 @@ Used for: **Complex structures requiring consistent traversal**
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  CONTENT STORE                                                   │
-│  Hash → file on disk (zstd compressed)                           │
-│                                                                  │
+│  CONTENT STORE                                                  │
+│  Hash → file on disk (zstd compressed)                          │
+│                                                                 │
 │  Read:  Директно от filesystem (+ memory cache)                 │
-│  Write: Атомарен write (write to tmp, rename)                    │
-│                                                                  │
+│  Write: Атомарен write (write to tmp, rename)                   │
+│                                                                 │
 │  Why: Content-addressed = идемпотентни writes.                  │
 │       Ако двама пишат същото - един успява, резултатът е същият.│
 └─────────────────────────────────────────────────────────────────┘
@@ -572,23 +572,23 @@ SYSTEM EVENTS
                               COMMANDS (bounded mpsc)
     ┌──────────────────────────────────────────────────────────────────┐
     │                                                                  │
-    │   ┌─────────┐      ┌─────────┐      ┌─────────┐                 │
-    │   │  CLI    │      │  Agent  │      │  Watcher│                 │
-    │   └────┬────┘      └────┬────┘      └────┬────┘                 │
+    │   ┌─────────┐      ┌─────────┐      ┌─────────┐                  │
+    │   │  CLI    │      │  Agent  │      │  Watcher│                  │
+    │   └────┬────┘      └────┬────┘      └────┬────┘                  │
     │        │                │                │                       │
     │        └────────────────┼────────────────┘                       │
     │                         │                                        │
     │                         ▼                                        │
-    │              ┌─────────────────────┐                            │
-    │              │   Command Channel   │  bounded, backpressure     │
-    │              └──────────┬──────────┘                            │
+    │              ┌─────────────────────┐                             │
+    │              │   Command Channel   │  bounded, backpressure      │
+    │              └──────────┬──────────┘                             │
     │                         │                                        │
     │                         ▼                                        │
-    │              ┌─────────────────────┐                            │
-    │              │    COORDINATOR      │                            │
-    │              │  Applies mutations  │                            │
-    │              │  Broadcasts events  │                            │
-    │              └──────────┬──────────┘                            │
+    │              ┌─────────────────────┐                             │
+    │              │    COORDINATOR      │                             │
+    │              │  Applies mutations  │                             │
+    │              │  Broadcasts events  │                             │
+    │              └──────────┬──────────┘                             │
     └─────────────────────────┼────────────────────────────────────────┘
                               │
                               │ EVENTS (broadcast)
@@ -609,18 +609,18 @@ SYSTEM EVENTS
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                           DAEMON PROCESS                                     │
+│                           DAEMON PROCESS                                    │
 │                                                                             │
-│  ┌─────────────┐     ┌────────────────────────────────────────────────┐    │
-│  │ FileWatcher │     │              GraphActor                         │    │
-│  │  (notify)   │────►│  ┌────────────┐    ┌──────────┐                │    │
-│  └─────────────┘     │  │SymbolTable │    │ CodeGraph│                │    │
-│                      │  │  (DashMap) │    │(petgraph)│                │    │
-│                      │  └────────────┘    └──────────┘                │    │
-│                      └─────────────────────────▲───────────────────────┘    │
-│                                                │                             │
-│                                         Command Channel                      │
-│                                                │                             │
+│  ┌─────────────┐     ┌────────────────────────────────────────────────┐     │
+│  │ FileWatcher │     │              GraphActor                        │     │
+│  │  (notify)   │────►│  ┌────────────┐    ┌──────────┐                │     │
+│  └─────────────┘     │  │SymbolTable │    │ CodeGraph│                │     │
+│                      │  │  (DashMap) │    │(petgraph)│                │     │
+│                      │  └────────────┘    └──────────┘                │     │
+│                      └─────────────────────────▲──────────────────────┘     │
+│                                                │                            │
+│                                         Command Channel                     │
+│                                                │                            │
 │  ┌─────────────────────────────────────────────┴───────────────────────────┐│
 │  │                        Unix Socket Server                               ││
 │  │                     (.agent/daemon.sock)                                ││
