@@ -7,11 +7,14 @@ mod message;
 mod provider;
 mod anthropic;
 mod zai;
+mod openai_compat;
+mod openrouter;
 
 pub use message::*;
 pub use provider::*;
 pub use anthropic::AnthropicProvider;
 pub use zai::ZaiProvider;
+pub use openrouter::OpenRouterProvider;
 
 use thiserror::Error;
 
