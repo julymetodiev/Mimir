@@ -3,10 +3,11 @@
 pub mod daemon;
 pub mod edit;
 pub mod init;
+pub mod read;
+pub mod search;
 pub mod status;
 pub mod sync;
 pub mod trace;
-pub mod search;
 
 use clap::Subcommand;
 use std::path::PathBuf;
@@ -154,5 +155,28 @@ pub enum Commands {
         /// Show source code snippet.
         #[arg(short, long)]
         code: bool,
+    },
+
+    /// Read source code by symbol name.
+    Read {
+        /// Symbol name to read.
+        #[arg(short, long)]
+        symbol: String,
+
+        /// Lines of context before the symbol.
+        #[arg(short = 'B', long, default_value = "0")]
+        before: usize,
+
+        /// Lines of context after the symbol.
+        #[arg(short = 'A', long, default_value = "0")]
+        after: usize,
+
+        /// Show line numbers.
+        #[arg(short, long, default_value = "true")]
+        numbers: bool,
+
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
     },
 }

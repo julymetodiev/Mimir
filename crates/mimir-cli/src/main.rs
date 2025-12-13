@@ -75,6 +75,13 @@ async fn main() -> anyhow::Result<()> {
             json,
             code,
         } => commands::search::execute(&pattern, kind.as_deref(), limit, json, code).await?,
+        commands::Commands::Read {
+            symbol,
+            before,
+            after,
+            numbers,
+            json,
+        } => commands::read::execute(&symbol, before, after, numbers, json).await?,
     }
 
     Ok(())
