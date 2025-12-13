@@ -92,17 +92,20 @@ pub enum Commands {
         #[arg(long)]
         symbol: Option<String>,
 
-        /// Edit mode: replace, insert, delete, lines.
+        /// Edit mode: replace, insert, delete, lines, symbol.
+        /// Use 'symbol' mode to replace entire symbol with new content.
         #[arg(short, long, default_value = "replace")]
         mode: String,
 
         /// Start position (byte offset for replace/insert/delete, line number for lines).
-        /// When --symbol is used, this is relative to the symbol's start line.
+        /// When --symbol is used with lines mode, this is relative to the symbol's start.
+        /// Not needed for 'symbol' mode.
         #[arg(short, long)]
-        start: u32,
+        start: Option<u32>,
 
         /// End position (byte offset for replace/delete, line number for lines).
-        /// When --symbol is used, this is relative to the symbol's start line.
+        /// When --symbol is used with lines mode, this is relative to the symbol's start.
+        /// Not needed for 'symbol' mode.
         #[arg(short, long)]
         end: Option<u32>,
 
@@ -122,6 +125,22 @@ pub enum Commands {
     /// Apply batch edits from JSON.
     EditBatch {
         /// JSON string containing edit operations.
+        #[arg(short, long)]
+        json: String,
+
+        /// Preview changes without applying.
+        #[arg(short, long)]
+        preview: bool,
+
+        /// Create backup files before editing.
+        #[arg(short, long)]
+        backup: bool,
+    },
+
+    /// Apply batch symbol edits from JSON.
+    /// JSON format: [{"symbol": "name", "content": "new code"}, ...]
+    EditSymbols {
+        /// JSON string containing symbol edit operations.
         #[arg(short, long)]
         json: String,
 

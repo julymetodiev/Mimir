@@ -217,6 +217,42 @@ $ mimir trace -s process_user --json | jq '.root'
 $ mimir trace -s main -d 5  # Trace up to 5 levels deep
 ```
 
+### Filter by Direction
+
+Show only callers (who calls this symbol):
+
+```bash
+$ mimir trace -s process_user --callers
+
+Trace for: process_user (Function)
+  Lines: 42-67
+
+Callers (3):
+  ← handle_request (Function)
+  ← batch_process (Function)
+    ← main (Function)
+  ← test_process (Function)
+
+Total: 4 symbols, max depth: 3
+```
+
+Show only callees (what this symbol calls):
+
+```bash
+$ mimir trace -s process_user --callees
+
+Trace for: process_user (Function)
+  Lines: 42-67
+
+Callees (3):
+  → validate_user (Function)
+  → save_to_db (Function)
+    → execute_query (Method)
+  → log_action (Function)
+
+Total: 4 symbols, max depth: 3
+```
+
 ---
 
 ## Editing Files
@@ -226,6 +262,7 @@ The `mimir edit` command provides precise file editing with conflict detection a
 ### Edit Modes
 
 - **lines**: Replace line ranges (most common, recommended)
+- **symbol**: Replace entire symbol with new content
 - **replace**: Replace byte ranges
 - **insert**: Insert at byte position
 - **delete**: Delete byte range
@@ -285,6 +322,56 @@ Delete a byte range:
 $ mimir edit -f src/lib.rs -m delete -s 100 -e 150
 ```
 
+### Symbol-Based Editing
+
+Edit code by symbol name instead of file path and line numbers:
+
+```bash
+# Edit a specific line within a symbol (relative line numbers)
+$ mimir edit --symbol process_user -m lines -s 2 -e 2 -c '    let validated = new_validate(&req)?;'
+
+Resolved symbol 'process_user' to src/handlers/user.rs:42-67
+Edited: src/handlers/user.rs
+  Lines: 1 modified (net: +0)
+  Graph synced: 1403 symbols
+```
+
+When using `--symbol`:
+- Line numbers are relative to the symbol's start (line 1 = first line of the function)
+- File path is resolved automatically
+- Works with all edit modes
+
+### Replace Entire Symbol
+
+Replace a complete function/struct with new code:
+
+```bash
+$ mimir edit --symbol validate_user -m symbol -c 'pub fn validate_user(user: &User) -> Result<()> {
+    // New improved validation
+    if user.name.is_empty() || user.email.is_empty() {
+        return Err(ValidationError::MissingFields);
+    }
+    Ok(())
+}' --preview
+
+Resolved symbol 'validate_user' to src/validation.rs:10-25
+Preview of changes to: src/validation.rs
+--- a/src/validation.rs
++++ b/src/validation.rs
+@@ -10,16 +10,7 @@
+-pub fn validate_user(user: &User) -> Result<()> {
+-    // Old validation logic
+-    ...
+-}
++pub fn validate_user(user: &User) -> Result<()> {
++    // New improved validation
++    if user.name.is_empty() || user.email.is_empty() {
++        return Err(ValidationError::MissingFields);
++    }
++    Ok(())
++}
+```
+
 ### Batch Edits
 
 Apply multiple edits from JSON:
@@ -300,55 +387,193 @@ Applied 2 edits:
   src/b.rs (+3 bytes, +0 lines)
 ```
 
-### Workflow: Trace + Edit
+### Batch Symbol Edits
 
-The recommended workflow is to use `trace` to find code, then `edit` to modify it:
+Edit multiple symbols at once:
 
 ```bash
-# 1. Find the function with trace
-$ mimir trace -s process_user --code
+$ mimir edit-symbols -j '[
+  {"symbol": "validate_user", "content": "pub fn validate_user(u: &User) -> Result<()> { Ok(()) }"},
+  {"symbol": "validate_email", "content": "pub fn validate_email(e: &str) -> bool { !e.is_empty() }"}
+]' --preview
 
-Trace for: process_user (Function)
-  Lines: 42-67
+  validate_user → src/validation.rs:10-25
+  validate_email → src/validation.rs:30-45
+
+Previewing 2 symbol edits:
+
+--- src/validation.rs ---
 ...
 ```
+
+### Workflow: Search → Read → Edit
+
+The recommended workflow using symbol-based commands:
+
+```bash
+# 1. Search for symbols
+$ mimir search -p "process.*user"
+
+Found 2 symbols matching 'process.*user':
+  1. process_user [function] - src/handlers/user.rs:42
+  2. process_user_batch [function] - src/handlers/batch.rs:89
+
+# 2. Read the symbol's code
+$ mimir read -s process_user
+
+process_user  [function]  src/handlers/user.rs:42-67
+
   42│ pub fn process_user(req: Request) -> Result<User> {
   43│     let old_value = compute();
-  ...
-```
+  44│     save_to_db(old_value).await?;
+  45│     Ok(user)
+  46│ }
 
-# 2. Edit by line number
-$ mimir edit -f src/handlers.rs -m lines -s 43 -e 43 -c '    let new_value = improved_compute();'
+# 3. Edit by symbol name (relative line 2 = absolute line 43)
+$ mimir edit --symbol process_user -m lines -s 2 -e 2 -c '    let new_value = improved_compute();'
 
-Edited: src/handlers.rs
+Resolved symbol 'process_user' to src/handlers/user.rs:42-67
+Edited: src/handlers/user.rs
   Lines: 1 modified (net: +0)
   Graph synced: 1403 symbols
 
-# 3. Verify the change
-$ mimir trace -s process_user --code
+# 4. Or replace entire symbol
+$ mimir edit --symbol process_user -m symbol -c 'pub fn process_user(req: Request) -> Result<User> {
+    let value = improved_compute();
+    save_to_db(value).await?;
+    Ok(user)
+}'
+
+# 5. Verify the change
+$ mimir read -s process_user
 ```
 
 ---
 
-## Semantic Search (Future)
+## Symbol Search
+
+Search for symbols by name pattern (supports regex):
 
 ```bash
-$ mimir search "validate email format"
+$ mimir search -p "handle.*file"
 
-1. validate_email     src/validation/email.rs:12    (0.94)
-2. check_email_format src/utils/email.rs:45        (0.87)
-3. is_valid_email     src/models/user.rs:89        (0.82)
+Found 3 symbols matching 'handle.*file':
+
+  1. handle_add_file (<GraphActor>::handle_add_file) [method] - crates/mimir-graph-actor/src/actor.rs:132
+  2. handle_remove_file (<GraphActor>::handle_remove_file) [method] - crates/mimir-graph-actor/src/actor.rs:245
+  3. handle_update_file (<GraphActor>::handle_update_file) [method] - crates/mimir-graph-actor/src/actor.rs:180
+
+Total: 3 matches
 ```
 
-```bash
-$ mimir search "handle authentication" --limit 10
+### Filter by Kind
 
- 1. handle_login         src/handlers/auth.rs:45      (0.96)
- 2. verify_token         src/middleware/auth.rs:23    (0.94)
- 3. authenticate_user    src/services/auth.rs:67      (0.92)
- 4. check_permissions    src/middleware/rbac.rs:34    (0.85)
- 5. validate_session     src/auth/session.rs:89       (0.83)
- ...
+```bash
+$ mimir search -p "User" -k struct
+
+Found 5 symbols matching 'User':
+
+  1. User [struct] - src/models/user.rs:12
+  2. UserRequest [struct] - src/api/requests.rs:45
+  3. UserResponse [struct] - src/api/responses.rs:23
+  ...
+```
+
+### Show Code Snippets
+
+```bash
+$ mimir search -p "validate" --code
+
+Found 2 symbols matching 'validate':
+
+  1. validate_user [function] - src/validation.rs:10
+     ```
+       10│ pub fn validate_user(user: &User) -> Result<()> {
+       11│     if user.name.is_empty() {
+       12│         return Err(ValidationError::EmptyName);
+       13│     }
+       14│     Ok(())
+       15│ }
+     ```
+  ...
+```
+
+### JSON Output
+
+```bash
+$ mimir search -p "handle" --json | jq '.symbols[0]'
+
+{
+  "id": 42,
+  "name": "handle_request",
+  "qualified_name": "handlers::api::handle_request",
+  "kind": "Function",
+  "file_path": "src/handlers/api.rs",
+  "start_line": 45,
+  "end_line": 89
+}
+```
+
+---
+
+## Reading Symbols
+
+Read source code by symbol name:
+
+```bash
+$ mimir read -s process_user
+
+process_user  [function]  src/handlers/user.rs:42-67
+
+  42│ pub async fn process_user(req: UserRequest) -> Result<User> {
+  43│     let validated = validate_user(&req)?;
+  44│     let user = save_to_db(validated).await?;
+  45│     log_action("user_processed", &user.id);
+  46│     Ok(user)
+  47│ }
+```
+
+### With Context Lines
+
+Show lines before (`-B`) and after (`-A`) the symbol:
+
+```bash
+$ mimir read -s process_user -B 3 -A 2
+
+process_user  [function]  src/handlers/user.rs:42-67
+
+·  39│ }
+·  40│
+·  41│ /// Process a user request.
+   42│ pub async fn process_user(req: UserRequest) -> Result<User> {
+   43│     let validated = validate_user(&req)?;
+   44│     let user = save_to_db(validated).await?;
+   45│     log_action("user_processed", &user.id);
+   46│     Ok(user)
+   47│ }
+·  48│
+·  49│ /// Delete a user.
+```
+
+Context lines are marked with `·` to distinguish them from the symbol's code.
+
+### JSON Output
+
+```bash
+$ mimir read -s process_user --json
+
+{
+  "symbol": "process_user",
+  "kind": "Function",
+  "file": "src/handlers/user.rs",
+  "start_line": 42,
+  "end_line": 67,
+  "content": "pub async fn process_user(...) -> Result<User> {\n    ...\n}",
+  "lines": [
+    {"number": 42, "content": "pub async fn process_user...", "is_symbol": true},
+    ...
+  ]
+}
 ```
 
 ---
@@ -697,37 +922,78 @@ USAGE:
     mimir <COMMAND>
 
 COMMANDS:
-    init        Initialize Mímir in current directory
-    status      Show project status
-    daemon      Manage background daemon (start, stop, status)
-    trace       Trace a symbol (show callers, callees, similar)
-    search      Semantic code search
-    edit        Edit files with conflict detection
-    task        Start a new task
-    resume      Resume paused task
-    recover     Recover from crash
-    rollback    Rollback to snapshot
-    sync        Sync with filesystem
-    watch       Watch for changes
-    config      Manage configuration
-    agent       Interactive agent mode
-    help        Show this help
+    init          Initialize Mímir in current directory
+    status        Show project status
+    daemon        Manage background daemon (start, stop, status)
+    sync          Sync with filesystem
+    search        Search for symbols by pattern
+    read          Read source code by symbol name
+    trace         Trace a symbol (show callers, callees)
+    edit          Edit files with conflict detection
+    edit-batch    Apply batch edits from JSON
+    edit-symbols  Apply batch symbol edits from JSON
+    help          Show this help
 
 OPTIONS:
     -v, --verbose    Verbose output
-    -q, --quiet      Quiet output
     --json           JSON output
     --version        Show version
 
-$ mimir daemon --help
+$ mimir search --help
 
-Manage background daemon
+Search for symbols by pattern
 
-USAGE:
-    mimir daemon <COMMAND>
+OPTIONS:
+    -p, --pattern <PATTERN>  Pattern to search for (supports regex)
+    -k, --kind <KIND>        Filter by symbol kind (function, struct, enum, etc.)
+    -l, --limit <LIMIT>      Maximum results to return [default: 20]
+        --json               Output as JSON
+    -c, --code               Show source code snippet
 
-COMMANDS:
-    start       Start daemon (use --foreground for debug mode)
-    stop        Stop running daemon
-    status      Show daemon status
+$ mimir read --help
+
+Read source code by symbol name
+
+OPTIONS:
+    -s, --symbol <SYMBOL>    Symbol name to read
+    -B, --before <LINES>     Lines of context before [default: 0]
+    -A, --after <LINES>      Lines of context after [default: 0]
+    -n, --numbers            Show line numbers [default: true]
+        --json               Output as JSON
+
+$ mimir trace --help
+
+Trace call chains for a symbol
+
+OPTIONS:
+    -s, --symbol <SYMBOL>    Symbol name to trace
+    -f, --file <FILE>        Source file (optional)
+    -d, --depth <DEPTH>      Maximum trace depth [default: 3]
+    -c, --code               Show source code snippet
+        --callers            Show only callers
+        --callees            Show only callees
+        --json               Output as JSON
+
+$ mimir edit --help
+
+Edit a file with conflict detection
+
+OPTIONS:
+    -f, --file <FILE>        File to edit (optional if --symbol provided)
+        --symbol <SYMBOL>    Symbol name to edit
+    -m, --mode <MODE>        Edit mode: replace, insert, delete, lines, symbol
+    -s, --start <POS>        Start position (relative to symbol if --symbol used)
+    -e, --end <POS>          End position
+    -c, --content <TEXT>     New content
+    -p, --preview            Preview changes without applying
+    -b, --backup             Create backup file
+
+$ mimir edit-symbols --help
+
+Apply batch symbol edits from JSON
+
+OPTIONS:
+    -j, --json <JSON>        JSON: [{"symbol": "name", "content": "code"}, ...]
+    -p, --preview            Preview changes without applying
+    -b, --backup             Create backup files
 ```
