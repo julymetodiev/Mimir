@@ -72,7 +72,7 @@ impl Tool for EditTool {
         let old_content = params["old_content"].as_str();
         let start_line = params["start_line"].as_u64().map(|n| n as u32);
         let end_line = params["end_line"].as_u64().map(|n| n as u32);
-        
+
         // Handle content extraction (handling array edge case)
         let content_value = &params["content"];
         let content_string: String;
@@ -80,7 +80,8 @@ impl Tool for EditTool {
             content_string = c.to_string();
             &content_string
         } else if let Some(arr) = content_value.as_array() {
-            content_string = arr.iter()
+            content_string = arr
+                .iter()
                 .filter_map(|v| v.as_str())
                 .collect::<Vec<_>>()
                 .join("\n");
@@ -97,19 +98,25 @@ impl Tool for EditTool {
 
         // 1. Symbol-based editing (Primary)
         if let Some(sym) = symbol {
-            return self.handle_symbol_edit(sym, content, preview, context).await;
+            return self
+                .handle_symbol_edit(sym, content, preview, context)
+                .await;
         }
 
         let file_path = match file {
             Some(f) => f,
-            None => return ToolResult::error(
-                "One of 'symbol', 'file' (with old_content), or 'file' (with start_line) is required."
-            ),
+            None => {
+                return ToolResult::error(
+                    "One of 'symbol', 'file' (with old_content), or 'file' (with start_line) is required.",
+                );
+            }
         };
 
         // 2. Text-based Search & Replace (Secondary - Robust)
         if let Some(old) = old_content {
-            return self.handle_text_replace(file_path, old, content, preview, context).await;
+            return self
+                .handle_text_replace(file_path, old, content, preview, context)
+                .await;
         }
 
         // 3. Line-based editing (Fallback - Brittle)
@@ -122,7 +129,9 @@ impl Tool for EditTool {
 
         let file_content = match fs::read_to_string(&path) {
             Ok(c) => c,
-            Err(e) => return ToolResult::error(format!("Failed to read file '{}': {}", file_path, e)),
+            Err(e) => {
+                return ToolResult::error(format!("Failed to read file '{}': {}", file_path, e));
+            }
         };
         let total_lines = file_content.lines().count() as u32;
 
@@ -136,13 +145,15 @@ impl Tool for EditTool {
                 match start_line {
                     Some(s) => (s, end_line.unwrap_or(s)),
                     None => {
-                        // If neither symbol, old_content, nor start_line is provided, assume append if mode is not explicit, 
+                        // If neither symbol, old_content, nor start_line is provided, assume append if mode is not explicit,
                         // or error out. But since default mode is "replace", we should error if no target specified.
-                         if mode == "append" {
-                             (total_lines + 1, total_lines)
-                         } else {
-                             return ToolResult::error("Missing 'start_line' for file replacement. Use 'append' mode, 'old_content', or 'symbol'.");
-                         }
+                        if mode == "append" {
+                            (total_lines + 1, total_lines)
+                        } else {
+                            return ToolResult::error(
+                                "Missing 'start_line' for file replacement. Use 'append' mode, 'old_content', or 'symbol'.",
+                            );
+                        }
                     }
                 }
             }
@@ -166,10 +177,12 @@ impl EditTool {
     ) -> ToolResult {
         let client = match &context.graph_client {
             Some(c) => c,
-            None => return ToolResult::error(
-                "Symbol-based editing requires daemon connection.\n\
-                 Use file/start_line/end_line instead, or start daemon with: mimir daemon start"
-            ),
+            None => {
+                return ToolResult::error(
+                    "Symbol-based editing requires daemon connection.\n\
+                 Use file/start_line/end_line instead, or start daemon with: mimir daemon start",
+                );
+            }
         };
 
         // Try exact match first, then fuzzy search. Increase limit to ensure we find it.
@@ -178,7 +191,9 @@ impl EditTool {
         match search_result {
             Ok(result) if !result.symbols.is_empty() => {
                 // Find best match (prefer exact name match)
-                let best_match = result.symbols.iter()
+                let best_match = result
+                    .symbols
+                    .iter()
                     .find(|s| s.name == symbol || s.name.ends_with(symbol));
 
                 match best_match {
@@ -189,21 +204,26 @@ impl EditTool {
                             self.apply_edit(&m.file, m.start_line, m.end_line, content, context)
                         }
                     }
-                    None => {
-                         ToolResult::error(format!(
-                            "Symbol '{}' not found exactly. Did you mean one of these? {:?}\n\
+                    None => ToolResult::error(format!(
+                        "Symbol '{}' not found exactly. Did you mean one of these? {:?}\n\
                              Please use the exact symbol name.",
-                            symbol,
-                            result.symbols.iter().map(|s| &s.name).take(5).collect::<Vec<_>>()
-                        ))
-                    }
+                        symbol,
+                        result
+                            .symbols
+                            .iter()
+                            .map(|s| &s.name)
+                            .take(5)
+                            .collect::<Vec<_>>()
+                    )),
                 }
             }
             Ok(result) => {
                 // Symbol not found - provide helpful suggestions
                 let suggestion = if result.total > 0 {
-                    format!("Did you mean one of these? {:?}",
-                        result.symbols.iter().map(|s| &s.name).collect::<Vec<_>>())
+                    format!(
+                        "Did you mean one of these? {:?}",
+                        result.symbols.iter().map(|s| &s.name).collect::<Vec<_>>()
+                    )
                 } else {
                     "Try using 'search' tool first to find the symbol.".to_string()
                 };
@@ -246,16 +266,16 @@ impl EditTool {
         let matches: Vec<_> = original.match_indices(old_content).collect();
 
         if matches.is_empty() {
-             // Try to be helpful: check if it matches ignoring whitespace
-             let clean_old = old_content.split_whitespace().collect::<Vec<_>>().join(" ");
-             let clean_orig = original.split_whitespace().collect::<Vec<_>>().join(" ");
-             
-             if clean_orig.contains(&clean_old) {
-                 return ToolResult::error(
-                     "Exact match not found, but similar content exists (whitespace differences). \n\
-                      Please read the file again and provide the EXACT content including indentation and newlines."
-                 );
-             }
+            // Try to be helpful: check if it matches ignoring whitespace
+            let clean_old = old_content.split_whitespace().collect::<Vec<_>>().join(" ");
+            let clean_orig = original.split_whitespace().collect::<Vec<_>>().join(" ");
+
+            if clean_orig.contains(&clean_old) {
+                return ToolResult::error(
+                    "Exact match not found, but similar content exists (whitespace differences). \n\
+                      Please read the file again and provide the EXACT content including indentation and newlines.",
+                );
+            }
 
             return ToolResult::error(format!(
                 "Content to replace not found in '{}'. Please make sure 'old_content' matches exactly.",
@@ -272,7 +292,7 @@ impl EditTool {
         }
 
         let (start_byte, _) = matches[0];
-        
+
         // Calculate line numbers for reporting
         let pre_match = &original[..start_byte];
         let start_line = pre_match.lines().count() as u32 + 1;
@@ -281,20 +301,23 @@ impl EditTool {
 
         if preview || context.dry_run {
             // Generate diff
-            let lines: Vec<&str> = original.lines().collect();
-             // Just reuse preview_edit logic if it maps to full lines, otherwise manual diff
-             // For simplicity, let's just show a unified diff of the replacement
-             let mut diff = String::new();
-             diff.push_str(&format!("--- {}\n", file_path));
-             diff.push_str(&format!("+++ {}\n", file_path));
-             diff.push_str(&format!("@@ -{},{} +{},? @@\n", start_line, old_lines_count, start_line));
-             
-             for line in old_content.lines() {
-                 diff.push_str(&format!("-{}\n", line));
-             }
-             for line in new_content.lines() {
-                 diff.push_str(&format!("+{}\n", line));
-             }
+            // let lines: Vec<&str> = original.lines().collect();
+            // Just reuse preview_edit logic if it maps to full lines, otherwise manual diff
+            // For simplicity, let's just show a unified diff of the replacement
+            let mut diff = String::new();
+            diff.push_str(&format!("--- {}\n", file_path));
+            diff.push_str(&format!("+++ {}\n", file_path));
+            diff.push_str(&format!(
+                "@@ -{},{} +{},? @@\n",
+                start_line, old_lines_count, start_line
+            ));
+
+            for line in old_content.lines() {
+                diff.push_str(&format!("-{}\n", line));
+            }
+            for line in new_content.lines() {
+                diff.push_str(&format!("+{}\n", line));
+            }
 
             return ToolResult::success(EditOutput {
                 file: file_path.to_string(),
@@ -364,7 +387,13 @@ impl EditTool {
         let mut diff = String::new();
         diff.push_str(&format!("--- {}\n", file_path));
         diff.push_str(&format!("+++ {}\n", file_path));
-        diff.push_str(&format!("@@ -{},{} +{},{} @@\n", start_line, old_lines.len(), start_line, new_lines.len()));
+        diff.push_str(&format!(
+            "@@ -{},{} +{},{} @@\n",
+            start_line,
+            old_lines.len(),
+            start_line,
+            new_lines.len()
+        ));
 
         for line in &old_lines {
             diff.push_str(&format!("-{}\n", line));
