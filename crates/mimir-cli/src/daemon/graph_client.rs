@@ -143,10 +143,11 @@ impl GraphClient for DaemonGraphClient {
     async fn find_symbol(&self, name: &str) -> Result<Option<SymbolInfo>, GraphError> {
         let mut client = self.client.lock().await;
 
+        // Use higher limit to find all matches, then pick best one
         let options = FindOptions {
             file_pattern: None,
             language: None,
-            limit: Some(1),
+            limit: Some(100),
             include_deps: false,
         };
 
@@ -155,7 +156,25 @@ impl GraphClient for DaemonGraphClient {
             .await
             .map_err(|e| GraphError::new(e.to_string()))?;
 
-        Ok(response.symbols.into_iter().next().map(|s| SymbolInfo {
+        // Priority: impl > struct > function > enum/trait > enum_variant
+        // This ensures we get the main definition, not a variant with the same name
+        let best = response
+            .symbols
+            .into_iter()
+            .filter(|s| s.name == name) // Exact match only
+            .max_by_key(|s| {
+                let kind = format!("{:?}", s.kind).to_lowercase();
+                match kind.as_str() {
+                    "impl" => 100,
+                    "struct" | "class" => 90,
+                    "function" => 80,
+                    "enum" | "trait" | "interface" => 70,
+                    "enumvariant" | "enum_variant" => 10,
+                    _ => 60,
+                }
+            });
+
+        Ok(best.map(|s| SymbolInfo {
             name: s.name,
             qualified_name: s.qualified_name.unwrap_or_default(),
             kind: format!("{:?}", s.kind),

@@ -25,9 +25,10 @@ impl ToolRegistry {
     /// Create a registry with all built-in tools.
     pub fn with_builtins() -> Self {
         let mut registry = Self::new();
-        // Only essential tools for optimal 3-step workflow:
-        // 1. search (with code) -> 2. edit_batch -> 3. shell (cargo check)
+        registry.register(crate::tools::ReadTool);
         registry.register(crate::tools::SearchTool);
+        registry.register(crate::tools::TraceTool);
+        registry.register(crate::tools::EditTool);
         registry.register(crate::tools::EditBatchTool);
         registry.register(crate::tools::ShellTool);
         registry

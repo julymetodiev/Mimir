@@ -23,7 +23,7 @@ pub struct ShellTool;
 
 /// Commands that are allowed to run.
 const ALLOWED_COMMANDS: &[&str] = &[
-    "ls", "pwd", "cat", "head", "tail", "wc", "grep", "find",
+    "ls", "pwd", "cat", "head", "tail", "wc", "grep", "find", "sed", "awk",
     "cargo", "rustc", "rustfmt", "clippy",
     "git", "gh",
     "npm", "node", "npx", "yarn", "pnpm",

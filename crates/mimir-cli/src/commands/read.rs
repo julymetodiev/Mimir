@@ -47,16 +47,35 @@ pub async fn execute(
         anyhow::bail!("Daemon not running. Start with 'mimir daemon start'.");
     }
 
-    // Find symbol via daemon
+    // Find symbol via daemon - get multiple results for priority selection
     let mut client = DaemonClient::connect(&config.agent_dir).await?;
-    let options = FindOptions::default();
+    let options = FindOptions {
+        limit: Some(100),
+        ..Default::default()
+    };
     let result = client.find_symbol(symbol_name, options).await?;
 
     if result.symbols.is_empty() {
         anyhow::bail!("Symbol '{}' not found", symbol_name);
     }
 
-    let sym = &result.symbols[0];
+    // Select best match with priority: impl > struct > function > enum_variant
+    let sym = result
+        .symbols
+        .iter()
+        .filter(|s| s.name == symbol_name) // Exact name match
+        .max_by_key(|s| {
+            let kind = format!("{:?}", s.kind).to_lowercase();
+            match kind.as_str() {
+                "impl" => 100,
+                "struct" | "class" => 90,
+                "function" => 80,
+                "enum" | "trait" | "interface" => 70,
+                "enumvariant" | "enum_variant" => 10,
+                _ => 60,
+            }
+        })
+        .ok_or_else(|| anyhow::anyhow!("Symbol '{}' not found with exact name match", symbol_name))?;
     if sym.file_path.as_os_str().is_empty() {
         anyhow::bail!("Symbol '{}' has no file path", symbol_name);
     }
