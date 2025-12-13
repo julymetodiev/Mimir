@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 use mimir_agent::{Agent, AgentCallback, AgentConfig};
-use mimir_llm::{Completion, Message, ZaiProvider};
+use mimir_llm::{Completion, LlmProvider, Message, OpenRouterProvider, ZaiProvider};
 use mimir_tasks::{Checkpoint, FileTaskStore, Task, TaskStatus};
 use mimir_tools::ToolRegistry;
 use std::io::{self, Write};
@@ -244,23 +244,49 @@ fn format_tool_action(name: &str, input: &serde_json::Value) -> (&'static str, S
     }
 }
 
+/// Create an LLM provider based on the provider name.
+fn create_provider(provider_name: &str) -> Result<Box<dyn LlmProvider>> {
+    match provider_name {
+        "zai" => {
+            let provider = ZaiProvider::from_env()
+                .context("ZAI_API_KEY environment variable not set")?;
+            Ok(Box::new(provider))
+        }
+        "openrouter" => {
+            let provider = OpenRouterProvider::from_env()
+                .context("OPENROUTER_API_KEY environment variable not set")?;
+            Ok(Box::new(provider))
+        }
+        _ => anyhow::bail!("Unknown provider: {}. Supported: zai, openrouter", provider_name),
+    }
+}
+
+/// Get default model for a provider.
+fn default_model_for_provider(provider_name: &str) -> &'static str {
+    match provider_name {
+        "zai" => "GLM-4.6",
+        "openrouter" => "qwen/qwen3-coder",
+        _ => "GLM-4.6",
+    }
+}
+
 /// Run an agent task.
 pub async fn run_agent(
     goal: &str,
+    provider_name: &str,
     model: Option<&str>,
     max_iterations: u32,
     verbose: bool,
     checkpoint: bool,
 ) -> Result<()> {
-    // Get API key from environment
-    let provider = ZaiProvider::from_env()
-        .context("ZAI_API_KEY environment variable not set")?;
+    // Create provider
+    let provider = create_provider(provider_name)?;
 
     // Create tool registry with built-in tools
     let registry = ToolRegistry::with_builtins();
 
     // Configure agent
-    let model = model.unwrap_or("GLM-4.6");
+    let model = model.unwrap_or_else(|| default_model_for_provider(provider_name));
     let config = AgentConfig::new(model)
         .with_max_iterations(max_iterations)
         .with_max_tokens(8192)

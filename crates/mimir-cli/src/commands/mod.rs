@@ -206,7 +206,11 @@ pub enum Commands {
         /// The goal or task for the agent to accomplish.
         goal: String,
 
-        /// Model to use (default: GLM-4.6).
+        /// LLM provider (zai, openrouter).
+        #[arg(short, long, default_value = "openrouter")]
+        provider: String,
+
+        /// Model to use (default depends on provider).
         #[arg(short, long)]
         model: Option<String>,
 

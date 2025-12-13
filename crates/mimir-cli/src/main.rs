@@ -99,12 +99,13 @@ async fn main() -> anyhow::Result<()> {
         } => commands::read::execute(&symbol, before, after, numbers, json).await?,
         commands::Commands::Agent {
             goal,
+            provider,
             model,
             max_iterations,
             verbose,
             checkpoint,
         } => {
-            commands::agent::run_agent(&goal, model.as_deref(), max_iterations, verbose, checkpoint)
+            commands::agent::run_agent(&goal, &provider, model.as_deref(), max_iterations, verbose, checkpoint)
                 .await?
         }
         commands::Commands::Tasks { status } => {

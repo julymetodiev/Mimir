@@ -4,9 +4,9 @@
 //! See https://openrouter.ai/docs for available models.
 
 use crate::{
-    openai_compat::{OpenAIMessage, OpenAIRequest, OpenAIResponse, OpenAITool, OpenAIFunction},
-    ChunkType, Completion, CompletionRequest, CompletionStream, LlmError,
-    LlmProvider, LlmResult, StreamChunk, ToolUseChunk,
+    ChunkType, Completion, CompletionRequest, CompletionStream, LlmError, LlmProvider, LlmResult,
+    StreamChunk, ToolUseChunk,
+    openai_compat::{OpenAIFunction, OpenAIMessage, OpenAIRequest, OpenAIResponse, OpenAITool},
 };
 use async_trait::async_trait;
 use futures::StreamExt;
@@ -92,7 +92,8 @@ impl OpenRouterProvider {
                         function: OpenAIFunction {
                             name: t.name.clone(),
                             description: Some(t.description.clone()),
-                            parameters: serde_json::to_value(&t.parameters).unwrap_or(Value::Object(Default::default())),
+                            parameters: serde_json::to_value(&t.parameters)
+                                .unwrap_or(Value::Object(Default::default())),
                         },
                     })
                     .collect(),
@@ -132,6 +133,7 @@ impl LlmProvider for OpenRouterProvider {
             "meta-llama/llama-3.1-405b-instruct",
             "mistralai/mistral-large",
             "deepseek/deepseek-chat",
+            "qwen/qwen3-coder",
         ]
     }
 
@@ -139,7 +141,7 @@ impl LlmProvider for OpenRouterProvider {
         self.config
             .default_model
             .as_deref()
-            .unwrap_or("anthropic/claude-3.5-sonnet")
+            .unwrap_or("qwen/qwen3-coder")
     }
 
     fn is_ready(&self) -> bool {
@@ -247,9 +249,7 @@ fn parse_sse_chunk(bytes: &[u8]) -> LlmResult<StreamChunk> {
                         if let Some(tool_calls) = delta["tool_calls"].as_array() {
                             if let Some(tool_call) = tool_calls.first() {
                                 let id = tool_call["id"].as_str().map(String::from);
-                                let name = tool_call["function"]["name"]
-                                    .as_str()
-                                    .map(String::from);
+                                let name = tool_call["function"]["name"].as_str().map(String::from);
                                 let args = tool_call["function"]["arguments"]
                                     .as_str()
                                     .map(String::from);
@@ -310,8 +310,8 @@ mod tests {
 
     #[test]
     fn test_custom_model() {
-        let provider = OpenRouterProvider::from_api_key("test-key")
-            .with_default_model("openai/gpt-4o");
+        let provider =
+            OpenRouterProvider::from_api_key("test-key").with_default_model("openai/gpt-4o");
         assert_eq!(provider.default_model(), "openai/gpt-4o");
     }
 
@@ -334,8 +334,8 @@ mod tests {
         let api_key = std::env::var("OPENROUTER_API_KEY")
             .expect("OPENROUTER_API_KEY must be set for this test");
 
-        let provider = OpenRouterProvider::from_api_key(api_key)
-            .with_default_model("qwen/qwen3-coder");
+        let provider =
+            OpenRouterProvider::from_api_key(api_key).with_default_model("qwen/qwen3-coder");
 
         let request = crate::CompletionRequest::new(
             "qwen/qwen3-coder",
@@ -366,8 +366,8 @@ mod tests {
         let api_key = std::env::var("OPENROUTER_API_KEY")
             .expect("OPENROUTER_API_KEY must be set for this test");
 
-        let provider = OpenRouterProvider::from_api_key(api_key)
-            .with_default_model("qwen/qwen3-coder");
+        let provider =
+            OpenRouterProvider::from_api_key(api_key).with_default_model("qwen/qwen3-coder");
 
         let request = crate::CompletionRequest::new(
             "qwen/qwen3-coder",
@@ -375,7 +375,10 @@ mod tests {
         )
         .with_max_tokens(100);
 
-        let mut stream = provider.stream(request).await.expect("Failed to start stream");
+        let mut stream = provider
+            .stream(request)
+            .await
+            .expect("Failed to start stream");
 
         let mut full_response = String::new();
         while let Some(chunk) = stream.next().await {

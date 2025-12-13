@@ -200,6 +200,34 @@ pub trait LlmProvider: Send + Sync {
 /// Type alias for a boxed provider.
 pub type BoxedProvider = Box<dyn LlmProvider>;
 
+/// Implementation of LlmProvider for Box<dyn LlmProvider> to allow dynamic dispatch.
+#[async_trait]
+impl LlmProvider for Box<dyn LlmProvider> {
+    fn name(&self) -> &str {
+        (**self).name()
+    }
+
+    fn models(&self) -> Vec<&str> {
+        (**self).models()
+    }
+
+    fn default_model(&self) -> &str {
+        (**self).default_model()
+    }
+
+    async fn complete(&self, request: CompletionRequest) -> LlmResult<Completion> {
+        (**self).complete(request).await
+    }
+
+    async fn stream(&self, request: CompletionRequest) -> LlmResult<CompletionStream> {
+        (**self).stream(request).await
+    }
+
+    fn is_ready(&self) -> bool {
+        (**self).is_ready()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
