@@ -139,6 +139,17 @@ impl StatsResponse {
     }
 }
 
+/// Response for search queries.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchResponse {
+    /// Matching symbols.
+    pub symbols: Vec<SymbolInfo>,
+    /// Total matches found.
+    pub total_count: usize,
+    /// Whether results were truncated.
+    pub truncated: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

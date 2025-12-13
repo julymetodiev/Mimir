@@ -7,8 +7,8 @@ use mimir_types::{FileId, Language, SymbolId};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-use crate::command::{FindOptions, SyncResult, TraceOptions};
-use crate::response::{FindResponse, StatsResponse, TraceResponse};
+use crate::command::{FindOptions, SearchOptions, SyncResult, TraceOptions};
+use crate::response::{FindResponse, SearchResponse, StatsResponse, TraceResponse};
 
 /// Request ID for correlating responses.
 pub type RequestId = u64;
@@ -64,7 +64,11 @@ pub enum IpcCommand {
     Stats,
 
     /// Trigger a sync operation.
+    /// Trigger a sync operation.
     Sync,
+
+    /// Search for symbols by pattern.
+    Search { options: SearchOptions },
 
     /// Request daemon shutdown.
     Shutdown,
@@ -139,7 +143,11 @@ pub enum IpcData {
     Stats(StatsResponse),
 
     /// Sync completed.
+    /// Sync completed.
     SyncResult(SyncResult),
+
+    /// Search results.
+    SearchResult(SearchResponse),
 
     /// Shutdown acknowledged.
     ShutdownAck,

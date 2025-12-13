@@ -3,7 +3,7 @@
 use mimir_error::GraphError;
 use mimir_protocol::{
     CommandSender, EventReceiver, EventSender, FindOptions, FindResponse, GraphCommand,
-    StatsResponse, SyncResult, TraceOptions, TraceResponse,
+    SearchOptions, SearchResponse, StatsResponse, SyncResult, TraceOptions, TraceResponse,
 };
 use mimir_types::{FileId, Language, SymbolId};
 use std::path::PathBuf;
@@ -159,6 +159,25 @@ impl GraphHandle {
         reply_rx.await.map_err(|_| GraphError::SymbolNotFound {
             name: "reply channel closed".to_string(),
         })?
+    }
+
+    /// Search for symbols by pattern.
+    pub async fn search(&self, options: SearchOptions) -> Result<SearchResponse, GraphError> {
+        let (reply_tx, reply_rx) = oneshot::channel();
+
+        self.commands
+            .send(GraphCommand::Search {
+                options,
+                reply: reply_tx,
+            })
+            .await
+            .map_err(|_| GraphError::SymbolNotFound {
+                name: "channel closed".to_string(),
+            })?;
+
+        reply_rx.await.map_err(|_| GraphError::SymbolNotFound {
+            name: "reply channel closed".to_string(),
+        })
     }
 
     /// Request shutdown.

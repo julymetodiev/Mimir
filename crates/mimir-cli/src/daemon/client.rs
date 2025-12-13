@@ -146,6 +146,20 @@ impl DaemonClient {
         }
     }
 
+    /// Search for symbols by pattern.
+    pub async fn search(
+        &mut self,
+        options: mimir_protocol::SearchOptions,
+    ) -> Result<mimir_protocol::SearchResponse> {
+        let response = self.send_command(IpcCommand::Search { options }).await?;
+
+        match response.result {
+            IpcResult::Ok(IpcData::SearchResult(r)) => Ok(r),
+            IpcResult::Ok(_) => anyhow::bail!("Unexpected response type"),
+            IpcResult::Err(e) => anyhow::bail!("{}", e),
+        }
+    }
+
     /// Request daemon shutdown.
     pub async fn shutdown(&mut self) -> Result<()> {
         let response = self.send_command(IpcCommand::Shutdown).await?;

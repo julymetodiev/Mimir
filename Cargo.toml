@@ -79,6 +79,9 @@ arc-swap = "1.7"
 # Graph
 petgraph = "0.6"
 
+# Regex
+regex = "1.10"
+
 # Parsing
 tree-sitter = "0.24"
 tree-sitter-rust = "0.23"

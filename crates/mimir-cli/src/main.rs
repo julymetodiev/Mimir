@@ -65,6 +65,13 @@ async fn main() -> anyhow::Result<()> {
             preview,
             backup,
         } => commands::edit::execute_batch(&json, preview, backup).await?,
+        commands::Commands::Search {
+            pattern,
+            kind,
+            limit,
+            json,
+            code,
+        } => commands::search::execute(&pattern, kind.as_deref(), limit, json, code).await?,
     }
 
     Ok(())

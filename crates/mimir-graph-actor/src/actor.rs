@@ -5,8 +5,8 @@ use mimir_files::{ScannedFile, Scanner};
 use mimir_graph::CodeGraph;
 use mimir_parse_core::AdapterRegistry;
 use mimir_protocol::{
-    CommandReceiver, EventSender, FindResponse, GraphCommand, GraphEvent, StatsResponse,
-    SymbolInfo, SyncResult, TraceNode, TraceRelation, TraceResponse,
+    CommandReceiver, EventSender, FindResponse, GraphCommand, GraphEvent, SearchOptions,
+    SearchResponse, StatsResponse, SymbolInfo, SyncResult, TraceNode, TraceRelation, TraceResponse,
 };
 use mimir_types::{ContentHash, FileId, IdGenerator, Language, Symbol, SymbolId, SymbolKind};
 use std::collections::HashMap;
@@ -116,6 +116,11 @@ impl GraphActor {
                 GraphCommand::Sync { reply } => {
                     let result = self.handle_sync(&events).await;
                     let _ = reply.send(result);
+                }
+
+                GraphCommand::Search { options, reply } => {
+                    let response = self.handle_search(&options);
+                    let _ = reply.send(response);
                 }
 
                 GraphCommand::Shutdown => {
@@ -455,6 +460,53 @@ impl GraphActor {
             references_count: self.graph.edge_count(),
             files_by_language: Vec::new(),
             symbols_by_kind: Vec::new(),
+        }
+    }
+
+    /// Handle searching for symbols by pattern.
+    fn handle_search(&self, options: &SearchOptions) -> SearchResponse {
+        use regex::Regex;
+
+        let pattern = match Regex::new(&options.pattern) {
+            Ok(p) => p,
+            Err(_) => {
+                return SearchResponse {
+                    symbols: Vec::new(),
+                    total_count: 0,
+                    truncated: false,
+                };
+            }
+        };
+
+        let limit = options.limit.unwrap_or(20) as usize;
+        let mut matches = Vec::new();
+
+        // Search all symbols in the graph
+        for symbol in self.graph.symbols().all_symbols() {
+            if pattern.is_match(&symbol.name) || pattern.is_match(&symbol.qualified_name.to_string()) {
+                // Apply kind filter if specified
+                if let Some(ref kind_filter) = options.kind_filter {
+                    let kind_str = format!("{:?}", symbol.kind).to_lowercase();
+                    if !kind_str.contains(&kind_filter.to_lowercase()) {
+                        continue;
+                    }
+                }
+
+                matches.push(self.symbol_to_info(&symbol));
+
+                if matches.len() >= limit {
+                    break;
+                }
+            }
+        }
+
+        let truncated = matches.len() >= limit;
+        let total_count = matches.len();
+
+        SearchResponse {
+            symbols: matches,
+            total_count,
+            truncated,
         }
     }
 

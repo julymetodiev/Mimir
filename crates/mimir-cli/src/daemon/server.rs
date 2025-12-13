@@ -299,6 +299,11 @@ async fn process_command(
             Err(e) => IpcResponse::err(id, e.to_string()),
         },
 
+        IpcCommand::Search { options } => match handle.search(options).await {
+            Ok(result) => IpcResponse::ok(id, IpcData::SearchResult(result)),
+            Err(e) => IpcResponse::err(id, e.to_string()),
+        },
+
         IpcCommand::Shutdown => {
             let _ = shutdown_tx.send(());
             IpcResponse::ok(id, IpcData::ShutdownAck)

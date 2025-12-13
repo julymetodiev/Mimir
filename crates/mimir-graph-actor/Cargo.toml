@@ -21,6 +21,7 @@ tokio = { workspace = true, features = ["sync", "rt", "time"] }
 tracing.workspace = true
 notify.workspace = true
 notify-debouncer-mini.workspace = true
+regex.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokio::sync::oneshot;
 
-use crate::response::{FindResponse, StatsResponse, TraceResponse};
+use crate::response::{FindResponse, SearchResponse, StatsResponse, TraceResponse};
 
 /// Commands that can be sent to the graph actor.
 #[derive(Debug)]
@@ -48,6 +48,12 @@ pub enum GraphCommand {
         reply: oneshot::Sender<Result<SyncResult, mimir_error::GraphError>>,
     },
 
+    /// Search for symbols by pattern.
+    Search {
+        options: SearchOptions,
+        reply: oneshot::Sender<SearchResponse>,
+    },
+
     /// Shutdown the actor.
     Shutdown,
 }
@@ -76,6 +82,17 @@ pub struct TraceOptions {
     pub callees_only: bool,
     /// Include cross-language references.
     pub cross_language: bool,
+}
+
+/// Options for searching symbols by pattern.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SearchOptions {
+    /// Regex pattern to match symbol names.
+    pub pattern: String,
+    /// Filter by symbol kind.
+    pub kind_filter: Option<String>,
+    /// Maximum results to return.
+    pub limit: Option<u32>,
 }
 
 /// Result of a sync operation.

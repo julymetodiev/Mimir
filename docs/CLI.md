@@ -115,78 +115,222 @@ The `(via daemon)` indicator shows the query used the daemon's live graph.
 ### Basic Trace
 
 ```bash
-$ mimir trace process_user
+$ mimir trace -s process_user
 
-┌─────────────────────────────────────────────────────────────┐
-│ process_user                                                │
-│ src/handlers/user.rs:42                                     │
-│                                                             │
-│ pub async fn process_user(req: UserRequest) -> Result<User> │
-├─────────────────────────────────────────────────────────────┤
-│ Called by:                                                  │
-│   • handle_request     src/api.rs:89                        │
-│   • batch_process      src/jobs/batch.rs:156                │
-│                                                             │
-│ Calls:                                                      │
-│   • validate_user      src/validation.rs:23                 │
-│   • save_to_db         src/db/users.rs:67                   │
-├─────────────────────────────────────────────────────────────┤
-│ Similar functions:                                          │
-│   • process_admin (0.89)  src/handlers/admin.rs:34          │
-│   • update_user (0.84)    src/handlers/user.rs:98           │
-└─────────────────────────────────────────────────────────────┘
+Trace for: process_user (Function)
+  Lines: 42-67
+
+Callers (2):
+  ← handle_request (Function)
+  ← batch_process (Function)
+
+Callees (3):
+  → validate_user (Function)
+  → save_to_db (Function)
+  → log_action (Function)
+
+Total: 6 symbols, max depth: 3
 ```
 
-### Cross-Language Trace
+### Trace with Source Code (`--code`)
+
+The `--code` flag shows the source code of the traced symbol:
 
 ```bash
-$ mimir trace handle_login --cross-language
+$ mimir trace -s handle_add_file --code
 
-┌─────────────────────────────────────────────────────────────┐
-│ handle_login                                                │
-│ src/handlers/auth.rs:45                                     │
-│ Language: Rust                                              │
-├─────────────────────────────────────────────────────────────┤
-│ HTTP Endpoint: POST /api/auth/login                         │
-│                                                             │
-│ Called from frontend:                                       │
-│   • loginUser()        web/src/api/auth.ts:23               │
-│     fetch('/api/auth/login', { method: 'POST', ... })       │
-│                                                             │
-│   • AuthForm.submit()  web/src/components/AuthForm.tsx:67   │
-│     calls loginUser()                                       │
-├─────────────────────────────────────────────────────────────┤
-│ Backend calls:                                              │
-│   • verify_password    src/auth/password.rs:12              │
-│   • create_session     src/auth/session.rs:45               │
-│   • generate_jwt       src/auth/jwt.rs:78                   │
-└─────────────────────────────────────────────────────────────┘
+Trace for: handle_add_file (Method)
+  Lines: 132-233
+  (via daemon)
+
+```
+ 132│     fn handle_add_file(
+ 133│         &mut self,
+ 134│         path: PathBuf,
+ 135│         content: String,
+ 136│         language: Language,
+ 137│         events: &EventSender,
+ 138│     ) -> Result<FileId, GraphError> {
+ 139│         debug!("Adding file: {}", path.display());
+ 140│         // ... rest of the function
+ 233│     }
+```
+
+Callers (1):
+  ← run (Method)
+
+Callees (25):
+  → add_symbol (Method)
+  → extract_symbols (Method)
+  → parse (Method)
+  ...
+
+Total: 27 symbols, max depth: 3
+```
+
+### Single File Trace
+
+Trace a symbol from a specific file without using the project graph:
+
+```bash
+$ mimir trace -f src/handlers/user.rs -s process_user --code
+
+Trace for: process_user (Function)
+  File: src/handlers/user.rs:42-67
+
+```
+  42│ pub async fn process_user(req: UserRequest) -> Result<User> {
+  43│     let validated = validate_user(&req)?;
+  44│     let user = save_to_db(validated).await?;
+  45│     Ok(user)
+  46│ }
+```
+
+Callees (2):
+  → validate_user (Function)
+  → save_to_db (Function)
+
+Total: 3 symbols, max depth: 3
 ```
 
 ### JSON Output
 
 ```bash
-$ mimir trace process_user --json | jq '.callers'
+$ mimir trace -s process_user --json | jq '.root'
 
-[
-  {
-    "name": "handle_request",
-    "file": "src/api.rs",
-    "line": 89,
-    "context": "let user = process_user(req).await?;"
-  },
-  {
-    "name": "batch_process",
-    "file": "src/jobs/batch.rs",
-    "line": 156,
-    "context": "users.push(process_user(item).await?);"
-  }
-]
+{
+  "id": 42,
+  "name": "process_user",
+  "qualified_name": "handlers::user::process_user",
+  "kind": "function",
+  "file_id": 5,
+  "file_path": "src/handlers/user.rs",
+  "start_line": 42,
+  "end_line": 67,
+  "language": "rust"
+}
+```
+
+### Custom Depth
+
+```bash
+$ mimir trace -s main -d 5  # Trace up to 5 levels deep
 ```
 
 ---
 
-## Semantic Search
+## Editing Files
+
+The `mimir edit` command provides precise file editing with conflict detection and automatic graph sync.
+
+### Edit Modes
+
+- **lines**: Replace line ranges (most common, recommended)
+- **replace**: Replace byte ranges
+- **insert**: Insert at byte position
+- **delete**: Delete byte range
+
+### Line-Based Editing (Recommended)
+
+Edit by line numbers - the most reliable approach:
+
+```bash
+# Preview changes first
+$ mimir edit -f src/lib.rs -m lines -s 42 -e 42 -c '    let result = compute_value();' --preview
+
+Preview of changes to: /path/to/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -42,1 +42,1 @@
+-    let result = old_function();
++    let result = compute_value();
+
+# Apply the edit
+$ mimir edit -f src/lib.rs -m lines -s 42 -e 42 -c '    let result = compute_value();'
+
+Edited: /path/to/src/lib.rs
+  Bytes: a1b2c3d4 → e5f6g7h8 (+5)
+  Lines: 1 modified (net: +0)
+  Graph synced: 1403 symbols
+```
+
+### Multi-Line Replacement
+
+Replace multiple lines at once:
+
+```bash
+$ mimir edit -f src/config.rs -m lines -s 10 -e 15 -c 'const MAX_CONNECTIONS: u32 = 100;
+const TIMEOUT_MS: u32 = 5000;
+const RETRY_COUNT: u32 = 3;'
+
+Edited: /path/to/src/config.rs
+  Bytes: ... → ... (-42)
+  Lines: 3 modified (net: -3)
+  Graph synced: 1403 symbols
+```
+
+### Insert New Content
+
+Insert at a specific byte position:
+
+```bash
+$ mimir edit -f src/lib.rs -m insert -s 256 -c '// New comment\n'
+```
+
+### Delete Content
+
+Delete a byte range:
+
+```bash
+$ mimir edit -f src/lib.rs -m delete -s 100 -e 150
+```
+
+### Batch Edits
+
+Apply multiple edits from JSON:
+
+```bash
+$ mimir edit-batch -j '[
+  {"file_path": "src/a.rs", "kind": {"ReplaceLines": {"start_line": 10, "end_line": 12, "new_content": "new code"}}},
+  {"file_path": "src/b.rs", "kind": {"ReplaceLines": {"start_line": 5, "end_line": 5, "new_content": "updated line"}}}
+]'
+
+Applied 2 edits:
+  src/a.rs (+10 bytes, -2 lines)
+  src/b.rs (+3 bytes, +0 lines)
+```
+
+### Workflow: Trace + Edit
+
+The recommended workflow is to use `trace` to find code, then `edit` to modify it:
+
+```bash
+# 1. Find the function with trace
+$ mimir trace -s process_user --code
+
+Trace for: process_user (Function)
+  Lines: 42-67
+...
+```
+  42│ pub fn process_user(req: Request) -> Result<User> {
+  43│     let old_value = compute();
+  ...
+```
+
+# 2. Edit by line number
+$ mimir edit -f src/handlers.rs -m lines -s 43 -e 43 -c '    let new_value = improved_compute();'
+
+Edited: src/handlers.rs
+  Lines: 1 modified (net: +0)
+  Graph synced: 1403 symbols
+
+# 3. Verify the change
+$ mimir trace -s process_user --code
+```
+
+---
+
+## Semantic Search (Future)
 
 ```bash
 $ mimir search "validate email format"

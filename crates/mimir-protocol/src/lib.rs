@@ -62,11 +62,11 @@ pub use channel::{
     DEFAULT_COMMAND_BUFFER, DEFAULT_EVENT_CAPACITY,
 };
 
-pub use command::{FindOptions, GraphCommand, SyncResult, TraceOptions};
+pub use command::{FindOptions, GraphCommand, SearchOptions, SyncResult, TraceOptions};
 
 pub use event::{FileEvent, GraphEvent};
 
-pub use response::{FindResponse, StatsResponse, SymbolInfo, TraceNode, TraceRelation, TraceResponse};
+pub use response::{FindResponse, SearchResponse, StatsResponse, SymbolInfo, TraceNode, TraceRelation, TraceResponse};
 
 pub use ipc::{
     DaemonStatus, IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult, RequestId,

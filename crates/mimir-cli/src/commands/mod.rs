@@ -6,6 +6,7 @@ pub mod init;
 pub mod status;
 pub mod sync;
 pub mod trace;
+pub mod search;
 
 use clap::Subcommand;
 use std::path::PathBuf;
@@ -114,5 +115,28 @@ pub enum Commands {
         /// Create backup files before editing.
         #[arg(short, long)]
         backup: bool,
+    },
+
+    /// Search for symbols by pattern.
+    Search {
+        /// Pattern to search for (supports regex).
+        #[arg(short, long)]
+        pattern: String,
+
+        /// Filter by symbol kind (function, struct, enum, etc.).
+        #[arg(short, long)]
+        kind: Option<String>,
+
+        /// Maximum results to return.
+        #[arg(short, long, default_value = "20")]
+        limit: usize,
+
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+
+        /// Show source code snippet.
+        #[arg(short, long)]
+        code: bool,
     },
 }
