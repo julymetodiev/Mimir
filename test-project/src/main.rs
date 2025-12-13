@@ -9,10 +9,18 @@ fn main() {
 
     // CREATE: Create users
     println!("=== Creating users ===");
-    let user1 = service.create_user("Alice", "alice@example.com");
-    let user2 = service.create_user("Bob", "bob@example.com");
-    println!("Created user: {} (ID: {})", user1.name(), user1.id());
-    println!("Created user: {} (ID: {})", user2.name(), user2.id());
+    let user1_id = {
+        let user = service.create_user("Alice", "alice@example.com");
+        println!("Created user: {} (ID: {})", user.name(), user.id());
+        user.id()
+    };
+    
+    let user2_id = {
+        let user = service.create_user("Bob", "bob@example.com");
+        println!("Created user: {} (ID: {})", user.name(), user.id());
+        user.id()
+    };
+    
     println!("Total users: {}", service.count());
     println!();
 
@@ -22,7 +30,7 @@ fn main() {
         println!("Found user by email: {} ({})", found.name(), found.email());
     }
     
-    if let Some(found) = service.find_by_id(2) {
+    if let Some(found) = service.find_by_id(user2_id) {
         println!("Found user by ID: {} ({})", found.name(), found.email());
     }
     
@@ -37,34 +45,37 @@ fn main() {
     let update_data = UserUpdate {
         name: Some("Alice Smith".to_string()),
         email: None, // Keep original email
+        role: None, // Keep original role
     };
     
-    match service.update_user(1, update_data) {
-        Ok(_) => println!("User 1 updated successfully"),
+    match service.update_user(user1_id, update_data) {
+        Ok(_) => println!("User {} updated successfully", user1_id),
         Err(e) => println!("Update failed: {}", e),
     }
     
     // Verify update
-    if let Some(updated) = service.find_by_id(1) {
+    if let Some(updated) = service.find_by_id(user1_id) {
         println!("Updated user: {} ({})", updated.name(), updated.email());
     }
-
     // Update with new email
     let email_update = UserUpdate {
         name: None,
         email: Some("alice.smith@newdomain.com".to_string()),
+        role: None,
     };
-    
-    service.update_user(1, email_update);
-    if let Some(updated) = service.find_by_id(1) {
+
+    service.update_user(user1_id, email_update).unwrap_or_else(|e| {
+        println!("Failed to update email: {}", e);
+    });
+    if let Some(updated) = service.find_by_id(user1_id) {
         println!("Updated email: {} ({})", updated.name(), updated.email());
     }
     println!();
 
     // DELETE: Remove users
     println!("=== Deleting users ===");
-    let removed = service.remove_by_id(1);
-    println!("Removed user ID 1: {}", removed);
+    let removed = service.remove_by_id(user1_id);
+    println!("Removed user ID {}: {}", user1_id, removed);
     
     let removed = service.remove_by_email("bob@example.com");
     println!("Removed user with email bob@example.com: {}", removed);

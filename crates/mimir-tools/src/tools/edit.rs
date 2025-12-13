@@ -33,7 +33,7 @@ impl Tool for EditTool {
         ToolSchema::new(self.name(), self.description())
             .with_param(ToolParameter::optional_string(
                 "symbol",
-                "Symbol name to edit. If provided, replaces the entire symbol with new content.",
+                "Symbol name to edit (e.g., 'UserService', 'impl User'). Replaces the entire symbol.",
             ))
             .with_param(ToolParameter::optional_string(
                 "file",
@@ -41,19 +41,23 @@ impl Tool for EditTool {
             ))
             .with_param(ToolParameter::optional_integer(
                 "start_line",
-                "Start line number (1-based). Required for line-based editing.",
+                "Start line (1-based). If omitted with 'append' mode, appends to end of file.",
             ))
             .with_param(ToolParameter::optional_integer(
                 "end_line",
-                "End line number (1-based, inclusive). Required for line-based editing.",
+                "End line (1-based, inclusive). If omitted, defaults to start_line (single line edit).",
             ))
             .with_param(ToolParameter::required_string(
                 "content",
-                "New content to replace the specified lines or symbol.",
+                "New content to insert/replace.",
+            ))
+            .with_param(ToolParameter::optional_string(
+                "mode",
+                "Edit mode: 'replace' (default), 'append' (add to end), 'insert' (insert before start_line).",
             ))
             .with_param(ToolParameter::optional_bool(
                 "preview",
-                "If true, only shows diff without applying. Set to false to apply changes.",
+                "If true, only shows diff without applying.",
                 false,
             ))
     }
@@ -67,74 +71,129 @@ impl Tool for EditTool {
             Some(c) => c,
             None => return ToolResult::error("'content' parameter is required"),
         };
+        let mode = params["mode"].as_str().unwrap_or("replace");
         let preview = params["preview"].as_bool().unwrap_or(false);
 
-        if context.dry_run || preview {
-            // Preview mode - just show what would happen
-            if let Some(sym) = symbol {
-                // Resolve symbol to location for preview
-                if let Some(client) = &context.graph_client {
-                    match client.search(sym, None, 1).await {
-                        Ok(result) if !result.symbols.is_empty() => {
-                            let s = &result.symbols[0];
-                            return self.preview_edit(&s.file, s.start_line, s.end_line, content, context);
-                        }
-                        Ok(_) => return ToolResult::error(format!("Symbol '{}' not found", sym)),
-                        Err(e) => return ToolResult::error(format!("Failed to resolve symbol: {}", e)),
-                    }
-                } else {
-                    return ToolResult::error("Symbol-based editing requires daemon connection");
-                }
-            }
-
-            if let Some(file_path) = file {
-                let (start, end) = match (start_line, end_line) {
-                    (Some(s), Some(e)) => (s, e),
-                    _ => return ToolResult::error("'start_line' and 'end_line' required for file editing"),
-                };
-                return self.preview_edit(file_path, start, end, content, context);
-            }
-
-            return ToolResult::error("Either 'symbol' or 'file' must be provided");
+        // Handle symbol-based editing first
+        if let Some(sym) = symbol {
+            return self.handle_symbol_edit(sym, content, preview, context).await;
         }
 
-        // Actual edit
-        if let Some(sym) = symbol {
-            // Symbol-based editing: resolve symbol to file location via daemon
-            if let Some(client) = &context.graph_client {
-                match client.search(sym, None, 1).await {
-                    Ok(result) if !result.symbols.is_empty() => {
-                        let s = &result.symbols[0];
-                        self.apply_edit(&s.file, s.start_line, s.end_line, content, context)
-                    }
-                    Ok(_) => ToolResult::error(format!(
-                        "Symbol '{}' not found. Try using file/start_line/end_line instead, or search for the symbol first.",
-                        sym
-                    )),
-                    Err(e) => ToolResult::error(format!(
-                        "Failed to resolve symbol: {}. Try using file/start_line/end_line parameters.",
-                        e
-                    )),
-                }
-            } else {
-                // Fallback: if no daemon, suggest line-based editing
-                ToolResult::error(
-                    "Symbol-based editing requires daemon. Use file/start_line/end_line parameters instead."
-                )
-            }
-        } else if let Some(file_path) = file {
-            let (start, end) = match (start_line, end_line) {
-                (Some(s), Some(e)) => (s, e),
-                _ => return ToolResult::error("'start_line' and 'end_line' required for file editing"),
-            };
-            self.apply_edit(file_path, start, end, content, context)
+        // File-based editing
+        let file_path = match file {
+            Some(f) => f,
+            None => return ToolResult::error(
+                "Either 'symbol' or 'file' must be provided. Examples:\n\
+                 - symbol: 'UserService' (edits entire struct/impl)\n\
+                 - file: 'src/user.rs' with start_line/end_line"
+            ),
+        };
+
+        // Resolve file path and get file info
+        let path = if std::path::Path::new(file_path).is_absolute() {
+            std::path::PathBuf::from(file_path)
         } else {
-            ToolResult::error("Either 'symbol' or 'file' must be provided")
+            context.project_root.join(file_path)
+        };
+
+        let file_content = match fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) => return ToolResult::error(format!("Failed to read file '{}': {}", file_path, e)),
+        };
+        let total_lines = file_content.lines().count() as u32;
+
+        // Determine start and end lines based on mode
+        let (start, end) = match mode {
+            "append" => {
+                // Append mode: add to end of file
+                (total_lines + 1, total_lines)
+            }
+            "insert" => {
+                // Insert mode: insert before start_line
+                let line = start_line.unwrap_or(1);
+                (line, line.saturating_sub(1))
+            }
+            "replace" | _ => {
+                // Replace mode: need start_line, end_line defaults to start_line
+                match start_line {
+                    Some(s) => {
+                        let e = end_line.unwrap_or(s);
+                        (s, e)
+                    }
+                    None => {
+                        return ToolResult::error(format!(
+                            "'start_line' is required for replace mode. File '{}' has {} lines.\n\
+                             Hint: Use mode='append' to add to end, or specify start_line.",
+                            file_path, total_lines
+                        ));
+                    }
+                }
+            }
+        };
+
+        if context.dry_run || preview {
+            self.preview_edit(file_path, start, end, content, context)
+        } else {
+            self.apply_edit(file_path, start, end, content, context)
         }
     }
 }
 
 impl EditTool {
+    async fn handle_symbol_edit(
+        &self,
+        symbol: &str,
+        content: &str,
+        preview: bool,
+        context: &ToolContext,
+    ) -> ToolResult {
+        let client = match &context.graph_client {
+            Some(c) => c,
+            None => return ToolResult::error(
+                "Symbol-based editing requires daemon connection.\n\
+                 Use file/start_line/end_line instead, or start daemon with: mimir daemon start"
+            ),
+        };
+
+        // Try exact match first, then fuzzy search
+        let search_result = client.search(symbol, None, 5).await;
+
+        match search_result {
+            Ok(result) if !result.symbols.is_empty() => {
+                // Find best match (prefer exact name match)
+                let best_match = result.symbols.iter()
+                    .find(|s| s.name == symbol || s.name.ends_with(symbol))
+                    .unwrap_or(&result.symbols[0]);
+
+                if preview || context.dry_run {
+                    self.preview_edit(&best_match.file, best_match.start_line, best_match.end_line, content, context)
+                } else {
+                    self.apply_edit(&best_match.file, best_match.start_line, best_match.end_line, content, context)
+                }
+            }
+            Ok(result) => {
+                // Symbol not found - provide helpful suggestions
+                let suggestion = if result.total > 0 {
+                    format!("Did you mean one of these? {:?}",
+                        result.symbols.iter().map(|s| &s.name).collect::<Vec<_>>())
+                } else {
+                    "Try using 'search' tool first to find the symbol.".to_string()
+                };
+
+                ToolResult::error(format!(
+                    "Symbol '{}' not found. {}\n\
+                     Alternative: Use file/start_line/end_line parameters.",
+                    symbol, suggestion
+                ))
+            }
+            Err(e) => ToolResult::error(format!(
+                "Failed to search for symbol '{}': {}\n\
+                 Try using file/start_line/end_line parameters instead.",
+                symbol, e
+            )),
+        }
+    }
+
     fn preview_edit(
         &self,
         file_path: &str,

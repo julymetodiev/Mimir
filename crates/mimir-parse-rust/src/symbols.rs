@@ -266,10 +266,12 @@ fn extract_impl(node: &Node, source: &[u8], parent: Option<&str>) -> Option<Extr
         .and_then(|n| n.utf8_text(source).ok())
         .map(|s| s.to_string());
 
+    // Use "impl Type" format for easier searching
+    // For trait impls: "impl Trait for Type"
     let impl_name = if let Some(trait_ref) = &trait_name {
-        format!("<{} as {}>", name, trait_ref)
+        format!("impl {} for {}", trait_ref, name)
     } else {
-        format!("<{}>", name)
+        format!("impl {}", name)
     };
 
     let mut sym = ExtractedSymbol::new(

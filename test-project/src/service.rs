@@ -17,7 +17,7 @@ impl UserService {
 
     /// CREATE: Create a new user with auto-generated ID
     pub fn create_user(&mut self, name: &str, email: &str) -> &User {
-        let user = User::new(self.next_id, name, email);
+        let user = User::new_with_default_role(self.next_id, name, email);
         self.users.push(user);
         self.next_id += 1;
         self.users.last().unwrap()
@@ -51,6 +51,11 @@ impl UserService {
     /// READ: Count users.
     pub fn count(&self) -> usize {
         self.users.len()
+    }
+
+    /// READ: Get all emails from all users.
+    pub fn get_all_emails(&self) -> Vec<String> {
+        self.users.iter().map(|user| user.email().to_string()).collect()
     }
 
     /// UPDATE: Update a user by id with partial data
