@@ -94,9 +94,29 @@ impl ShellTool {
     fn validate_command(&self, command: &str) -> Result<(), String> {
         let trimmed = command.trim();
 
-        // Check for blocked patterns
+        // Extract only the command part (before any heredoc markers)
+        // This prevents blocking commands like `cat << 'EOF'\nuser data\nEOF`
+        // where "user" contains "su" but is just data, not a command
+        let command_part = if let Some(heredoc_pos) = trimmed.find("<<") {
+            &trimmed[..heredoc_pos]
+        } else {
+            trimmed
+        };
+
+        // Check for blocked patterns only in the actual command, not heredoc content
+        // Use word boundary checks to avoid false positives (e.g., "user" containing "su")
         for blocked in BLOCKED_COMMANDS {
-            if trimmed.contains(blocked) {
+            // Check if blocked command appears as a word (not part of another word)
+            let patterns = [
+                format!("{} ", blocked),      // "su " at start/middle
+                format!(" {}", blocked),      // " su" at end
+                format!(" {} ", blocked),     // " su " in middle
+            ];
+
+            // Also check if command starts with blocked command
+            if command_part.starts_with(&format!("{} ", blocked))
+                || command_part == *blocked
+                || patterns.iter().any(|p| command_part.contains(p)) {
                 return Err(format!("Command contains blocked pattern: {}", blocked));
             }
         }
@@ -187,7 +207,22 @@ mod tests {
     fn test_validate_blocked_command() {
         let tool = ShellTool;
         assert!(tool.validate_command("sudo rm -rf /").is_err());
+        assert!(tool.validate_command("su root").is_err());
         assert!(tool.validate_command("dangerous_command").is_err());
+    }
+
+    #[test]
+    fn test_heredoc_with_user_content() {
+        let tool = ShellTool;
+        // "user" contains "su" but it's in heredoc content, not the command
+        let cmd = r#"cat > src/main.rs << 'EOF'
+mod user;
+use user::User;
+EOF"#;
+        assert!(tool.validate_command(cmd).is_ok(), "heredoc content should not trigger blocked pattern");
+
+        // But actual su command should still be blocked
+        assert!(tool.validate_command("su -").is_err());
     }
 
     #[tokio::test]
