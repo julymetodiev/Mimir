@@ -179,7 +179,21 @@ Step 4: If cargo check passes, STOP. Task complete.
 3. Content must NOT have /// comments or #[derive]
 4. NEVER modify main.rs
 5. After cargo check succeeds → STOP immediately
-6. To add new types (enum, struct): include them in the content when editing an existing impl block"#;
+6. To add new types (enum, struct): include them in the content when editing an existing impl block
+
+# How to Remove Code
+
+To remove a method from an impl block:
+1. Search for the impl block: {"pattern": "impl User"}
+2. Copy the ENTIRE impl block content from search results
+3. Remove the unwanted methods from the content
+4. Use edit_batch with the modified content (without the removed methods)
+
+To remove an enum/struct: You cannot delete symbols directly. Instead, remove all references to it from other symbols, and it will become unused.
+
+Example - remove method "foo" from impl User:
+Original impl User has: new(), foo(), bar()
+New content should have: new(), bar() (without foo)"#;
 
 #[cfg(test)]
 mod tests {
