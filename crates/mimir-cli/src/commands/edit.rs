@@ -111,7 +111,11 @@ pub async fn execute(
             result.new_hash.to_hex()[..8].to_string(),
             result.bytes_changed
         );
-        println!("  Lines changed: {:+}", result.lines_changed);
+        println!(
+            "  Lines: {} modified (net: {:+})",
+            result.lines_modified,
+            result.lines_changed
+        );
 
         // Auto-sync after edit if enabled (default: true)
         if config.sync.sync_on_edit {

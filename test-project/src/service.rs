@@ -42,6 +42,7 @@ impl UserService {
     }
 
     /// Clear all users.
+    /// New line....
     pub fn clear_all(&mut self) {
         self.users.clear();
     }

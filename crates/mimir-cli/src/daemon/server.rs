@@ -1,12 +1,12 @@
 //! Daemon server - runs GraphActor + FileWatcher and accepts IPC connections.
 
 use anyhow::{Context, Result};
-use mimir_graph_actor::{GraphActor, GraphHandle, FileWatcher, WatcherConfig, WatcherHandle};
+use mimir_graph_actor::{FileWatcher, GraphActor, GraphHandle, WatcherConfig, WatcherHandle};
 use mimir_parse_core::AdapterRegistry;
 use mimir_parse_rust::RustAdapter;
 use mimir_protocol::{
-    command_channel, event_channel, socket_path, IpcCommand,
-    IpcData, IpcRequest, IpcResponse, IpcResult,
+    IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult, command_channel, event_channel,
+    socket_path,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -71,7 +71,10 @@ impl DaemonServer {
                 Some(handle)
             }
             Err(e) => {
-                warn!("Failed to start file watcher: {}. Continuing without auto-sync.", e);
+                warn!(
+                    "Failed to start file watcher: {}. Continuing without auto-sync.",
+                    e
+                );
                 None
             }
         };
@@ -114,8 +117,7 @@ impl DaemonServer {
         }
 
         // Create listener
-        let listener = UnixListener::bind(&socket_path)
-            .context("Failed to bind Unix socket")?;
+        let listener = UnixListener::bind(&socket_path).context("Failed to bind Unix socket")?;
 
         info!("Daemon listening on: {}", socket_path.display());
 

@@ -64,6 +64,10 @@ pub enum Commands {
         /// Output as JSON.
         #[arg(long)]
         json: bool,
+
+        /// Show source code snippet.
+        #[arg(short, long)]
+        code: bool,
     },
 
     /// Edit a file with conflict detection.

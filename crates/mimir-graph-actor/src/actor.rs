@@ -36,6 +36,8 @@ pub struct GraphActor {
     ids: IdGenerator,
     /// Tracked files by path.
     files: HashMap<PathBuf, TrackedFile>,
+    /// Reverse mapping: file ID to path.
+    file_paths: HashMap<FileId, PathBuf>,
 }
 
 impl GraphActor {
@@ -47,6 +49,7 @@ impl GraphActor {
             root,
             ids: IdGenerator::new(),
             files: HashMap::new(),
+            file_paths: HashMap::new(),
         }
     }
 
@@ -58,6 +61,7 @@ impl GraphActor {
             root,
             ids: IdGenerator::new(),
             files: HashMap::new(),
+            file_paths: HashMap::new(),
         }
     }
 
@@ -167,6 +171,9 @@ impl GraphActor {
                 language,
             },
         );
+        // Store reverse mapping for file path lookup
+        let relative_path = path.strip_prefix(&self.root).unwrap_or(&path).to_path_buf();
+        self.file_paths.insert(file_id, relative_path);
 
         // Extract symbols
         let extracted_symbols = adapter.extract_symbols(&tree, file_id);
@@ -244,6 +251,7 @@ impl GraphActor {
         if let Some(path) = path_to_remove {
             self.files.remove(&path);
         }
+        self.file_paths.remove(&file_id);
 
         let removed = self.graph.remove_file(file_id);
         let was_removed = !removed.is_empty();
@@ -582,6 +590,8 @@ impl GraphActor {
                 language: scanned.language,
             },
         );
+        // Store reverse mapping for file path lookup
+        self.file_paths.insert(file_id, scanned.path.clone());
 
         // Extract symbols
         let extracted_symbols = adapter.extract_symbols(&tree, file_id);
@@ -639,13 +649,18 @@ impl GraphActor {
 
     /// Convert a Symbol to SymbolInfo.
     fn symbol_to_info(&self, sym: &Symbol) -> SymbolInfo {
+        let file_path = self
+            .file_paths
+            .get(&sym.file_id)
+            .cloned()
+            .unwrap_or_default();
         SymbolInfo {
             id: sym.id,
             name: sym.name.clone(),
             qualified_name: Some(sym.qualified_name.to_string()),
             kind: sym.kind,
             file_id: sym.file_id,
-            file_path: PathBuf::new(), // Would need file path storage
+            file_path,
             start_line: sym.range.start_line,
             end_line: sym.range.end_line,
             language: sym.language,
@@ -680,6 +695,7 @@ mod tests {
         handle.await.unwrap().unwrap();
     }
 
+    /// Test: adding a file indexes symbols.
     #[tokio::test]
     async fn test_add_file() {
         let (cmd_tx, cmd_rx) = command_channel(16);

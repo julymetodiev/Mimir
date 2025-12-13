@@ -153,9 +153,12 @@ pub struct EditResult {
     /// Hash after the edit.
     pub new_hash: ContentHash,
     /// Number of bytes changed.
+    /// Number of bytes changed (delta).
     pub bytes_changed: i64,
-    /// Number of lines changed.
+    /// Number of lines changed (delta).
     pub lines_changed: i64,
+    /// Number of lines modified/touched.
+    pub lines_modified: usize,
 }
 
 /// A diff showing what would change.

@@ -68,6 +68,7 @@ impl Editor {
             new_hash,
             bytes_changed: new_bytes - old_bytes,
             lines_changed: new_lines - old_lines,
+            lines_modified: old_lines.max(new_lines) as usize,
         })
     }
 
@@ -171,6 +172,7 @@ impl Editor {
                 new_hash,
                 bytes_changed: new_bytes - old_bytes,
                 lines_changed: new_lines - old_lines,
+                lines_modified: old_lines.max(new_lines) as usize,
             });
         }
 
@@ -297,8 +299,11 @@ impl Editor {
                     result.push('\n');
                 }
 
-                // Add new content
+                // Add new content (ensure it ends with newline)
                 result.push_str(new_content);
+                if !new_content.ends_with('\n') {
+                    result.push('\n');
+                }
 
                 // Add lines after the range
                 for line in lines.iter().skip(*end_line as usize) {

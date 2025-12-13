@@ -19,10 +19,11 @@ pub async fn execute(
     symbol_name: &str,
     depth: usize,
     json: bool,
+    show_code: bool,
 ) -> Result<()> {
     match file {
-        Some(f) => execute_single_file(f, symbol_name, depth, json).await,
-        None => execute_from_graph(symbol_name, depth, json).await,
+        Some(f) => execute_single_file(f, symbol_name, depth, json, show_code).await,
+        None => execute_from_graph(symbol_name, depth, json, show_code).await,
     }
 }
 
@@ -32,6 +33,7 @@ async fn execute_single_file(
     symbol_name: &str,
     depth: usize,
     json: bool,
+    show_code: bool,
 ) -> Result<()> {
     // Verify file exists
     if !file.exists() {
@@ -103,11 +105,11 @@ async fn execute_single_file(
     }
 
     // Find and trace the symbol
-    trace_symbol(&graph, symbol_name, depth, json, Some(file))
+    trace_symbol(&graph, symbol_name, depth, json, show_code, Some(file))
 }
 
 /// Execute trace from the synced graph.
-async fn execute_from_graph(symbol_name: &str, depth: usize, json: bool) -> Result<()> {
+async fn execute_from_graph(symbol_name: &str, depth: usize, json: bool, show_code: bool) -> Result<()> {
     // Find project root
     let root = find_project_root().context("Not in a Mimir project. Run 'mimir init' first.")?;
     let config = Config::new(&root);
@@ -118,7 +120,7 @@ async fn execute_from_graph(symbol_name: &str, depth: usize, json: bool) -> Resu
 
     // Check if daemon is running - use it for automatic updates
     if check_daemon_running(&config.agent_dir) {
-        return execute_via_daemon(&config, symbol_name, depth, json).await;
+        return execute_via_daemon(&config, symbol_name, depth, json, show_code).await;
     }
 
     // Fallback: sync and query locally
@@ -135,11 +137,11 @@ async fn execute_from_graph(symbol_name: &str, depth: usize, json: bool) -> Resu
     };
 
     // Find and trace the symbol
-    trace_symbol(&graph, symbol_name, depth, json, None)
+    trace_symbol(&graph, symbol_name, depth, json, show_code, None)
 }
 
 /// Execute trace via the daemon.
-async fn execute_via_daemon(config: &Config, symbol_name: &str, depth: usize, json: bool) -> Result<()> {
+async fn execute_via_daemon(config: &Config, symbol_name: &str, depth: usize, json: bool, show_code: bool) -> Result<()> {
     let mut client = DaemonClient::connect(&config.agent_dir).await?;
 
     let options = IpcTraceOptions {
@@ -157,8 +159,24 @@ async fn execute_via_daemon(config: &Config, symbol_name: &str, depth: usize, js
         println!("{}", output);
     } else {
         println!("Trace for: {} ({:?})", result.root.name, result.root.kind);
-        println!("  Line: {}", result.root.start_line);
+        println!("  Lines: {}-{}", result.root.start_line, result.root.end_line);
         println!("  (via daemon)");
+
+        // Show code snippet if requested
+        if show_code && !result.root.file_path.as_os_str().is_empty() {
+            let file_path = config.root.join(&result.root.file_path);
+            if let Ok(source) = std::fs::read_to_string(&file_path) {
+                let lines: Vec<&str> = source.lines().collect();
+                let start = (result.root.start_line as usize).saturating_sub(1);
+                let end = (result.root.end_line as usize).min(lines.len());
+                println!();
+                println!("```");
+                for (i, line) in lines[start..end].iter().enumerate() {
+                    println!("{:4}│ {}", start + i + 1, line);
+                }
+                println!("```");
+            }
+        }
         println!();
 
         if !result.callers.is_empty() {
@@ -194,6 +212,7 @@ fn trace_symbol(
     symbol_name: &str,
     depth: usize,
     json: bool,
+    show_code: bool,
     file: Option<&Path>,
 ) -> Result<()> {
     // Find the target symbol
@@ -221,9 +240,26 @@ fn trace_symbol(
     } else {
         println!("Trace for: {} ({})", result.root.name, result.root.kind);
         if let Some(f) = file {
-            println!("  File: {}:{}", f.display(), result.root.range.start_line);
+            println!("  File: {}:{}-{}", f.display(), result.root.range.start_line, result.root.range.end_line);
         } else {
-            println!("  Line: {}", result.root.range.start_line);
+            println!("  Lines: {}-{}", result.root.range.start_line, result.root.range.end_line);
+        }
+
+        // Show code snippet if requested
+        if show_code {
+            if let Some(f) = file {
+                if let Ok(source) = std::fs::read_to_string(f) {
+                    let lines: Vec<&str> = source.lines().collect();
+                    let start = (result.root.range.start_line as usize).saturating_sub(1);
+                    let end = (result.root.range.end_line as usize).min(lines.len());
+                    println!();
+                    println!("```");
+                    for (i, line) in lines[start..end].iter().enumerate() {
+                        println!("{:4}│ {}", start + i + 1, line);
+                    }
+                    println!("```");
+                }
+            }
         }
         println!();
 

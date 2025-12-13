@@ -45,7 +45,8 @@ async fn main() -> anyhow::Result<()> {
             symbol,
             depth,
             json,
-        } => commands::trace::execute(file.as_deref(), &symbol, depth, json).await?,
+            code,
+        } => commands::trace::execute(file.as_deref(), &symbol, depth, json, code).await?,
         commands::Commands::Edit {
             file,
             mode,
