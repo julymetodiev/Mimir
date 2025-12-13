@@ -42,9 +42,22 @@ impl Tool for AppendTool {
             Some(f) => f,
             None => return ToolResult::error("'file' is required"),
         };
-        let content = match params["content"].as_str() {
-            Some(c) => c,
-            None => return ToolResult::error("'content' is required"),
+        // Handle content - can be string or (erroneously) array from some models
+        let content_value = &params["content"];
+        let content: String = if let Some(c) = content_value.as_str() {
+            c.to_string()
+        } else if let Some(arr) = content_value.as_array() {
+            // Some models send content as array - join it
+            let joined = arr.iter()
+                .filter_map(|v| v.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
+            if joined.is_empty() {
+                return ToolResult::error("'content' is required (got empty array)");
+            }
+            joined
+        } else {
+            return ToolResult::error("'content' is required");
         };
 
         let path = if std::path::Path::new(file).is_absolute() {
@@ -61,7 +74,7 @@ impl Tool for AppendTool {
             existing.push('\n');
         }
         existing.push('\n');
-        existing.push_str(content);
+        existing.push_str(&content);
         if !content.ends_with('\n') {
             existing.push('\n');
         }

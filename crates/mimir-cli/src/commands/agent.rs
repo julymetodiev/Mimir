@@ -111,6 +111,11 @@ impl AgentCallback for CliCallback {
         let tokens = self.last_tokens.load(Ordering::SeqCst);
         println!("  {}  {} ({} tokens)", rune, desc, tokens);
 
+        // Show raw JSON if verbose OR if there's a "?" (malformed input)
+        if self.verbose || desc.contains('?') {
+            println!("     → {}", input);
+        }
+
         // In verbose mode, show edit_batch contents
         if self.verbose && name == "edit_batch" {
             if let Some(edits) = input.get("edits").and_then(|v| v.as_array()) {
@@ -190,13 +195,18 @@ impl AgentCallback for CliCallback {
 fn format_tool_action(name: &str, input: &serde_json::Value) -> (&'static str, String) {
     match name {
         "read" | "read_file" => {
-            let path = input.get("file")
-                .or_else(|| input.get("path"))
+            // Check for symbol first, then file/path
+            let target = input.get("symbol")
                 .and_then(|v| v.as_str())
-                .unwrap_or("?");
-            // Show just filename or last path component
-            let short = path.rsplit('/').next().unwrap_or(path);
-            ("ᚲ ", format!("read {}", short))
+                .map(|s| s.to_string())
+                .or_else(|| {
+                    input.get("file")
+                        .or_else(|| input.get("path"))
+                        .and_then(|v| v.as_str())
+                        .map(|p| p.rsplit('/').next().unwrap_or(p).to_string())
+                })
+                .unwrap_or_else(|| "?".to_string());
+            ("ᚲ ", format!("read {}", target))
         }
         "edit" | "edit_file" => {
             // Check for file/path first, then symbol for symbol-based editing
@@ -238,6 +248,13 @@ fn format_tool_action(name: &str, input: &serde_json::Value) -> (&'static str, S
                 .and_then(|v| v.as_str())
                 .unwrap_or("?");
             ("ᚠ ", format!("trace {}", symbol))
+        }
+        "append" => {
+            let file = input.get("file")
+                .and_then(|v| v.as_str())
+                .map(|p| p.rsplit('/').next().unwrap_or(p))
+                .unwrap_or("?");
+            ("᛫ ", format!("append {}", file))
         }
         _ => ("᛫ ", format!("{}", name))
     }

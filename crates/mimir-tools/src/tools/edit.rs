@@ -67,9 +67,24 @@ impl Tool for EditTool {
         let file = params["file"].as_str();
         let start_line = params["start_line"].as_u64().map(|n| n as u32);
         let end_line = params["end_line"].as_u64().map(|n| n as u32);
-        let content = match params["content"].as_str() {
-            Some(c) => c,
-            None => return ToolResult::error("'content' parameter is required"),
+        // Handle content - can be string or (erroneously) array from some models
+        let content_value = &params["content"];
+        let content_string: String;
+        let content: &str = if let Some(c) = content_value.as_str() {
+            content_string = c.to_string();
+            &content_string
+        } else if let Some(arr) = content_value.as_array() {
+            // Some models send content as array - join it
+            content_string = arr.iter()
+                .filter_map(|v| v.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
+            if content_string.is_empty() {
+                return ToolResult::error("'content' parameter is required (got empty array)");
+            }
+            &content_string
+        } else {
+            return ToolResult::error("'content' parameter is required");
         };
         let mode = params["mode"].as_str().unwrap_or("replace");
         let preview = params["preview"].as_bool().unwrap_or(false);
