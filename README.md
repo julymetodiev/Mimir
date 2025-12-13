@@ -26,6 +26,9 @@ A semantic code intelligence engine that gives AI agents structured understandin
 - **File Watching**: Automatic detection of file changes
 - **Edit Operations**: Safe code modifications with conflict detection
 - **Content Deduplication**: Blake3 hashing with Zstd compression
+- **AI Agent**: Autonomous task execution with Z.ai GLM-4.6 LLM
+- **Tool System**: Built-in tools (read, edit, shell, trace, search)
+- **Checkpoints**: Resumable tasks with state persistence
 
 ## Status
 
@@ -34,11 +37,11 @@ A semantic code intelligence engine that gives AI agents structured understandin
 | M1 | Storage + Init | ✅ Done |
 | M2 | Single-Language Graph | ✅ Done |
 | M3 | Actor + Sync | ✅ Done |
-| M4 | Multi-Language | ⏳ Pending |
-| M5 | Semantic Search | ⏳ Pending |
-| M6 | Agent | ⏳ Pending |
+| M4 | Agent | ✅ Done |
+| M5 | Multi-Language | ⏳ Pending |
+| M6 | Semantic Search | ⏳ Pending |
 
-**189 tests passing** | Rust 1.90 (2024 edition)
+**237 tests passing** | Rust 1.90 (2024 edition)
 
 ## Quick Start
 
@@ -58,6 +61,15 @@ mimir trace -f src/main.rs -s process_data
 # Edit with preview
 mimir edit -f src/lib.rs -m replace -s 10 -e 20 -c "new_code" -p
 
+# Run AI agent to complete a task
+ZAI_API_KEY=your-key mimir agent "Refactor the auth module"
+
+# List active tasks
+mimir tasks
+
+# Resume a paused task
+mimir resume <task-id>
+
 # Stop daemon when done
 mimir daemon stop
 ```
@@ -66,7 +78,7 @@ mimir daemon stop
 
 ```
 Layer 7: Application    mimir-cli
-Layer 6: Agent          (future: mimir-agent, mimir-llm)
+Layer 6: Agent          mimir-agent, mimir-llm, mimir-tools
 Layer 5: Execution      mimir-edit, mimir-tasks
 Layer 4: Graph          mimir-graph, mimir-graph-actor
 Layer 3: Index          mimir-symbols, mimir-relations, mimir-files
@@ -94,6 +106,10 @@ Layer 0: Primitives     mimir-types, mimir-error, mimir-protocol
 | `mimir-graph` | Graph facade |
 | `mimir-graph-actor` | Actor pattern for concurrent access |
 | `mimir-edit` | File editing with conflict detection |
+| `mimir-tasks` | Task lifecycle, checkpoints, persistence |
+| `mimir-llm` | LLM providers (Z.ai GLM-4.6, Anthropic) |
+| `mimir-tools` | Agent tools (read, edit, shell, trace, search) |
+| `mimir-agent` | Agent orchestration with tool execution loop |
 | `mimir-cli` | Command-line interface |
 
 ## Performance Targets

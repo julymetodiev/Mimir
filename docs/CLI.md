@@ -877,36 +877,131 @@ Watching for changes...
 
 ---
 
-## Agent Mode
+## Agent Commands
+
+The agent system allows autonomous task execution using Z.ai GLM-4.6 LLM.
+
+### Running an Agent Task
 
 ```bash
-$ mimir agent
+# Set API key and run agent
+$ ZAI_API_KEY=your-key mimir agent "List files and describe this project"
 
-╭────────────────────────────────────────────────────────╮
-│ Mímir Agent v0.1.0                                     │
-│ Type your request or 'help' for commands               │
-╰────────────────────────────────────────────────────────╯
+🤖 Starting: List files and describe this project
 
-> Add input validation to all API endpoints
+🔧 shell
+✅ shell = {"output":"Cargo.toml\nREADME.md\ncrates/\ndocs/\n..."}
+🔧 read_file
+✅ read_file = {"content":"# Mimir\n\n**Semantic Code..."}
 
-Analyzing API endpoints...
-Found 15 endpoints without validation.
+✨ Completed in 3 tool calls
 
-I'll add validation using the validator crate. Here's my plan:
-1. Add validator dependency
-2. Create validation schemas for each endpoint
-3. Add validation middleware
-4. Update endpoint handlers
+📝 Response:
+This is the Mimir project - a Semantic Code Intelligence Engine written in Rust.
+The project provides structured understanding of code for AI agents...
+```
 
-Shall I proceed? [Y/n]
+### Agent Options
 
-> y
+```bash
+$ mimir agent --help
 
-[Step 1/4] Adding validator dependency...
-✓ Updated Cargo.toml
+Run an AI agent to complete a task
 
-[Step 2/4] Creating validation schemas...
+OPTIONS:
+    <GOAL>                   Task description (required)
+    -m, --model <MODEL>      LLM model [default: GLM-4.6]
+    -i, --max-iterations <N> Max iterations [default: 50]
+    -v, --verbose            Show detailed tool calls and responses
+    -c, --checkpoint         Enable checkpoints for task resumption
+
+ENVIRONMENT:
+    ZAI_API_KEY              Z.ai API key (required)
+```
+
+### Verbose Mode
+
+```bash
+$ ZAI_API_KEY=your-key mimir agent "Find all functions in the agent crate" -v
+
+🤖 Starting: Find all functions in the agent crate
+
+📤 Sending 2 messages to LLM...
+📥 Response: 245 tokens in, 89 tokens out
+🔧 search {"pattern": ".*", "kind": "function", "path": "crates/mimir-agent"}
+✅ search = {"symbols":[{"name":"new","kind":"Method",...},...]}
+   ... (342 more chars)
+
+📤 Sending 4 messages to LLM...
+📥 Response: 512 tokens in, 156 tokens out
+
+✨ Completed in 2 tool calls
+   Total tokens: 1002
+
+📝 Response:
+I found 8 functions in the mimir-agent crate:
+1. Agent::new - Creates a new agent instance
+2. Agent::run - Runs the agent on a task
 ...
+```
+
+### Listing Tasks
+
+```bash
+$ mimir tasks
+
+ID                                   STATUS     GOAL
+--------------------------------------------------------------------------------
+a1b2c3d4-e5f6-7890-abcd-ef1234567890 running    Find all functions in the agent...
+b2c3d4e5-f6a7-8901-bcde-f12345678901 done       List files and describe this pro...
+
+$ mimir tasks --status paused
+
+ID                                   STATUS     GOAL
+--------------------------------------------------------------------------------
+(no paused tasks)
+```
+
+### Resuming Tasks
+
+```bash
+$ mimir resume a1b2c3d4-e5f6-7890-abcd-ef1234567890
+
+Resuming from checkpoint 3...
+
+🤖 Starting: Find all functions in the agent crate
+
+[Continues from where it left off...]
+```
+
+### Built-in Tools
+
+The agent has access to these tools:
+
+| Tool | Description |
+|------|-------------|
+| `read_file` | Read file contents |
+| `edit_file` | Edit files with line-based operations |
+| `shell` | Execute shell commands (allowlist protected) |
+| `search_symbol` | Search for symbols by pattern |
+| `trace_symbol` | Trace callers/callees of a symbol |
+
+### Example: Code Refactoring
+
+```bash
+$ ZAI_API_KEY=your-key mimir agent "Rename the function process_data to handle_data in src/lib.rs"
+
+🤖 Starting: Rename the function process_data to handle_data in src/lib.rs
+
+🔧 read_file
+🔧 search_symbol
+🔧 edit_file
+
+✨ Completed in 3 tool calls
+
+📝 Response:
+I've renamed `process_data` to `handle_data` in src/lib.rs.
+The function was found on line 42 and has been updated.
 ```
 
 ---
@@ -932,6 +1027,9 @@ COMMANDS:
     edit          Edit files with conflict detection
     edit-batch    Apply batch edits from JSON
     edit-symbols  Apply batch symbol edits from JSON
+    agent         Run AI agent to complete a task
+    tasks         List tasks
+    resume        Resume a paused task
     help          Show this help
 
 OPTIONS:
@@ -996,4 +1094,37 @@ OPTIONS:
     -j, --json <JSON>        JSON: [{"symbol": "name", "content": "code"}, ...]
     -p, --preview            Preview changes without applying
     -b, --backup             Create backup files
+
+$ mimir agent --help
+
+Run an AI agent to complete a task
+
+ARGS:
+    <GOAL>                   Task goal/description
+
+OPTIONS:
+    -m, --model <MODEL>      LLM model to use [default: GLM-4.6]
+    -i, --max-iterations <N> Maximum iterations [default: 50]
+    -v, --verbose            Show detailed output
+    -c, --checkpoint         Enable checkpoints for resumption
+
+ENVIRONMENT:
+    ZAI_API_KEY              Z.ai API key (required)
+
+$ mimir tasks --help
+
+List tasks from the task store
+
+OPTIONS:
+    -s, --status <STATUS>    Filter by status (pending, running, paused, done, failed)
+
+$ mimir resume --help
+
+Resume a paused or pending task
+
+ARGS:
+    <TASK_ID>                Task ID to resume
+
+OPTIONS:
+    -v, --verbose            Show detailed output
 ```

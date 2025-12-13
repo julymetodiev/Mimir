@@ -245,14 +245,12 @@ mimir/
 │   │       ├── conflict.rs
 │   │       └── transaction.rs      # Atomic multi-file edits
 │   │
-│   ├── mimir-tasks/                 # Task management
+│   ├── mimir-tasks/                 # Task management (14 tests)
 │   │   └── src/
-│   │       ├── task.rs             # Task, TaskStatus
-│   │       ├── plan.rs             # TaskPlan, PlannedStep
-│   │       ├── checkpoint.rs       # Checkpoint, recovery
-│   │       └── store/
-│   │           ├── filesystem.rs
-│   │           └── memory.rs
+│   │       ├── lib.rs              # Re-exports
+│   │       ├── task.rs             # Task, TaskId, TaskStatus
+│   │       ├── checkpoint.rs       # Checkpoint, CheckpointManager, ConversationMessage
+│   │       └── store.rs            # TaskStore trait, MemoryTaskStore, FileTaskStore
 │   │
 │   ├── mimir-context/               # LLM context management
 │   │   └── src/
@@ -277,32 +275,34 @@ mimir/
 │   │  ║              Depends on: Layers 0-5                       ║
 │   │  ╚═══════════════════════════════════════════════════════════╝
 │   │
-│   ├── mimir-llm/                   # LLM provider abstraction
+│   ├── mimir-llm/                   # LLM provider abstraction (13 tests)
 │   │   └── src/
-│   │       ├── traits.rs           # LlmProvider trait
-│   │       ├── message.rs
-│   │       └── providers/
-│   │           ├── anthropic.rs
-│   │           ├── openai.rs
-│   │           └── local.rs
+│   │       ├── lib.rs              # Re-exports
+│   │       ├── provider.rs         # LlmProvider trait, ProviderConfig
+│   │       ├── message.rs          # Message, Role, ContentBlock, Completion
+│   │       ├── anthropic.rs        # AnthropicProvider (Claude API)
+│   │       └── zai.rs              # ZaiProvider (Z.ai GLM-4.6, OpenAI-compatible)
 │   │
-│   ├── mimir-tools/                 # Agent tools
+│   ├── mimir-tools/                 # Agent tools (22 tests)
 │   │   └── src/
-│   │       ├── traits.rs           # Tool trait
-│   │       ├── registry.rs
-│   │       ├── builtin/
-│   │       │   ├── trace.rs
-│   │       │   ├── edit.rs
-│   │       │   ├── search.rs
-│   │       │   └── shell.rs
-│   │       └── sandbox.rs
+│   │       ├── lib.rs              # Re-exports, ToolResult
+│   │       ├── schema.rs           # JsonSchema, ToolSchema
+│   │       ├── registry.rs         # ToolRegistry
+│   │       ├── context.rs          # ToolContext (working_dir)
+│   │       └── tools/
+│   │           ├── read.rs         # ReadFileTool
+│   │           ├── edit.rs         # EditFileTool
+│   │           ├── search.rs       # SearchSymbolTool
+│   │           ├── trace.rs        # TraceSymbolTool
+│   │           └── shell.rs        # ShellTool (with allowlist/blocklist)
 │   │
-│   ├── mimir-agent/                 # Agent orchestration
+│   ├── mimir-agent/                 # Agent orchestration (6 tests)
 │   │   └── src/
-│   │       ├── agent.rs
-│   │       ├── planner.rs
-│   │       ├── loop.rs
-│   │       └── prompts/
+│   │       ├── lib.rs              # Re-exports, DEFAULT_SYSTEM_PROMPT
+│   │       ├── agent.rs            # Agent, AgentCallback, AgentBuilder
+│   │       ├── config.rs           # AgentConfig
+│   │       ├── executor.rs         # ToolExecutor
+│   │       └── error.rs            # AgentError
 │   │
 │   │  ╔═══════════════════════════════════════════════════════════╗
 │   │  ║                   LAYER 7: APPLICATION                    ║
@@ -321,9 +321,10 @@ mimir/
 │   │           ├── trace.rs         # Auto-detects daemon
 │   │           ├── daemon.rs        # start, stop, status
 │   │           ├── search.rs
-│   │           ├── task.rs
+│   │           ├── read.rs          # Read source code by symbol
+│   │           ├── edit.rs          # Edit files with conflict detection
 │   │           ├── status.rs
-│   │           └── resume.rs
+│   │           └── agent.rs         # run_agent, list_tasks, resume_task
 │   │
 │   └── mimir-tui/                   # Terminal UI (optional)
 │

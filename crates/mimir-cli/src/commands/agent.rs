@@ -21,63 +21,108 @@ impl CliCallback {
 
 impl AgentCallback for CliCallback {
     fn on_start(&self, task: &Task) {
-        println!("\n🤖 Starting: {}\n", task.goal);
+        println!("\n  ᛗ  Mímir awakens\n");
+        println!("  {}  {}\n", "◈", task.goal);
     }
 
     fn on_llm_request(&self, messages: &[Message]) {
         if self.verbose {
-            println!("📤 Sending {} messages to LLM...", messages.len());
+            println!("  ᛗ  consulting... ({} messages)", messages.len());
         }
     }
 
     fn on_llm_response(&self, completion: &Completion) {
         if self.verbose {
             println!(
-                "📥 Response: {} tokens in, {} tokens out",
+                "  ᛗ  received ({} in, {} out)",
                 completion.usage.input_tokens, completion.usage.output_tokens
             );
         }
     }
 
     fn on_tool_start(&self, name: &str, input: &serde_json::Value) {
-        if self.verbose {
-            println!("🔧 {} {:?}", name, input);
-        } else {
-            println!("🔧 {}", name);
-        }
+        let (rune, desc) = format_tool_action(name, input);
+        println!("  {}  {}", rune, desc);
     }
 
     fn on_tool_result(&self, name: &str, result: &str, is_error: bool) {
         if is_error {
-            println!("❌ {} failed: {}", name, &result[..result.len().min(100)]);
+            let preview = &result[..result.len().min(80)];
+            println!("  ᚦ  {} failed: {}", name, preview);
         } else if self.verbose {
-            let preview = &result[..result.len().min(200)];
-            println!("✅ {} = {}", name, preview);
-            if result.len() > 200 {
-                println!("   ... ({} more chars)", result.len() - 200);
+            let preview = &result[..result.len().min(120)];
+            println!("     → {}", preview);
+            if result.len() > 120 {
+                println!("       ... (+{} chars)", result.len() - 120);
             }
         }
     }
 
     fn on_checkpoint(&self, checkpoint: &Checkpoint) {
         if self.verbose {
-            println!("💾 Checkpoint {} created", checkpoint.sequence);
+            println!("  ᛉ  checkpoint {}", checkpoint.sequence);
         }
     }
 
     fn on_complete(&self, task: &Task) {
-        println!("\n✨ Completed in {} tool calls", task.tool_calls);
+        println!("\n  ᛏ  complete ({} actions)\n", task.tool_calls);
         if self.verbose {
-            println!("   Total tokens: {}", task.tokens_used);
+            println!("     tokens: {}", task.tokens_used);
         }
     }
 
     fn on_error(&self, error: &mimir_agent::AgentError) {
-        eprintln!("\n❌ Error: {:?}", error);
+        eprintln!("\n  ᚦ  {:?}", error);
     }
 
     fn approve_tool(&self, _name: &str, _input: &serde_json::Value) -> bool {
         true // Auto-approve in CLI mode
+    }
+}
+
+/// Format tool action with Nordic rune and description.
+fn format_tool_action(name: &str, input: &serde_json::Value) -> (&'static str, String) {
+    match name {
+        "read_file" => {
+            let path = input.get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            // Show just filename or last path component
+            let short = path.rsplit('/').next().unwrap_or(path);
+            ("ᚲ", format!("read {}", short))
+        }
+        "edit_file" => {
+            let path = input.get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            let short = path.rsplit('/').next().unwrap_or(path);
+            ("ᛟ", format!("edit {}", short))
+        }
+        "shell" => {
+            let cmd = input.get("command")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            // Truncate long commands
+            let preview = if cmd.len() > 50 {
+                format!("{}...", &cmd[..47])
+            } else {
+                cmd.to_string()
+            };
+            ("ᛊ", format!("shell {}", preview))
+        }
+        "search" | "search_symbol" => {
+            let pattern = input.get("pattern")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            ("ᚱ", format!("search \"{}\"", pattern))
+        }
+        "trace" | "trace_symbol" => {
+            let symbol = input.get("symbol")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            ("ᚠ", format!("trace {}", symbol))
+        }
+        _ => ("᛫", format!("{}", name))
     }
 }
 
@@ -117,11 +162,12 @@ pub async fn run_agent(
     // Run the agent
     match agent.run(&mut task).await {
         Ok(response) => {
-            println!("\n📝 Response:\n{}", response);
+            println!("  ◈  Response\n");
+            println!("{}\n", response);
             Ok(())
         }
         Err(e) => {
-            eprintln!("\n❌ Agent failed: {:?}", e);
+            eprintln!("\n  ᚦ  Agent failed: {:?}", e);
             Err(e.into())
         }
     }
@@ -224,13 +270,14 @@ pub async fn resume_task(
         Ok(response) => {
             // Save updated task
             store.save_task(&task)?;
-            println!("\n📝 Response:\n{}", response);
+            println!("  ◈  Response\n");
+            println!("{}\n", response);
             Ok(())
         }
         Err(e) => {
             // Save task state even on failure
             let _ = store.save_task(&task);
-            eprintln!("\n❌ Agent failed: {:?}", e);
+            eprintln!("\n  ᚦ  Agent failed: {:?}", e);
             Err(e.into())
         }
     }
