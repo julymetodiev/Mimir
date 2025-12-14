@@ -28,6 +28,7 @@ impl ToolRegistry {
         registry.register(crate::tools::SearchTool);
         registry.register(crate::tools::ReadTool);
         registry.register(crate::tools::TraceTool);
+        registry.register(crate::tools::InspectTool);
         registry.register(crate::tools::EditTool);
         registry.register(crate::tools::EditBatchTool);
         registry.register(crate::tools::AppendTool);

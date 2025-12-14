@@ -18,22 +18,46 @@ fn compress_result(content: &str) -> String {
         return content.to_string();
     }
 
-    // Try to parse as JSON array (common for search results)
-    if let Ok(arr) = serde_json::from_str::<serde_json::Value>(content) {
-        if let Some(items) = arr.get("matches").and_then(|m| m.as_array()) {
-            if items.len() > 10 {
-                // Truncate to first 10 matches
-                let mut compressed = arr.clone();
-                if let Some(matches) = compressed.get_mut("matches") {
-                    if let Some(arr) = matches.as_array_mut() {
-                        arr.truncate(10);
+    // Try to parse as JSON (handle both arrays and objects with arrays)
+    if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(content) {
+        let mut modified = false;
+
+        // Helper to truncate array
+        let truncate_array = |val: &mut serde_json::Value, limit: usize| -> bool {
+            if let Some(arr) = val.as_array_mut() {
+                if arr.len() > limit {
+                    arr.truncate(limit);
+                    return true;
+                }
+            }
+            false
+        };
+
+        if json.is_array() {
+            if truncate_array(&mut json, 10) {
+                 // For root arrays, we can't easily add a "note", but keeping it valid JSON is better
+                 modified = true;
+            }
+        } else if let Some(obj) = json.as_object_mut() {
+            for field in ["matches", "symbols", "callers", "callees", "references"] {
+                if let Some(val) = obj.get_mut(field) {
+                    if truncate_array(val, 10) {
+                        modified = true;
                     }
                 }
-                let note = format!("\n... ({} more results truncated)", items.len() - 10);
-                return compressed.to_string() + &note;
+            }
+            
+            if modified {
+                // Add a warning field to indicate truncation
+                obj.insert("_warning".to_string(), serde_json::Value::String("Output truncated for brevity".to_string()));
             }
         }
+
+        if modified {
+            return json.to_string();
+        }
     }
+
 
     // Fallback: smart truncation keeping start and end (crucial for error logs)
     let keep_len = MAX_RESULT_SIZE / 2;

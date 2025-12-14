@@ -8,6 +8,7 @@ mod search;
 mod shell;
 mod trace;
 mod write;
+mod inspect;
 
 pub use append::AppendTool;
 pub use edit::EditTool;
@@ -17,6 +18,7 @@ pub use search::SearchTool;
 pub use shell::ShellTool;
 pub use trace::TraceTool;
 pub use write::WriteTool;
+pub use inspect::InspectTool;
 
 use crate::ToolRegistry;
 
