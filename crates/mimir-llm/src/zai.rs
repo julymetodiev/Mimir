@@ -144,6 +144,14 @@ impl LlmProvider for ZaiProvider {
     async fn complete(&self, request: CompletionRequest) -> LlmResult<Completion> {
         let api_request = self.build_request(&request);
 
+        // Debug: dump first request to file
+        if std::env::var("MIMIR_DEBUG_REQUEST").is_ok() {
+            if let Ok(json) = serde_json::to_string_pretty(&api_request) {
+                let _ = std::fs::write("/tmp/mimir_request.json", &json);
+                eprintln!("[DEBUG] Request written to /tmp/mimir_request.json ({} bytes)", json.len());
+            }
+        }
+
         let response = self
             .client
             .post(self.base_url())

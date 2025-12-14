@@ -3,11 +3,13 @@
 //! This crate provides the core abstraction for tools that the agent can use,
 //! including the Tool trait, ToolRegistry, and built-in tool implementations.
 
+mod daemon_client;
 mod graph_client;
 mod registry;
 mod schema;
 mod tools;
 
+pub use daemon_client::{check_daemon_running, DaemonClient, DaemonGraphClient};
 pub use graph_client::{GraphClient, GraphError, SearchResult, SymbolInfo, TraceResult};
 pub use registry::ToolRegistry;
 pub use schema::{JsonSchema, ToolParameter, ToolSchema};

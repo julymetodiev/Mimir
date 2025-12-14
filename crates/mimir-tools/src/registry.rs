@@ -29,9 +29,7 @@ impl ToolRegistry {
         registry.register(crate::tools::ReadTool);
         registry.register(crate::tools::TraceTool);
         registry.register(crate::tools::InspectTool);
-        registry.register(crate::tools::EditTool);
-        registry.register(crate::tools::EditBatchTool);
-        registry.register(crate::tools::AppendTool);
+        registry.register(crate::tools::EditTool);  // Primary edit tool (string replacement)
         registry.register(crate::tools::WriteTool);
         registry.register(crate::tools::ShellTool);
         registry

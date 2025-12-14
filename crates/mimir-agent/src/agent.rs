@@ -174,12 +174,12 @@ impl ToolCache {
 
     /// Check if a tool is a mutating operation that should invalidate the cache.
     pub fn is_mutating(tool_name: &str) -> bool {
-        matches!(tool_name, "edit" | "edit_batch" | "edit_file" | "shell")
+        matches!(tool_name, "edit" | "edit_batch" | "edit_file" | "apply_patch" | "shell" | "write")
     }
 
     /// Check if tool is an edit operation (not shell).
     pub fn is_edit(tool_name: &str) -> bool {
-        matches!(tool_name, "edit" | "edit_batch" | "edit_file")
+        matches!(tool_name, "edit" | "edit_batch" | "edit_file" | "apply_patch" | "write")
     }
 
     /// Extract file path from tool input if present.
@@ -491,6 +491,9 @@ impl<P: LlmProvider> Agent<P> {
                     if ToolCache::is_edit(name) {
                         if let Some(file) = ToolCache::extract_file(input) {
                             tool_cache.invalidate_file(&file);
+                        } else {
+                            // Fallback for tools like apply_patch where file isn't easily extractable
+                            tool_cache.invalidate_all();
                         }
                     } else {
                         tool_cache.invalidate_all();
