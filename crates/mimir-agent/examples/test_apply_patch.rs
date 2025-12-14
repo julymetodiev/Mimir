@@ -39,9 +39,7 @@ impl AgentCallback for VerboseCallback {
         }
         println!(
             "Tokens: {} in, {} out | Stop: {:?}",
-            completion.usage.input_tokens,
-            completion.usage.output_tokens,
-            completion.stop_reason
+            completion.usage.input_tokens, completion.usage.output_tokens, completion.stop_reason
         );
     }
 
@@ -98,7 +96,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(p) => p,
         Err(_) => {
             eprintln!("ZAI_API_KEY not set in environment");
-            eprintln!("Usage: ZAI_API_KEY=your-key cargo run -p mimir-agent --example test_apply_patch");
+            eprintln!(
+                "Usage: ZAI_API_KEY=your-key cargo run -p mimir-agent --example test_apply_patch"
+            );
             std::process::exit(1);
         }
     };
@@ -129,7 +129,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Configure agent with the new apply_patch-focused prompt
     let config = AgentConfig::new("GLM-4.6")
-        .with_max_iterations(30)
+        .with_max_iterations(35)
         .with_max_tokens(8192)
         .with_temperature(0.1)
         .with_auto_approve(true)
@@ -137,20 +137,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_working_dir(project_root.to_string_lossy());
 
     // Create agent with graph client
-    let mut agent = Agent::new(provider, config, registry)
-        .with_callback(Arc::new(VerboseCallback));
+    let mut agent = Agent::new(provider, config, registry).with_callback(Arc::new(VerboseCallback));
 
     if let Some(client) = graph_client {
         agent = agent.with_graph_client(client);
     }
 
     // Create the task
-    let mut task = Task::new(
-        "Добави сериализация към User struct - derive Serialize и Deserialize от serde. \
-         Добави нов метод to_json() който връща String с JSON представяне на user-а. \
-         Добави метод from_json(s: &str) -> Result<User, serde_json::Error> за десериализация. \
-         Добави serde и serde_json зависимости към Cargo.toml."
-    );
+    let mut task = Task::new("Добави базова поддръжка на пермишъни към User");
     task.working_dir = Some(project_root.to_string_lossy().to_string());
 
     println!("\nStarting agent...\n");
