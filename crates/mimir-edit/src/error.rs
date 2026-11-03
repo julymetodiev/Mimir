@@ -52,6 +52,16 @@ pub enum EditError {
     #[error("No text to replace was given for {path}")]
     EmptyText { path: PathBuf },
 
+    #[error(
+        "The batch stopped midway: {written} changed, {failed} and any after it did not: {source}"
+    )]
+    PartlyWritten {
+        written: String,
+        failed: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
     #[error("Overlapping edits detected in batch operation")]
     OverlappingEdits,
 

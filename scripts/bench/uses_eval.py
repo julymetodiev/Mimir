@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Do the users `trace` shows for a type, a field or a constant match the language server's references?
 
-Usage: uses_eval.py PROJECT GRAPH.json SAMPLE_PER_KIND [SEED]
+Usage: uses_eval.py PROJECT GRAPH.json SAMPLE_PER_KIND [SEED [KIND]]
 The edges come from an index; these answers come from a running analyzer's find-references, another
 path through it. Each answer is reduced to the innermost symbol holding it, leaving out imports and
 `Self`, which the graph leaves out too. Prints precision and recall per kind, and what differs.
@@ -120,6 +120,8 @@ print(f"analyzer ready in {time.time() - started:.0f} s", flush=True)
 kinds = {"type": ("struct", "enum", "trait", "type_alias"), "variant": ("enum_variant",),
          "field": ("field",), "constant": ("constant",)}
 for name, wanted in kinds.items():
+    if len(sys.argv) > 5 and name != sys.argv[5]:
+        continue
     pool = [s for s in graph["symbols"] if s["kind"] in wanted and users[s["id"]]
             and (project / paths[s["file_id"]]).exists()]
     sample = random.sample(pool, min(per_kind, len(pool)))

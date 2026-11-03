@@ -2,6 +2,7 @@
 //! the disk, and only then takes the target's name. A reader or a crash sees the old file or the
 //! new one, never a part.
 
+use crate::{EditError, EditResult};
 use std::fs::{self, Permissions};
 use std::io::{self, Write};
 use std::os::unix::fs::PermissionsExt;
@@ -12,6 +13,12 @@ use tempfile::{Builder, NamedTempFile};
 const TEMPORARY_PREFIX: &str = ".mimir-write-";
 /// What a new file asks for, as `File::create` does; the umask decides the rest.
 const NEW_FILE_MODE: u32 = 0o666;
+
+/// Whether a file name is one of a write's temporary files, with its six random characters.
+pub fn is_temporary(name: &str) -> bool {
+    name.strip_prefix(TEMPORARY_PREFIX)
+        .is_some_and(|rest| rest.len() == 6 && rest.chars().all(char::is_alphanumeric))
+}
 
 /// The text on disk under a temporary name in `target`'s directory.
 fn on_disk(target: &Path, content: &str, permissions: Permissions) -> io::Result<NamedTempFile> {
@@ -46,15 +53,38 @@ fn prepared(path: &Path, content: &str) -> io::Result<(NamedTempFile, PathBuf)> 
 
 /// Replace existing files. Every text is on disk before the first file changes, so a full disk or a
 /// read-only file changes none of them.
-pub fn replace_all(files: &[(PathBuf, String)]) -> io::Result<()> {
+pub fn replace_all(files: &[(PathBuf, String)]) -> EditResult<()> {
     let ready = files
         .iter()
         .map(|(path, content)| prepared(path, content))
         .collect::<io::Result<Vec<_>>>()?;
+    take_names(ready)
+}
+
+/// Give each prepared text its target's name. The renames cannot be undone together, so if one
+/// fails, as when a directory has stopped being writable, the error says which files did change.
+fn take_names(ready: Vec<(NamedTempFile, PathBuf)>) -> EditResult<()> {
+    let mut written = Vec::new();
     for (file, target) in ready {
-        file.persist(&target).map_err(|e| e.error)?;
+        if let Err(e) = file.persist(&target) {
+            return Err(if written.is_empty() {
+                e.error.into()
+            } else {
+                EditError::PartlyWritten {
+                    written: list(&written),
+                    failed: target,
+                    source: e.error,
+                }
+            });
+        }
+        written.push(target);
     }
     Ok(())
+}
+
+fn list(paths: &[PathBuf]) -> String {
+    let shown: Vec<String> = paths.iter().map(|p| p.display().to_string()).collect();
+    shown.join(", ")
 }
 
 /// Make a file that must not exist yet: anything there, or appearing meanwhile, stays as it is.
@@ -149,6 +179,46 @@ mod tests {
         assert_eq!(fs::read_to_string(&open).unwrap(), "old\n");
         assert_eq!(fs::read_to_string(&locked).unwrap(), "old\n");
         assert_eq!(names(dir.path()), ["locked.txt", "open.txt"]);
+    }
+
+    #[test]
+    fn test_a_write_is_named_as_temporary_until_it_ends() {
+        let dir = tempdir().unwrap();
+        let target = dir.path().join("file.txt");
+        let file = on_disk(&target, "text", Permissions::from_mode(0o644)).unwrap();
+        let name = file.path().file_name().unwrap().to_str().unwrap();
+        assert!(is_temporary(name), "{name}");
+        assert!(!is_temporary(".mimir-write-a-longer-name"));
+        assert!(!is_temporary("file.txt"));
+    }
+
+    #[test]
+    fn test_a_rename_failing_midway_says_what_changed() {
+        let dir = tempdir().unwrap();
+        let (open, locked_dir) = (dir.path().join("open"), dir.path().join("locked"));
+        fs::create_dir(&open).unwrap();
+        fs::create_dir(&locked_dir).unwrap();
+        let (first, second) = (open.join("first.txt"), locked_dir.join("second.txt"));
+        fs::write(&first, "old\n").unwrap();
+        fs::write(&second, "old\n").unwrap();
+        let ready = vec![
+            prepared(&first, "new\n").unwrap(),
+            prepared(&second, "new\n").unwrap(),
+        ];
+        let written = ready[0].1.clone();
+        fs::set_permissions(&locked_dir, Permissions::from_mode(0o555)).unwrap();
+
+        let failure = take_names(ready);
+        fs::set_permissions(&locked_dir, Permissions::from_mode(0o755)).unwrap();
+
+        let message = failure.unwrap_err().to_string();
+        assert!(
+            message.contains(&written.display().to_string()),
+            "{message}"
+        );
+        assert!(message.contains("second.txt"), "{message}");
+        assert_eq!(fs::read_to_string(&first).unwrap(), "new\n");
+        assert_eq!(fs::read_to_string(&second).unwrap(), "old\n");
     }
 
     #[test]

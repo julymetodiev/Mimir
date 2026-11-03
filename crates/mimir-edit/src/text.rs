@@ -68,9 +68,57 @@ fn excerpt(text: &str) -> String {
     }
 }
 
-/// The lines that differ between two texts, leaving out what they start and end with in common:
-/// the first and last changed line, and the lines of each. A file's lines from 1.
-pub fn changed_lines(old: &str, new: &str) -> (u32, u32, String, String) {
+/// Lines that change, at one place in a file. Line numbers count from 1.
+#[derive(Debug, PartialEq)]
+pub struct Hunk {
+    pub old_start: u32,
+    pub new_start: u32,
+    pub old_text: String,
+    pub new_text: String,
+}
+
+/// The first and last byte of the lines holding a range, without the last newline.
+fn whole_lines(content: &str, start: usize, end: usize) -> (usize, usize) {
+    let first = content[..start]
+        .rfind('\n')
+        .map_or(0, |newline| newline + 1);
+    let last = content[end..]
+        .find('\n')
+        .map_or(content.len(), |offset| end + offset);
+    (first, last)
+}
+
+/// What replacing `old` with `new` changes, place by place. Places on the same line are one hunk.
+pub fn hunks(content: &str, old: &str, new: &str) -> Vec<Hunk> {
+    let mut regions: Vec<(usize, usize)> = Vec::new();
+    for (at, found) in content.match_indices(old) {
+        let (first, last) = whole_lines(content, at, at + found.len());
+        match regions.last_mut() {
+            Some(region) if first <= region.1 => region.1 = last,
+            _ => regions.push((first, last)),
+        }
+    }
+    let mut found = Vec::new();
+    let mut lines_added = 0i64;
+    for (first, last) in regions {
+        let region = &content[first..last];
+        let replaced = region.replace(old, new);
+        let (skipped, old_text, new_text) = changed_lines(region, &replaced);
+        let old_start = line_of(content, first) as i64 + skipped;
+        found.push(Hunk {
+            old_start: old_start as u32,
+            new_start: (old_start + lines_added) as u32,
+            old_text: old_text.clone(),
+            new_text: new_text.clone(),
+        });
+        lines_added += new_text.lines().count() as i64 - old_text.lines().count() as i64;
+    }
+    found
+}
+
+/// The lines that differ between two texts, leaving out what they start and end with in common: how
+/// many lines were left out at the start, and the lines of each.
+fn changed_lines(old: &str, new: &str) -> (i64, String, String) {
     let (old_lines, new_lines): (Vec<&str>, Vec<&str>) =
         (old.lines().collect(), new.lines().collect());
     let same_start = old_lines
@@ -84,11 +132,9 @@ pub fn changed_lines(old: &str, new: &str) -> (u32, u32, String, String) {
         .zip(new_lines[same_start..].iter().rev())
         .take_while(|(a, b)| a == b)
         .count();
-    let old_end = old_lines.len() - same_end;
     (
-        same_start as u32 + 1,
-        old_end as u32,
-        old_lines[same_start..old_end].join("\n"),
+        same_start as i64,
+        old_lines[same_start..old_lines.len() - same_end].join("\n"),
         new_lines[same_start..new_lines.len() - same_end].join("\n"),
     )
 }
@@ -99,6 +145,33 @@ mod tests {
 
     fn replace(content: &str, old: &str, new: &str, all: bool) -> EditResult<String> {
         replaced(Path::new("f.rs"), content, old, new, all)
+    }
+
+    #[test]
+    fn test_hunks_show_each_place_and_not_what_lies_between() {
+        let content = "a x\nkeep\nkeep\nb x x\nkeep\nc x\n";
+        let found = hunks(content, "x", "y\nz");
+        let places: Vec<_> = found
+            .iter()
+            .map(|h| (h.old_start, h.new_start, h.old_text.as_str()))
+            .collect();
+        assert_eq!(places, [(1, 1, "a x"), (4, 5, "b x x"), (6, 9, "c x")]);
+        assert_eq!(found[0].new_text, "a y\nz");
+        assert_eq!(found[1].new_text, "b y\nz y\nz");
+    }
+
+    #[test]
+    fn test_a_hunk_leaves_out_lines_a_long_text_keeps() {
+        let found = hunks("one\ntwo\nthree\n", "one\ntwo\nthree", "one\n2\nthree");
+        assert_eq!(
+            found,
+            [Hunk {
+                old_start: 2,
+                new_start: 2,
+                old_text: "two".to_string(),
+                new_text: "2".to_string(),
+            }]
+        );
     }
 
     #[test]
@@ -163,12 +236,12 @@ mod tests {
 
     #[test]
     fn test_changed_lines_leave_out_what_stays() {
-        let (first, last, old, new) = changed_lines("a\nb\nc\nd\n", "a\nX\nY\nd\n");
-        assert_eq!((first, last), (2, 3));
+        let (skipped, old, new) = changed_lines("a\nb\nc\nd\n", "a\nX\nY\nd\n");
+        assert_eq!(skipped, 1);
         assert_eq!((old.as_str(), new.as_str()), ("b\nc", "X\nY"));
 
-        let (first, last, old, new) = changed_lines("a\na\n", "a\na\na\n");
-        assert_eq!((first, last), (3, 2));
+        let (skipped, old, new) = changed_lines("a\na\n", "a\na\na\n");
+        assert_eq!(skipped, 2);
         assert_eq!((old.as_str(), new.as_str()), ("", "a"));
     }
 }

@@ -49,6 +49,7 @@ mod error;
 mod op;
 mod text;
 
+pub use atomic::is_temporary;
 pub use error::EditError;
 
 /// Result type for edit operations.

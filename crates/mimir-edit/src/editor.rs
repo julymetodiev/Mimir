@@ -2,7 +2,7 @@
 
 use crate::atomic;
 use crate::op::{Diff, EditOp, EditResult as OpResult};
-use crate::text;
+use crate::text::{self, Hunk};
 use crate::{EditError, EditResult};
 use mimir_types::ContentHash;
 use std::path::{Path, PathBuf};
@@ -53,16 +53,21 @@ impl Editor {
         }
 
         let new_content = self.apply_to_content(&content, op)?;
-        let (start_line, end_line, old_region, new_region) =
-            self.extract_change_region(&content, &new_content, op);
-
-        // Generate unified diff
-        let unified = self.generate_unified_diff(path, &old_region, &new_region, start_line);
+        let hunks = match op {
+            EditOp::ReplaceText { old, new, .. } => text::hunks(&content, old, new),
+            _ => vec![self.change_region(&content, &new_content, op)],
+        };
+        let unified = self.generate_unified_diff(path, &hunks);
+        let join = |text: fn(&Hunk) -> &str| hunks.iter().map(text).collect::<Vec<_>>().join("\n");
+        let start_line = hunks.first().map_or(1, |hunk| hunk.old_start);
+        let end_line = hunks.last().map_or(start_line, |hunk| {
+            hunk.old_start + (hunk.old_text.lines().count() as u32).saturating_sub(1)
+        });
 
         Ok(Diff {
             file_path: path.clone(),
-            old_content: old_region,
-            new_content: new_region,
+            old_content: join(|hunk| &hunk.old_text),
+            new_content: join(|hunk| &hunk.new_text),
             start_line,
             end_line,
             unified,
@@ -173,19 +178,15 @@ impl Editor {
         let (target, text) = (path.to_path_buf(), content.to_string());
         tokio::task::spawn_blocking(move || {
             if replaces {
-                atomic::replace_all(&[(target, text)])
-            } else {
-                atomic::create(&target, &text)
+                return atomic::replace_all(&[(target, text)]);
             }
+            atomic::create(&target, &text).map_err(|e| match e.kind() {
+                std::io::ErrorKind::AlreadyExists => EditError::FileExists { path: target },
+                _ => EditError::Io(e),
+            })
         })
         .await
-        .map_err(std::io::Error::other)?
-        .map_err(|e| match e.kind() {
-            std::io::ErrorKind::AlreadyExists => EditError::FileExists {
-                path: path.to_path_buf(),
-            },
-            _ => EditError::Io(e),
-        })?;
+        .map_err(std::io::Error::other)??;
         Ok(OpResult {
             file_path: path.to_path_buf(),
             old_hash: ContentHash::compute(old.as_bytes()),
@@ -385,12 +386,7 @@ impl Editor {
     }
 
     /// Extract the changed region for diff generation.
-    fn extract_change_region(
-        &self,
-        old: &str,
-        new: &str,
-        op: &EditOp,
-    ) -> (u32, u32, String, String) {
+    fn change_region(&self, old: &str, new: &str, op: &EditOp) -> Hunk {
         match op {
             EditOp::ReplaceLines {
                 start_line,
@@ -399,11 +395,14 @@ impl Editor {
                 ..
             } => {
                 let old_lines: Vec<&str> = old.lines().collect();
-                let old_region: String =
-                    old_lines[(*start_line as usize - 1)..(*end_line as usize)].join("\n");
-                (*start_line, *end_line, old_region, new_content.clone())
+                Hunk {
+                    old_start: *start_line,
+                    new_start: *start_line,
+                    old_text: old_lines[(*start_line as usize - 1)..(*end_line as usize)]
+                        .join("\n"),
+                    new_text: new_content.clone(),
+                }
             }
-            EditOp::ReplaceText { .. } => text::changed_lines(old, new),
             _ => {
                 // For byte-based operations, find affected lines
                 let old_lines: Vec<&str> = old.lines().collect();
@@ -417,19 +416,18 @@ impl Editor {
                     }
                 }
 
-                let start_line = (first_diff + 1) as u32;
-                let end_line = start_line + 1;
-
-                let old_region = old_lines.get(first_diff).unwrap_or(&"").to_string();
-                let new_region = new_lines.get(first_diff).unwrap_or(&"").to_string();
-
-                (start_line, end_line, old_region, new_region)
+                Hunk {
+                    old_start: (first_diff + 1) as u32,
+                    new_start: (first_diff + 1) as u32,
+                    old_text: old_lines.get(first_diff).unwrap_or(&"").to_string(),
+                    new_text: new_lines.get(first_diff).unwrap_or(&"").to_string(),
+                }
             }
         }
     }
 
     /// Generate unified diff format.
-    fn generate_unified_diff(&self, path: &Path, old: &str, new: &str, start_line: u32) -> String {
+    fn generate_unified_diff(&self, path: &Path, hunks: &[Hunk]) -> String {
         let shown = self
             .root
             .as_deref()
@@ -439,19 +437,20 @@ impl Editor {
 
         diff.push_str(&format!("--- {}\n", shown.display()));
         diff.push_str(&format!("+++ {}\n", shown.display()));
-        diff.push_str(&format!(
-            "@@ -{},{} +{},{} @@\n",
-            start_line,
-            old.lines().count(),
-            start_line,
-            new.lines().count()
-        ));
-
-        for line in old.lines() {
-            diff.push_str(&format!("-{}\n", line));
-        }
-        for line in new.lines() {
-            diff.push_str(&format!("+{}\n", line));
+        for hunk in hunks {
+            diff.push_str(&format!(
+                "@@ -{},{} +{},{} @@\n",
+                hunk.old_start,
+                hunk.old_text.lines().count(),
+                hunk.new_start,
+                hunk.new_text.lines().count()
+            ));
+            for line in hunk.old_text.lines() {
+                diff.push_str(&format!("-{}\n", line));
+            }
+            for line in hunk.new_text.lines() {
+                diff.push_str(&format!("+{}\n", line));
+            }
         }
 
         diff
