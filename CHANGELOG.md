@@ -6,6 +6,8 @@ All notable changes to Mimir are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-03
+
 ### Added
 
 - **Homebrew**: `brew install julymetodiev/tap/mimir`.

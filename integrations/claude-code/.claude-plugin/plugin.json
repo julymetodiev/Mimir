@@ -1,7 +1,7 @@
 {
   "name": "mimir",
   "displayName": "Mimir",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The call graph of your project for Claude Code: who calls a function and what it calls, from rust-analyzer, with edits by symbol.",
   "author": {
     "name": "Julius ML",
