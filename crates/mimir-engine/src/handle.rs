@@ -1,6 +1,6 @@
 //! Client handle for interacting with the graph actor.
 
-use mimir_error::GraphError;
+use crate::error::GraphError;
 use mimir_protocol::{
     FindOptions, FindResponse, SearchOptions, SearchResponse, StatsResponse, SymbolSource,
     SyncResult, TraceOptions, TraceResponse,
@@ -45,13 +45,9 @@ impl GraphHandle {
                 reply: reply_tx,
             })
             .await
-            .map_err(|_| GraphError::SymbolNotFound {
-                name: "channel closed".to_string(),
-            })?;
+            .map_err(|_| GraphError::EngineStopped)?;
 
-        reply_rx.await.map_err(|_| GraphError::SymbolNotFound {
-            name: "reply channel closed".to_string(),
-        })?
+        reply_rx.await.map_err(|_| GraphError::EngineStopped)?
     }
 
     /// Remove a file from the graph.
@@ -64,13 +60,9 @@ impl GraphHandle {
                 reply: reply_tx,
             })
             .await
-            .map_err(|_| GraphError::SymbolNotFound {
-                name: "channel closed".to_string(),
-            })?;
+            .map_err(|_| GraphError::EngineStopped)?;
 
-        reply_rx.await.map_err(|_| GraphError::SymbolNotFound {
-            name: "reply channel closed".to_string(),
-        })?
+        reply_rx.await.map_err(|_| GraphError::EngineStopped)?
     }
 
     /// Find symbols by name.
@@ -94,13 +86,9 @@ impl GraphHandle {
                 reply: reply_tx,
             })
             .await
-            .map_err(|_| GraphError::SymbolNotFound {
-                name: "channel closed".to_string(),
-            })?;
+            .map_err(|_| GraphError::EngineStopped)?;
 
-        reply_rx.await.map_err(|_| GraphError::SymbolNotFound {
-            name: "reply channel closed".to_string(),
-        })
+        reply_rx.await.map_err(|_| GraphError::EngineStopped)
     }
 
     /// Trace a symbol's relationships.
@@ -124,13 +112,9 @@ impl GraphHandle {
                 reply: reply_tx,
             })
             .await
-            .map_err(|_| GraphError::SymbolNotFound {
-                name: "channel closed".to_string(),
-            })?;
+            .map_err(|_| GraphError::EngineStopped)?;
 
-        reply_rx.await.map_err(|_| GraphError::SymbolNotFound {
-            name: "reply channel closed".to_string(),
-        })
+        reply_rx.await.map_err(|_| GraphError::EngineStopped)
     }
 
     /// Get graph statistics.
@@ -140,13 +124,9 @@ impl GraphHandle {
         self.commands
             .send(GraphCommand::Stats { reply: reply_tx })
             .await
-            .map_err(|_| GraphError::SymbolNotFound {
-                name: "channel closed".to_string(),
-            })?;
+            .map_err(|_| GraphError::EngineStopped)?;
 
-        reply_rx.await.map_err(|_| GraphError::SymbolNotFound {
-            name: "reply channel closed".to_string(),
-        })
+        reply_rx.await.map_err(|_| GraphError::EngineStopped)
     }
 
     /// Trigger a sync operation.
@@ -156,13 +136,9 @@ impl GraphHandle {
         self.commands
             .send(GraphCommand::Sync { reply: reply_tx })
             .await
-            .map_err(|_| GraphError::SymbolNotFound {
-                name: "channel closed".to_string(),
-            })?;
+            .map_err(|_| GraphError::EngineStopped)?;
 
-        reply_rx.await.map_err(|_| GraphError::SymbolNotFound {
-            name: "reply channel closed".to_string(),
-        })?
+        reply_rx.await.map_err(|_| GraphError::EngineStopped)?
     }
 
     /// Find a symbol by name and trace it.
@@ -179,12 +155,8 @@ impl GraphHandle {
                 reply,
             })
             .await
-            .map_err(|_| GraphError::SymbolNotFound {
-                name: "channel closed".to_string(),
-            })?;
-        answer.await.map_err(|_| GraphError::SymbolNotFound {
-            name: "reply channel closed".to_string(),
-        })?
+            .map_err(|_| GraphError::EngineStopped)?;
+        answer.await.map_err(|_| GraphError::EngineStopped)?
     }
 
     /// The source of the symbol a name most likely means, with lines of context around it.
@@ -203,12 +175,8 @@ impl GraphHandle {
                 reply,
             })
             .await
-            .map_err(|_| GraphError::SymbolNotFound {
-                name: "channel closed".to_string(),
-            })?;
-        answer.await.map_err(|_| GraphError::SymbolNotFound {
-            name: "reply channel closed".to_string(),
-        })?
+            .map_err(|_| GraphError::EngineStopped)?;
+        answer.await.map_err(|_| GraphError::EngineStopped)?
     }
 
     /// The first `lines` lines of a symbol, or all of them.
@@ -225,12 +193,8 @@ impl GraphHandle {
                 reply,
             })
             .await
-            .map_err(|_| GraphError::SymbolNotFound {
-                name: "channel closed".to_string(),
-            })?;
-        answer.await.map_err(|_| GraphError::SymbolNotFound {
-            name: "reply channel closed".to_string(),
-        })?
+            .map_err(|_| GraphError::EngineStopped)?;
+        answer.await.map_err(|_| GraphError::EngineStopped)?
     }
 
     /// Scan for changes, wait until no edge is provisional, and save the graph.
@@ -239,12 +203,8 @@ impl GraphHandle {
         self.commands
             .send(GraphCommand::SyncComplete { full, reply })
             .await
-            .map_err(|_| GraphError::SymbolNotFound {
-                name: "channel closed".to_string(),
-            })?;
-        answer.await.map_err(|_| GraphError::SymbolNotFound {
-            name: "reply channel closed".to_string(),
-        })?
+            .map_err(|_| GraphError::EngineStopped)?;
+        answer.await.map_err(|_| GraphError::EngineStopped)?
     }
 
     /// Queue a scan without waiting for it. Commands sent after this one wait for it in the actor.
@@ -281,13 +241,9 @@ impl GraphHandle {
                 reply: reply_tx,
             })
             .await
-            .map_err(|_| GraphError::SymbolNotFound {
-                name: "channel closed".to_string(),
-            })?;
+            .map_err(|_| GraphError::EngineStopped)?;
 
-        reply_rx.await.map_err(|_| GraphError::SymbolNotFound {
-            name: "reply channel closed".to_string(),
-        })?
+        reply_rx.await.map_err(|_| GraphError::EngineStopped)?
     }
 
     /// Request shutdown.
@@ -295,9 +251,7 @@ impl GraphHandle {
         self.commands
             .send(GraphCommand::Shutdown)
             .await
-            .map_err(|_| GraphError::SymbolNotFound {
-                name: "channel closed".to_string(),
-            })
+            .map_err(|_| GraphError::EngineStopped)
     }
 
     /// Subscribe to graph events.

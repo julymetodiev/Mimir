@@ -1,6 +1,6 @@
 //! Graph actor implementation.
 
-use mimir_error::GraphError;
+use crate::error::GraphError;
 use mimir_graph::{CodeGraph, TraceOptions as GraphTraceOptions, TraceRelationship};
 use mimir_parse_core::AdapterRegistry;
 use mimir_protocol::{
@@ -284,12 +284,12 @@ impl GraphActor {
         let adapter = self
             .registry
             .get_by_language(language)
-            .ok_or_else(|| GraphError::FileNotFound { path: path.clone() })?;
+            .ok_or_else(|| GraphError::NoAdapter { language })?;
 
         // Parse the file
         let tree = adapter
             .parse(&content)
-            .ok_or_else(|| GraphError::FileNotFound { path: path.clone() })?;
+            .ok_or_else(|| GraphError::ParseFailed { path: path.clone() })?;
 
         // Assign file ID
         let file_id: FileId = self.ids.next();
@@ -424,11 +424,11 @@ impl GraphActor {
         let indexes =
             tokio::task::spawn_blocking(move || semantics.load(&root, &cache_dir, &scan, refresh))
                 .await
-                .map_err(|e| GraphError::WatcherError(format!("Semantic indexing failed: {e}")))?;
+                .map_err(GraphError::Index)?;
         let report = link(&self.graph, &files, &indexes);
 
         let graph_file = save::save(&self.graph, &self.file_paths, &self.graph_dir())
-            .map_err(|e| GraphError::WatcherError(format!("Saving the graph failed: {e}")))?;
+            .map_err(GraphError::Save)?;
 
         result.link = Some(LinkSummary {
             semantic_calls: report.semantic_calls,
@@ -722,9 +722,11 @@ impl GraphActor {
     fn handle_search(&self, options: &SearchOptions) -> Result<SearchResponse, GraphError> {
         use regex::Regex;
 
-        let pattern = Regex::new(&options.pattern).map_err(|e| {
-            GraphError::WatcherError(format!("Invalid pattern '{}': {e}", options.pattern))
-        })?;
+        let pattern =
+            Regex::new(&options.pattern).map_err(|source| GraphError::InvalidPattern {
+                pattern: options.pattern.clone(),
+                source,
+            })?;
 
         let limit = options.limit.unwrap_or(20) as usize;
         let mut matches = Vec::new();
@@ -775,10 +777,7 @@ impl GraphActor {
 
         // Scan the directory
         let scanner = Scanner::new(&self.root);
-        let scanned_files = scanner
-            .scan()
-            .await
-            .map_err(|e| GraphError::WatcherError(format!("Scan failed: {}", e)))?;
+        let scanned_files = scanner.scan().await.map_err(GraphError::Scan)?;
 
         info!(
             "Scanned {} files in {:?}",

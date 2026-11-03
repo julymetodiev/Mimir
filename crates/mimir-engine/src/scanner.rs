@@ -2,7 +2,6 @@
 
 use chrono::{DateTime, TimeZone, Utc};
 use ignore::WalkBuilder;
-use mimir_error::StorageError;
 use mimir_types::{ContentHash, Language};
 use std::path::{Path, PathBuf};
 use tokio::fs;
@@ -51,7 +50,7 @@ impl Scanner {
     }
 
     /// Scan the directory and return all matching files.
-    pub async fn scan(&self) -> Result<Vec<ScannedFile>, StorageError> {
+    pub async fn scan(&self) -> std::io::Result<Vec<ScannedFile>> {
         let root = self.root.clone();
         let max_size = self.max_file_size;
 

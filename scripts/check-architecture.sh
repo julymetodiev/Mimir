@@ -12,7 +12,7 @@ done
 
 TEST_FILES='(^|/)tests?(/|\.rs$)|_tests?(/|\.rs$)|(^|/)test_[a-z_]+\.rs$|/benches/|/examples/|(^|/)build\.rs$'
 src() { # $@ = path prefixes; prints non-test .rs files
-  git ls-files --cached --others --exclude-standard -- "$@" | grep -E '\.rs$' | grep -v -E "$TEST_FILES" || true
+  git ls-files --cached --others --exclude-standard -- "$@" | sort -u | grep -E '\.rs$' | grep -v -E "$TEST_FILES" || true
 }
 count() { # $1 = regex, files on stdin; drops inline test modules
   local re=$1 n=0 f c

@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
     "crates/mimir-types",
-    "crates/mimir-error",
     # M2: Graph crates
     "crates/mimir-parse-core",
     "crates/mimir-parse-rust",
@@ -30,7 +29,6 @@ repository = "https://github.com/JuliusML/Mimir"
 [workspace.dependencies]
 # Internal crates - Layer 0
 mimir-types = { path = "crates/mimir-types" }
-mimir-error = { path = "crates/mimir-error" }
 
 # Internal crates - Layer 2 (Parsing)
 mimir-parse-core = { path = "crates/mimir-parse-core" }

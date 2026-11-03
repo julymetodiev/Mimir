@@ -1,6 +1,6 @@
 //! File system watcher for automatic graph updates.
 
-use mimir_error::GraphError;
+use crate::error::GraphError;
 use mimir_types::Language;
 use notify::RecursiveMode;
 use notify_debouncer_mini::{DebouncedEventKind, new_debouncer};
@@ -93,7 +93,7 @@ impl WatcherHandle {
         self.shutdown_tx
             .send(())
             .await
-            .map_err(|_| GraphError::WatcherError("watcher already shut down".to_string()))
+            .map_err(|_| GraphError::Watcher("watcher already shut down".to_string()))
     }
 }
 

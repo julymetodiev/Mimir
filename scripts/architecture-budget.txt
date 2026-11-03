@@ -11,6 +11,6 @@ string_errors 0
 super_paths 2
 swallowed 9
 transport_reach 1
-unused_deps 2
+unused_deps 0
 unwrap_expect 3
-wrong_deps 6
+wrong_deps 1

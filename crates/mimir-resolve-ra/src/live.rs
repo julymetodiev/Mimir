@@ -497,10 +497,9 @@ fn read_message(reader: &mut impl BufRead) -> Option<Value> {
         }
         if let Some((name, value)) = line.split_once(':')
             && name.eq_ignore_ascii_case("content-length")
+            && let Ok(found) = value.trim().parse::<usize>()
         {
-            if let Ok(found) = value.trim().parse::<usize>() {
-                length = Some(found);
-            }
+            length = Some(found);
         }
     }
     let mut body = vec![0; length?];

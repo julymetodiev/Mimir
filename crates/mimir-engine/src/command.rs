@@ -1,6 +1,6 @@
 //! Commands for the graph actor.
 
-use mimir_error::GraphError;
+use crate::error::GraphError;
 use mimir_protocol::{
     FindOptions, FindResponse, SearchOptions, SearchResponse, StatsResponse, SymbolSource,
     SyncResult, TraceOptions, TraceResponse,

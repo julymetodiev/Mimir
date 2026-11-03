@@ -64,6 +64,7 @@
 mod actor;
 mod channel;
 mod command;
+mod error;
 mod event;
 mod handle;
 mod save;
@@ -78,6 +79,7 @@ pub use channel::{
     EventSender, command_channel, event_channel,
 };
 pub use command::GraphCommand;
+pub use error::GraphError;
 pub use event::{FileEvent, GraphEvent};
 pub use handle::GraphHandle;
 pub use scanner::{ScannedFile, Scanner};
