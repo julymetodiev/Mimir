@@ -10,6 +10,8 @@ Run them on a throwaway copy of a project that is a git repository: they edit fi
 `rust-analyzer` runs its build scripts and proc macros. Without git, `.gitignore` does not apply
 and `target/` ends up in the graph. In `.mimir/graph`, the project's index is the largest `.scip`.
 
+The daemon starts by itself with the first command; after rebuilding `mimir`, run `mimir daemon stop` between measurements.
+
 | Script | Answers |
 |---|---|
 | `ra_truth.py` | Which calls does the language server's call hierarchy report? Input for `scip_eval.py`. |
@@ -18,7 +20,7 @@ and `target/` ends up in the graph. In `.mimir/graph`, the project's index is th
 | `value_eval.py` | How do function values from syntax rules compare with those from an index? |
 | `lsp_probe.py` | How fast and how exact is a running analyzer on given files? |
 | `edit_compare.py` | After edits, does a running analyzer give what a new index gives? |
-| `daemon_latency.py` | How long does `trace` take through the daemon, from no index on and after edits? |
+| `daemon_latency.py` | How long does `trace` take through the daemon, from no daemon on and after edits? |
 | `graph_diff.py` | Which edges differ between two `graph.json`? |
 | `roots.py` | What does each index of a project add, and which files does none cover? |
 

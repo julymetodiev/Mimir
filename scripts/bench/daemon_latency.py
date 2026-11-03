@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""How long does trace take through the daemon, from no index on, and after edits?
+"""How long does trace take through the daemon, from no daemon on, and after edits?
 
 Usage: daemon_latency.py MIMIR PROJECT SYMBOL FILE
-PROJECT must be a git repository you can throw away, with a short path: the daemon's socket
-is inside it and the limit is about 100 characters. FILE gets a comment line on top, three times.
+PROJECT must be a git repository you can throw away. The daemon starts by itself with the first
+command, so the script stops any running one first; the first trace then pays for the start.
+FILE gets a comment line on top, three times.
 """
 import pathlib, re, subprocess, sys, tempfile, time
 
@@ -13,7 +14,7 @@ project = pathlib.Path(project)
 
 def run(*args):
     started = time.time()
-    # To a file: the daemon inherits a pipe, and reading one would wait for the daemon to end.
+    # To a file, not a pipe: a pipe is read to its end, which waits for every process holding it.
     with tempfile.TemporaryFile("w+") as out:
         subprocess.run([mimir, *args], cwd=project, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, timeout=300)
         out.seek(0)
@@ -26,16 +27,12 @@ def trace():
     return took, int(callers.group(1)) if callers else 0, "Partial:" in out
 
 
+run("daemon", "stop")
 run("init")
-with tempfile.TemporaryFile("w") as log:
-    started = time.time()
-    subprocess.Popen([mimir, "daemon", "start"], cwd=project, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
-while "Daemon: running" not in run("daemon", "status")[1] and time.time() - started < 120:
-    time.sleep(0.5)
-print(f"daemon running after {time.time() - started:.1f}s", flush=True)
+started = time.time()
 
 took, callers, partial = trace()
-print(f"first trace: {took:.2f}s callers={callers} partial={partial}", flush=True)
+print(f"first answer from no daemon: {took:.2f}s callers={callers} partial={partial}", flush=True)
 while partial and time.time() - started < 600:
     time.sleep(3)
     took, callers, partial = trace()
