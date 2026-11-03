@@ -93,6 +93,8 @@ pub struct GrepResponse {
     pub matches: Vec<GrepMatch>,
     /// All that match, of which `matches` may be the first few.
     pub total: usize,
+    /// Files passed over for their size, so a match there is not among these.
+    pub too_large: Vec<PathBuf>,
 }
 
 /// Files of a project.

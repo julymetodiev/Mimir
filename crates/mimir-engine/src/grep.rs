@@ -14,8 +14,12 @@ const MAX_FILE_BYTES: u64 = 2 * 1024 * 1024;
 /// A line over this is minified; the match still counts, without all of its line.
 const MAX_LINE_CHARS: usize = 400;
 
-/// Everything that matches, in path and line order, each without its symbol.
-pub fn search(root: &Path, options: &GrepOptions) -> Result<Vec<GrepMatch>, GraphError> {
+/// Everything that matches, in path and line order, each without its symbol, and the files too
+/// large to search.
+pub fn search(
+    root: &Path,
+    options: &GrepOptions,
+) -> Result<(Vec<GrepMatch>, Vec<PathBuf>), GraphError> {
     let pattern = if options.literal {
         regex::escape(&options.pattern)
     } else {
@@ -30,18 +34,26 @@ pub fn search(root: &Path, options: &GrepOptions) -> Result<Vec<GrepMatch>, Grap
         })?;
 
     let mut found = Vec::new();
+    let mut too_large = Vec::new();
     for entry in project_files::walk(root, options.path.as_deref())?.flatten() {
         let path = entry.path();
-        let small = entry
-            .metadata()
-            .is_ok_and(|file| file.is_file() && file.len() <= MAX_FILE_BYTES);
+        let Ok(file) = entry.metadata() else {
+            continue;
+        };
+        if !file.is_file() {
+            continue;
+        }
+        let relative = path.strip_prefix(root).unwrap_or(path).to_path_buf();
+        if file.len() > MAX_FILE_BYTES {
+            too_large.push(relative);
+            continue;
+        }
         // A file that is not text cannot be read as text, and has nothing to find.
-        if let (true, Ok(text)) = (small, fs::read_to_string(path)) {
-            let relative = path.strip_prefix(root).unwrap_or(path).to_path_buf();
+        if let Ok(text) = fs::read_to_string(path) {
             matches_in(&relative, &text, &regex, options.context, &mut found);
         }
     }
-    Ok(found)
+    Ok((found, too_large))
 }
 
 fn matches_in(
@@ -106,7 +118,7 @@ mod tests {
         let dir = project();
         let mut asked = options("needle");
         asked.ignore_case = true;
-        let found = search(dir.path(), &asked).unwrap();
+        let (found, _) = search(dir.path(), &asked).unwrap();
         let places: Vec<_> = found
             .iter()
             .map(|m| (m.path.to_str().unwrap(), m.line))
@@ -117,18 +129,18 @@ mod tests {
     #[test]
     fn test_case_literal_context_and_path() {
         let dir = project();
-        assert_eq!(search(dir.path(), &options("needle")).unwrap().len(), 1);
+        assert_eq!(search(dir.path(), &options("needle")).unwrap().0.len(), 1);
 
         let mut literal = options("Needle.*");
         literal.literal = true;
         assert_eq!(
-            search(dir.path(), &literal).unwrap()[0].path,
+            search(dir.path(), &literal).unwrap().0[0].path,
             Path::new("notes.md")
         );
 
         let mut around = options("needle");
         around.context = 1;
-        let found = &search(dir.path(), &around).unwrap()[0];
+        let found = &search(dir.path(), &around).unwrap().0[0];
         assert_eq!(
             (found.before.as_slice(), found.after.as_slice()),
             (&["one".to_string()][..], &["three".to_string()][..])
@@ -136,9 +148,21 @@ mod tests {
 
         let mut only = options("(?i)needle");
         only.path = Some("*.md".to_string());
-        let found = search(dir.path(), &only).unwrap();
+        let (found, _) = search(dir.path(), &only).unwrap();
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].path, Path::new("notes.md"));
+    }
+
+    #[test]
+    fn test_a_file_too_large_is_named_and_not_searched() {
+        let dir = project();
+        let large = "needle\n".repeat(MAX_FILE_BYTES as usize / 7 + 1);
+        fs::write(dir.path().join("large.log"), large).unwrap();
+
+        let (found, too_large) = search(dir.path(), &options("needle")).unwrap();
+
+        assert_eq!(found.len(), 1);
+        assert_eq!(too_large, [PathBuf::from("large.log")]);
     }
 
     #[test]

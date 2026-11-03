@@ -199,6 +199,9 @@ pub struct Grep {
     matches: Vec<Line>,
     /// All that match, of which `matches` may be the first few.
     total: usize,
+    /// Files passed over for their size: a match there is not among these.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    too_large: Vec<std::path::PathBuf>,
 }
 
 impl From<GrepResponse> for Grep {
@@ -206,6 +209,7 @@ impl From<GrepResponse> for Grep {
         Self {
             matches: found.matches.into_iter().map(Line::from).collect(),
             total: found.total,
+            too_large: found.too_large,
         }
     }
 }

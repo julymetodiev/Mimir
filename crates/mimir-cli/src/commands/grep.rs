@@ -37,5 +37,8 @@ pub async fn execute(options: GrepOptions, json: bool) -> Result<()> {
     if found.matches.len() < found.total {
         println!("Showing {} of {} matches", found.matches.len(), found.total);
     }
+    for file in &found.too_large {
+        println!("Not searched, too large: {}", file.display());
+    }
     Ok(())
 }

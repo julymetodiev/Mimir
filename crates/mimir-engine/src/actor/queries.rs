@@ -249,9 +249,10 @@ impl GraphActor {
     pub async fn handle_grep(&self, options: GrepOptions) -> Result<GrepResponse, GraphError> {
         let limit = options.limit.unwrap_or(DEFAULT_GREP_LIMIT) as usize;
         let root = self.root.clone();
-        let mut matches = tokio::task::spawn_blocking(move || grep::search(&root, &options))
-            .await
-            .map_err(GraphError::Grep)??;
+        let (mut matches, too_large) =
+            tokio::task::spawn_blocking(move || grep::search(&root, &options))
+                .await
+                .map_err(GraphError::Grep)??;
         let total = matches.len();
         matches.truncate(limit);
 
@@ -265,7 +266,11 @@ impl GraphActor {
                 found.symbol = self.symbol_at(*id, found.line);
             }
         }
-        Ok(GrepResponse { matches, total })
+        Ok(GrepResponse {
+            matches,
+            total,
+            too_large,
+        })
     }
 
     /// The fullest name of the innermost symbol holding a line.
