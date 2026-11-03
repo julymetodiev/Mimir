@@ -47,6 +47,8 @@ pub enum TraceRelationship {
     CallerByValue,
     /// Held as a value by the symbol above it, which may call it at runtime.
     CalleeByValue,
+    /// Reads the constant above it.
+    Reader,
 }
 
 /// Result of a trace operation.

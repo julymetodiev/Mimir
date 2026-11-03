@@ -154,6 +154,8 @@ pub struct LinkSummary {
     pub implementations: usize,
     /// Edges from a symbol to a function it names without calling.
     pub function_values: usize,
+    /// Edges from a symbol to a plain constant it reads.
+    pub constant_uses: usize,
     /// Import edges.
     pub imports: usize,
     /// Files covered by a semantic index.

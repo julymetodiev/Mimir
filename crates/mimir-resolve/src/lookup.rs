@@ -167,16 +167,17 @@ impl SymbolTable {
     }
 
     /// The only constant or static with this name: in this file first, then in the project.
-    pub fn only_constant(&self, file: FileId, name: &str) -> Option<&Arc<Symbol>> {
+    pub fn only_constant(&self, file: FileId, name: &str, scoped: bool) -> Option<&Arc<Symbol>> {
         let all: Vec<_> = self
             .named(name)
             .iter()
             .filter(|s| s.kind == SymbolKind::Constant)
             .collect();
         let local: Vec<_> = all.iter().filter(|s| s.file_id == file).collect();
+        // A path can lead to any crate, so the one in this file is no more likely than another.
         match (local.as_slice(), all.as_slice()) {
-            ([one], _) => Some(**one),
-            ([], [one]) => Some(*one),
+            (_, [one]) => Some(*one),
+            ([one], _) if !scoped => Some(**one),
             _ => None,
         }
     }

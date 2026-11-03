@@ -69,7 +69,10 @@ impl From<&TraceNode> for Step {
                 TraceRelation::CallerViaTrait => Some("via trait"),
                 TraceRelation::Implementation => Some("implementation"),
                 TraceRelation::CallerByValue | TraceRelation::CalleeByValue => Some("as value"),
-                TraceRelation::Root | TraceRelation::Caller | TraceRelation::Callee => None,
+                TraceRelation::Root
+                | TraceRelation::Caller
+                | TraceRelation::Callee
+                | TraceRelation::Reader => None,
             },
         }
     }

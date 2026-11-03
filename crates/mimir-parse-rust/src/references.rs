@@ -183,7 +183,11 @@ fn extract_constant_read(
             }
             *node
         }
-        "scoped_identifier" => node.child_by_field_name("name")?,
+        "scoped_identifier" => {
+            let path = node.child_by_field_name("path")?.utf8_text(source).ok()?;
+            let name = node.child_by_field_name("name")?;
+            return Some(constant_read(name, source, container)?.with_context(path.to_string()));
+        }
         _ => return None,
     };
     constant_read(name_node, source, container)

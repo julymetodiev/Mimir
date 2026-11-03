@@ -128,6 +128,7 @@ impl GraphActor {
                     TraceRelationship::Implementation => TraceRelation::Implementation,
                     TraceRelationship::CallerByValue => TraceRelation::CallerByValue,
                     TraceRelationship::CalleeByValue => TraceRelation::CalleeByValue,
+                    TraceRelationship::Reader => TraceRelation::Reader,
                 },
             })
             .collect()

@@ -34,6 +34,7 @@ the same operations are tools the model can use: `trace`, `search`, `read`, `edi
   runtime.
 - `[as value, possible]`: a function named without being called, as in `.map(helper)`, or a constant
   holding one. It may run later, or never.
+- `[reads it]`: on a constant or static, a symbol that reads it.
 - `Partial:` analysis is still running, so calls may be missing. Ask again shortly.
 
 Without `rust-analyzer`, or with `MIMIR_NO_SCIP=1`, only syntax rules apply. They find about half the
@@ -62,8 +63,7 @@ names across types and crates, calls inside macros, trait methods. Scripts behin
 [scripts/bench](scripts/bench/README.md).
 
 Known limits: only Rust. A proc macro that fails silently while the index is written loses its calls;
-one that says so is handled. A plain constant has no callers in `trace`; only one holding a function
-does. A function named in an attribute, as in `#[serde(skip_serializing_if = "name")]`, has no call.
+one that says so is handled. Types and fields have no `trace`, only functions and constants; `grep` finds those. A function named in an attribute, as in `#[serde(skip_serializing_if = "name")]`, has no call.
 
 ## Develop
 

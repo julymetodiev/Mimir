@@ -131,6 +131,21 @@ pub fn uses_plain() -> u32 {
     PLAIN
 }
 
+/// Two constants share this name across crates.
+pub const LIMIT: u32 = 1;
+
+pub fn uses_own_limit() -> u32 {
+    LIMIT
+}
+
+pub fn uses_other_limit() -> u32 {
+    alpha::LIMIT
+}
+
+pub fn uses_limit_in_macro() -> String {
+    format!("{}", LIMIT)
+}
+
 /// A parameter named like a function is not that function.
 pub fn shadowed(helper: fn() -> u32) -> Option<u32> {
     std::iter::once_with(helper).next()

@@ -153,9 +153,9 @@ pub fn resolve_constant_uses(
             .filter(|r| r.kind == ReferenceKind::Read)
         {
             let from = table.any_at(file.file_id, reference.span.start);
-            if let (Some(from), Some(constant)) =
-                (from, table.only_constant(file.file_id, &reference.name))
-            {
+            let scoped = reference.context.is_some();
+            let constant = table.only_constant(file.file_id, &reference.name, scoped);
+            if let (Some(from), Some(constant)) = (from, constant) {
                 uses.push(ConstantUse {
                     from: from.id,
                     constant: constant.id,

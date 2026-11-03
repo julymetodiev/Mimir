@@ -93,6 +93,7 @@ fn show(node: &TraceNode, arrow: &str) {
         TraceRelation::CallerViaTrait => " [via trait, possible]",
         TraceRelation::Implementation => " [implementation, possible]",
         TraceRelation::CallerByValue | TraceRelation::CalleeByValue => " [as value, possible]",
+        TraceRelation::Reader => " [reads it]",
         _ => "",
     };
     println!("{indent}{arrow} {name} ({}){mark}", symbol.kind);

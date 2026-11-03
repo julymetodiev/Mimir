@@ -2,6 +2,12 @@
 //! resolver is graded by itself. `fixtures/resolve-workspace` holds the traps: same names
 //! across types and crates, calls inside macros, trait methods, nested functions.
 
+mod expected;
+
+use expected::{
+    CALLS, CONSTANT_READS, IMPLEMENTS, IMPLEMENTS_BY_SYNTAX, NEEDS_TYPES, SOURCES, VALUES,
+    VALUES_NEED_TYPES,
+};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -14,87 +20,6 @@ use mimir_resolve_ra::{Analyzers, load_or_generate};
 use mimir_types::{FileId, IdGenerator, Symbol, SymbolId, SymbolKind};
 
 type Edge = (String, String);
-
-/// Every call in the fixture to a function in the fixture: `crate::owner::name` -> same.
-const CALLS: &[(&str, &str)] = &[
-    ("alpha::Store::load_twice", "alpha::Store::load"),
-    ("alpha::Disk::get", "alpha::Disk::read"),
-    ("alpha::Disk::read", "alpha::helper"),
-    ("alpha::Disk::load", "alpha::Disk::new"),
-    ("alpha::Disk::load", "alpha::Disk::get"),
-    ("alpha::helper", "alpha::inner"),
-    ("beta::direct", "beta::helper"),
-    ("beta::imported", "alpha::helper"),
-    ("beta::by_type", "alpha::Memory::new"),
-    ("beta::by_type", "alpha::Memory::get"),
-    ("beta::other_type", "alpha::Disk::new"),
-    ("beta::other_type", "alpha::Disk::get"),
-    ("beta::in_macro", "alpha::Disk::new"),
-    ("beta::in_macro", "alpha::Disk::get"),
-    ("beta::through_trait", "alpha::Store::load_twice"),
-    ("beta::turbofish", "alpha::generic"),
-    ("beta::local_use", "alpha::generic"),
-    ("beta::doc_link", "beta::nested"),
-    ("beta::forwarding", "alpha::Disk::new"),
-    ("alpha::one_calls", "alpha::shared"),
-    ("alpha::two_calls", "alpha::shared"),
-];
-
-/// Calls syntax leaves out: the receiver is not `self`, or the name is not unique.
-const NEEDS_TYPES: &[(&str, &str)] = &[
-    ("alpha::Store::load_twice", "alpha::Store::load"),
-    ("beta::imported", "alpha::helper"),
-    ("beta::by_type", "alpha::Memory::get"),
-    ("beta::other_type", "alpha::Disk::get"),
-    ("beta::in_macro", "alpha::Disk::get"),
-    ("beta::through_trait", "alpha::Store::load_twice"),
-    ("alpha::Disk::load", "alpha::Disk::get"),
-    ("beta::local_use", "alpha::generic"),
-];
-
-/// Every method implementing a trait of the fixture.
-const IMPLEMENTS: &[(&str, &str)] = &[
-    ("alpha::Disk::load", "alpha::Store::load"),
-    ("alpha::Memory::load", "alpha::Store::load"),
-    ("alpha::Disk::name", "alpha::Named::name"),
-    ("beta::Own::load", "beta::Store::load"),
-    ("beta::Aliased::name", "alpha::Named::name"),
-];
-
-/// Those syntax links: `Store` is two traits, so it leaves their methods out.
-const IMPLEMENTS_BY_SYNTAX: &[(&str, &str)] = &[("alpha::Disk::name", "alpha::Named::name")];
-
-/// Every function named without being called, by the symbol that holds it.
-const VALUES: &[(&str, &str)] = &[
-    ("beta::as_value", "beta::helper"),
-    ("beta::method_as_value", "alpha::Disk::get"),
-    ("beta::trait_method_as_value", "alpha::Disk::load"),
-    ("beta::dyn_method_as_value", "alpha::Store::load"),
-    ("beta::generic_as_value", "alpha::generic"),
-    ("beta::shorthand", "beta::helper"),
-    ("beta::value_in_macro", "beta::helper"),
-    ("beta::HANDLERS", "beta::helper"),
-    ("beta::HANDLERS", "alpha::helper"),
-    ("beta::run_handlers", "beta::HANDLERS"),
-    ("beta::handlers_in_macro", "beta::HANDLERS"),
-    ("beta::NESTED", "beta::HANDLERS"),
-    ("beta::run_nested", "beta::NESTED"),
-];
-
-/// Those syntax leaves out: macro tokens, a trait name used twice, a name used twice.
-const VALUES_NEED_TYPES: &[(&str, &str)] = &[
-    ("beta::value_in_macro", "beta::helper"),
-    ("beta::trait_method_as_value", "alpha::Disk::load"),
-    ("beta::dyn_method_as_value", "alpha::Store::load"),
-    ("beta::HANDLERS", "alpha::helper"),
-];
-
-const SOURCES: [&str; 4] = [
-    "alpha/src/lib.rs",
-    "beta/src/lib.rs",
-    "alpha/tests/one.rs",
-    "alpha/tests/two.rs",
-];
 
 fn workspace() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/resolve-workspace")
@@ -245,6 +170,16 @@ fn syntax_rules_never_guess() {
         edges_of_kind(&graph, &files, EdgeKind::UsesAsValue),
         by_syntax
     );
+    // Without types a name with two declarations is left out, and no read lands on the wrong one.
+    let reads = edges_of_kind(&graph, &files, EdgeKind::UsesConstant);
+    assert!(reads.is_subset(&expected(CONSTANT_READS)), "{reads:?}");
+    assert!(
+        !reads
+            .iter()
+            .any(|(from, _)| from == "beta::uses_other_limit"),
+        "two constants could be meant: {reads:?}"
+    );
+    assert!(reads.contains(&("beta::uses_plain".to_string(), "beta::PLAIN".to_string())));
     assert_eq!(report.semantic_files, 0);
     assert_eq!(report.syntax_files, SOURCES.len());
 }
@@ -289,6 +224,24 @@ fn semantic_index_finds_every_call() {
         edges_of_kind(&graph, &files, EdgeKind::UsesAsValue),
         expected(VALUES)
     );
+    assert_eq!(
+        edges_of_kind(&graph, &files, EdgeKind::UsesConstant),
+        expected(CONSTANT_READS)
+    );
+
+    let plain = find(&graph, &files, "beta::PLAIN");
+    let trace = graph.trace(plain, trace_options(true, false, 1)).unwrap();
+    assert_eq!(
+        trace
+            .callers
+            .iter()
+            .map(|n| (label(&n.symbol, &files), n.relationship))
+            .collect::<Vec<_>>(),
+        [("beta::uses_plain".to_string(), TraceRelationship::Reader)]
+    );
+    let reader = find(&graph, &files, "beta::uses_plain");
+    let trace = graph.trace(reader, trace_options(false, true, 1)).unwrap();
+    assert!(trace.callees.is_empty(), "a read is not a callee");
 
     let names = |nodes: &[mimir_graph::TraceNode], relationship| {
         let mut names: Vec<_> = nodes
@@ -381,8 +334,13 @@ fn edited_files_match_a_new_index() {
         std::fs::write(scratch.join(path), text.replacen(from, to, 1)).unwrap();
     };
     let edges = |graph: &CodeGraph, files: &[ProjectFile]| {
-        [EdgeKind::Calls, EdgeKind::UsesAsValue, EdgeKind::Implements]
-            .map(|kind| edges_of_kind(graph, files, kind))
+        [
+            EdgeKind::Calls,
+            EdgeKind::UsesAsValue,
+            EdgeKind::UsesConstant,
+            EdgeKind::Implements,
+        ]
+        .map(|kind| edges_of_kind(graph, files, kind))
     };
 
     let cache = scratch.join("cache");
@@ -459,7 +417,11 @@ fn find(graph: &CodeGraph, files: &[ProjectFile], wanted: &str) -> SymbolId {
         .iter()
         .flat_map(|f| graph.symbols_in_file(f.file_id))
         .find(|s| {
-            label(s, files) == wanted && matches!(s.kind, SymbolKind::Function | SymbolKind::Method)
+            label(s, files) == wanted
+                && matches!(
+                    s.kind,
+                    SymbolKind::Function | SymbolKind::Method | SymbolKind::Constant
+                )
         })
         .unwrap_or_else(|| panic!("no symbol {wanted}"))
         .id

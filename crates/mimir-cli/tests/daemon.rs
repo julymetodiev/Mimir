@@ -227,3 +227,25 @@ fn test_grep_finds_text_anywhere_and_names_the_symbol() {
         .stderr(contains("Invalid pattern"));
     stop(dir);
 }
+
+#[test]
+fn test_trace_of_a_constant_shows_who_reads_it() {
+    let project = project();
+    let dir = project.path();
+    fs::write(
+        dir.join("src/lib.rs"),
+        "pub const MAX: u32 = 1;\n\npub fn reader() -> u32 {\n    MAX\n}\n",
+    )
+    .unwrap();
+    mimir(dir)
+        .args(["trace", "-s", "MAX", "--callers"])
+        .assert()
+        .success()
+        .stdout(contains("← reader (function) [reads it]"));
+    mimir(dir)
+        .args(["trace", "-s", "reader", "--callees"])
+        .assert()
+        .success()
+        .stdout(contains("MAX").not());
+    stop(dir);
+}

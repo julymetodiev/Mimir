@@ -94,3 +94,10 @@ impl std::fmt::Display for Disk {
         write!(f, "disk")
     }
 }
+
+/// Shares its name with a constant in another crate.
+pub const LIMIT: u32 = 2;
+
+pub fn uses_limit_here() -> u32 {
+    LIMIT
+}

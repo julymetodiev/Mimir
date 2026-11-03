@@ -48,6 +48,8 @@ pub struct LinkReport {
     pub implementations: usize,
     /// Edges from a symbol to a function it names without calling.
     pub function_values: usize,
+    /// Edges from a symbol to a plain constant it reads.
+    pub constant_uses: usize,
     /// Import edges.
     pub imports: usize,
     /// Files covered by a semantic index.
@@ -74,6 +76,7 @@ pub fn link(graph: &CodeGraph, files: &[ProjectFile], indexes: &[ScipIndex]) -> 
     syntax::resolve_constant_uses(&table, files, &covered, &mut constant_uses);
     add_uses_of_function_holders(graph, &mut edges, &constant_uses);
     let function_values = edges.count(EdgeKind::UsesAsValue);
+    let constant_uses = edges.count(EdgeKind::UsesConstant);
     let linked_calls = edges.len();
     syntax::resolve_imports(&table, files, &mut edges);
     let imports = edges.len() - linked_calls;
@@ -89,6 +92,7 @@ pub fn link(graph: &CodeGraph, files: &[ProjectFile], indexes: &[ScipIndex]) -> 
         syntax_calls,
         implementations,
         function_values,
+        constant_uses,
         imports,
         semantic_files,
         live_files: indexes.iter().map(|index| index.live.len()).sum(),
@@ -96,8 +100,9 @@ pub fn link(graph: &CodeGraph, files: &[ProjectFile], indexes: &[ScipIndex]) -> 
     }
 }
 
-/// Add an edge for each use of a constant that holds a function, directly or through another
-/// constant. Other constants are left out: `MAX_SIZE` under every function would hide the rest.
+/// Add an edge for each use of a constant. One that holds a function, directly or through another
+/// constant, is a possible call. Any other is only a read, which `trace` shows on the constant and
+/// not on the reader: `MAX_SIZE` under every function would hide the rest.
 fn add_uses_of_function_holders(graph: &CodeGraph, edges: &mut EdgeSet, uses: &[ConstantUse]) {
     let is_constant = |id: SymbolId| {
         graph
@@ -124,7 +129,18 @@ fn add_uses_of_function_holders(graph: &CodeGraph, edges: &mut EdgeSet, uses: &[
             }
         }
         if !grew {
-            return;
+            break;
+        }
+    }
+    for used in uses {
+        if !holders.contains(&used.constant) && used.from != used.constant {
+            edges.add(
+                used.from,
+                used.constant,
+                EdgeKind::UsesConstant,
+                used.span,
+                used.confidence,
+            );
         }
     }
 }

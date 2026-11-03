@@ -107,6 +107,7 @@ impl GraphActor {
             syntax_calls: report.syntax_calls,
             implementations: report.implementations,
             function_values: report.function_values,
+            constant_uses: report.constant_uses,
             imports: report.imports,
             semantic_files: report.semantic_files,
             live_files: report.live_files,

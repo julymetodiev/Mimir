@@ -11,6 +11,9 @@ pub enum EdgeKind {
     Calls,
     /// Names a function without calling it, as in `.map(name)`. It may run later, or never.
     UsesAsValue,
+    /// Reads a constant or static that holds no function. `trace` of the constant shows it, and
+    /// `trace` of the reader does not: `MAX_SIZE` under every function would hide the rest.
+    UsesConstant,
     /// Import relationship.
     Imports,
     /// Implements trait/interface.
@@ -23,6 +26,7 @@ impl EdgeKind {
         match self {
             EdgeKind::Calls => "Calls",
             EdgeKind::UsesAsValue => "UsesAsValue",
+            EdgeKind::UsesConstant => "UsesConstant",
             EdgeKind::Imports => "Imports",
             EdgeKind::Implements => "Implements",
         }

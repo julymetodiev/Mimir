@@ -173,7 +173,17 @@ impl CodeGraph {
             .callers(symbol_id)
             .into_iter()
             .map(|caller| (caller, TraceRelationship::Caller));
-        let callers: Vec<_> = direct.chain(by_value).chain(via_trait).collect();
+        let readers = self
+            .relations
+            .incoming(symbol_id)
+            .into_iter()
+            .filter(|(_, edge)| edge.kind == EdgeKind::UsesConstant)
+            .map(|(reader, _)| (reader, TraceRelationship::Reader));
+        let callers: Vec<_> = direct
+            .chain(by_value)
+            .chain(via_trait)
+            .chain(readers)
+            .collect();
 
         for (caller_id, relationship) in callers {
             if !visited.insert(caller_id) {

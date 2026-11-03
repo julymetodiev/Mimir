@@ -123,6 +123,8 @@ pub enum TraceRelation {
     CallerByValue,
     /// Held as a value by the symbol above it, which may call it at runtime.
     CalleeByValue,
+    /// Reads the constant being traced.
+    Reader,
 }
 
 /// Response for trace queries.

@@ -109,7 +109,8 @@ running analyzer too. Without `rust-analyzer` only syntax rules apply, and `sync
 files that covers.
 
 Edge kinds: `Calls` is exact. `UsesAsValue` (function values, constants holding functions) and
-`Implements` are possible targets. Syntax rules link a call only when its form allows one target.
+`Implements` are possible targets. `UsesConstant` is a read of any other constant, shown when tracing
+the constant and not the reader. Syntax rules link a call only when its form allows one target.
 
 ## 6. Checks
 
