@@ -71,21 +71,9 @@ impl ExtractedSymbol {
         self
     }
 
-    /// Set the signature.
-    pub fn with_signature(mut self, signature: Signature) -> Self {
-        self.signature = Some(signature);
-        self
-    }
-
     /// Set the visibility.
     pub fn with_visibility(mut self, visibility: Visibility) -> Self {
         self.visibility = visibility;
-        self
-    }
-
-    /// Set the documentation.
-    pub fn with_doc(mut self, doc: String) -> Self {
-        self.doc = Some(doc);
         self
     }
 
@@ -194,13 +182,11 @@ mod tests {
             Range::new(1, 0, 5, 1),
             Span::new(0, 50),
         )
-        .with_visibility(Visibility::Public)
-        .with_doc("A test function".to_string());
+        .with_visibility(Visibility::Public);
 
         assert_eq!(sym.name, "foo");
         assert_eq!(sym.kind, SymbolKind::Function);
         assert_eq!(sym.visibility, Visibility::Public);
-        assert_eq!(sym.doc, Some("A test function".to_string()));
     }
 
     #[test]

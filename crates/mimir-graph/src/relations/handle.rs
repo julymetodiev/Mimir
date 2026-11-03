@@ -30,13 +30,6 @@ impl RelationsHandle {
         }
     }
 
-    /// Create a handle from an existing graph.
-    pub fn from_graph(graph: RelationGraph) -> Self {
-        Self {
-            inner: Arc::new(graph),
-        }
-    }
-
     /// Add a symbol node to the graph.
     pub fn add_symbol(&self, symbol_id: SymbolId) -> NodeIndex {
         self.inner.add_symbol(symbol_id)
@@ -55,11 +48,6 @@ impl RelationsHandle {
     /// Remove a symbol and all its edges.
     pub fn remove_symbol(&self, symbol_id: SymbolId) {
         self.inner.remove_symbol(symbol_id)
-    }
-
-    /// Remove all edges from a symbol.
-    pub fn remove_symbol_edges(&self, symbol_id: SymbolId) {
-        self.inner.remove_symbol_edges(symbol_id)
     }
 
     /// Get all outgoing edges from a symbol.
@@ -82,34 +70,9 @@ impl RelationsHandle {
         self.inner.callers(symbol_id)
     }
 
-    /// Check if a symbol exists in the graph.
-    pub fn contains(&self, symbol_id: SymbolId) -> bool {
-        self.inner.contains(symbol_id)
-    }
-
-    /// Get the number of symbols.
-    pub fn symbol_count(&self) -> usize {
-        self.inner.symbol_count()
-    }
-
     /// Get the number of edges.
     pub fn edge_count(&self) -> usize {
         self.inner.edge_count()
-    }
-
-    /// Get all symbol IDs.
-    pub fn symbols(&self) -> Vec<SymbolId> {
-        self.inner.symbols()
-    }
-
-    /// Clear the graph.
-    pub fn clear(&self) {
-        self.inner.clear()
-    }
-
-    /// Get the number of strong references.
-    pub fn strong_count(&self) -> usize {
-        Arc::strong_count(&self.inner)
     }
 }
 
@@ -139,21 +102,7 @@ mod tests {
         );
 
         // Should be visible through handle2
-        assert!(handle2.contains(sym1));
-        assert!(handle2.contains(sym2));
         assert_eq!(handle2.edge_count(), 1);
-    }
-
-    #[test]
-    fn test_handle_strong_count() {
-        let handle1 = RelationsHandle::new();
-        assert_eq!(handle1.strong_count(), 1);
-
-        let handle2 = handle1.clone();
-        assert_eq!(handle1.strong_count(), 2);
-
-        drop(handle2);
-        assert_eq!(handle1.strong_count(), 1);
     }
 
     #[test]
@@ -193,6 +142,5 @@ mod tests {
         // In production, writes would be serialized through a channel.
         // For now, just verify no panics and at least some edges are present.
         assert!(handle.edge_count() > 0);
-        assert!(handle.symbol_count() > 1);
     }
 }

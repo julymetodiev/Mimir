@@ -58,18 +58,6 @@ impl Span {
     pub const fn contains(&self, offset: u32) -> bool {
         offset >= self.start && offset < self.end
     }
-
-    /// Check if this span overlaps with another.
-    #[inline]
-    pub const fn overlaps(&self, other: &Span) -> bool {
-        self.start < other.end && other.start < self.end
-    }
-
-    /// Extend this span to include another span.
-    pub fn extend(&mut self, other: &Span) {
-        self.start = self.start.min(other.start);
-        self.end = self.end.max(other.end);
-    }
 }
 
 /// A range of lines and columns.
@@ -95,22 +83,6 @@ impl Range {
             end_col,
         }
     }
-
-    /// Create a range for a single line.
-    pub const fn single_line(line: u32, start_col: u32, end_col: u32) -> Self {
-        Self {
-            start_line: line,
-            start_col,
-            end_line: line,
-            end_col,
-        }
-    }
-
-    /// Check if this range spans multiple lines.
-    #[inline]
-    pub const fn is_multiline(&self) -> bool {
-        self.start_line != self.end_line
-    }
 }
 
 #[cfg(test)]
@@ -132,24 +104,5 @@ mod tests {
         assert!(span.contains(15));
         assert!(!span.contains(5));
         assert!(!span.contains(20));
-    }
-
-    #[test]
-    fn test_span_overlap() {
-        let span1 = Span::new(10, 20);
-        let span2 = Span::new(15, 25);
-        let span3 = Span::new(25, 30);
-
-        assert!(span1.overlaps(&span2));
-        assert!(!span1.overlaps(&span3));
-    }
-
-    #[test]
-    fn test_range() {
-        let range = Range::new(1, 1, 5, 10);
-        assert!(range.is_multiline());
-
-        let single = Range::single_line(3, 5, 15);
-        assert!(!single.is_multiline());
     }
 }

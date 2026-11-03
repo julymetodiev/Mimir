@@ -14,9 +14,9 @@
 //!
 //! // Replace text at a specific byte range
 //! let op = EditOp::replace("src/main.rs", Span::new(10, 20), "new_function");
-//! let result = editor.apply(&op).await?;
+//! let results = editor.apply_batch(&[op]).await?;
 //!
-//! println!("Changed {} bytes", result.bytes_changed);
+//! println!("Changed {} bytes", results[0].bytes_changed);
 //! # Ok(())
 //! # }
 //! ```
@@ -38,7 +38,7 @@
 //!
 //! let editor = Editor::new();
 //! // This will fail if the file was modified since we computed the hash
-//! let result = editor.apply(&op).await?;
+//! editor.apply_batch(&[op]).await?;
 //! # Ok(())
 //! # }
 //! ```

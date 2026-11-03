@@ -25,53 +25,6 @@ impl Editor {
         self
     }
 
-    /// Apply a single edit operation.
-    pub async fn apply(&self, op: &EditOp) -> EditResult<OpResult> {
-        let path = op.file_path();
-
-        // Read current content
-        let content = self.read_file(path).await?;
-        let old_hash = ContentHash::compute(content.as_bytes());
-
-        // Check optimistic lock
-        if let Some(expected) = op.expected_hash()
-            && &old_hash != expected
-        {
-            return Err(EditError::HashMismatch {
-                path: path.clone(),
-                expected: *expected,
-                actual: old_hash,
-            });
-        }
-
-        // Create backup if enabled
-        if self.create_backups {
-            self.create_backup(path, &content).await?;
-        }
-
-        // Apply the operation
-        let new_content = self.apply_to_content(&content, op)?;
-        let new_hash = ContentHash::compute(new_content.as_bytes());
-
-        // Calculate stats
-        let old_lines = content.lines().count() as i64;
-        let new_lines = new_content.lines().count() as i64;
-        let old_bytes = content.len() as i64;
-        let new_bytes = new_content.len() as i64;
-
-        // Write the new content
-        fs::write(path, &new_content).await?;
-
-        Ok(OpResult {
-            file_path: path.clone(),
-            old_hash,
-            new_hash,
-            bytes_changed: new_bytes - old_bytes,
-            lines_changed: new_lines - old_lines,
-            lines_modified: old_lines.max(new_lines) as usize,
-        })
-    }
-
     /// Preview an edit operation without applying it.
     pub async fn preview(&self, op: &EditOp) -> EditResult<Diff> {
         let path = op.file_path();

@@ -126,32 +126,14 @@ impl SymbolTable {
             .collect()
     }
 
-    /// Get all symbol IDs.
-    pub fn symbol_ids(&self) -> Vec<SymbolId> {
-        self.symbols.iter().map(|r| *r.key()).collect()
-    }
-
     /// Get all symbols.
     pub fn all_symbols(&self) -> Vec<Arc<Symbol>> {
         self.symbols.iter().map(|r| Arc::clone(&*r)).collect()
     }
 
     /// Get the number of symbols.
-    pub fn len(&self) -> usize {
+    pub fn count(&self) -> usize {
         self.symbols.len()
-    }
-
-    /// Check if the table is empty.
-    pub fn is_empty(&self) -> bool {
-        self.symbols.is_empty()
-    }
-
-    /// Clear all symbols and indices.
-    pub fn clear(&self) {
-        self.symbols.clear();
-        self.name_index.clear();
-        self.file_index.clear();
-        self.qualified_index.clear();
     }
 
     /// Get statistics about the table.
@@ -334,7 +316,7 @@ mod tests {
 
         assert!(table.symbols_in_file(file1).is_empty());
         assert_eq!(table.symbols_in_file(file2).len(), 1);
-        assert_eq!(table.len(), 1);
+        assert_eq!(table.count(), 1);
     }
 
     #[test]

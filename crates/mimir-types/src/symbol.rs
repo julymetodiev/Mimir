@@ -62,25 +62,6 @@ impl QualifiedName {
         }
     }
 
-    /// Parse a qualified name from a string with separator.
-    pub fn from_str(s: &str, separator: &str) -> Self {
-        Self::new(s.split(separator).map(String::from).collect())
-    }
-
-    /// Get the simple name (last segment).
-    pub fn name(&self) -> &str {
-        self.segments.last().expect("QualifiedName is never empty")
-    }
-
-    /// Get the parent path (all segments except the last).
-    pub fn parent(&self) -> Option<Self> {
-        if self.segments.len() > 1 {
-            Some(Self::new(self.segments[..self.segments.len() - 1].to_vec()))
-        } else {
-            None
-        }
-    }
-
     /// Get all segments.
     pub fn segments(&self) -> &[String] {
         &self.segments
@@ -89,16 +70,6 @@ impl QualifiedName {
     /// Join segments with a separator.
     pub fn join(&self, separator: &str) -> String {
         self.segments.join(separator)
-    }
-
-    /// Add a segment to the path.
-    pub fn push(&mut self, segment: impl Into<String>) {
-        self.segments.push(segment.into());
-    }
-
-    /// Check if this name starts with another path.
-    pub fn starts_with(&self, other: &Self) -> bool {
-        self.segments.starts_with(&other.segments)
     }
 }
 
@@ -150,42 +121,7 @@ pub enum SymbolKind {
     Test,
 }
 
-impl SymbolKind {
-    /// Check if this is a container kind (can contain other symbols).
-    pub fn is_container(&self) -> bool {
-        matches!(
-            self,
-            Self::Module
-                | Self::Class
-                | Self::Interface
-                | Self::Trait
-                | Self::Namespace
-                | Self::Package
-        )
-    }
-
-    /// Check if this is a callable kind.
-    pub fn is_callable(&self) -> bool {
-        matches!(
-            self,
-            Self::Function | Self::Method | Self::Constructor | Self::Closure | Self::Macro
-        )
-    }
-
-    /// Check if this is a type kind.
-    pub fn is_type(&self) -> bool {
-        matches!(
-            self,
-            Self::Struct
-                | Self::Enum
-                | Self::Union
-                | Self::TypeAlias
-                | Self::Interface
-                | Self::Trait
-                | Self::Class
-        )
-    }
-}
+impl SymbolKind {}
 
 impl fmt::Display for SymbolKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -289,30 +225,14 @@ mod tests {
 
     #[test]
     fn test_qualified_name() {
-        let qn = QualifiedName::from_str("crate::module::func", "::");
-        assert_eq!(qn.name(), "func");
+        let qn = QualifiedName::new(vec!["crate".into(), "module".into(), "func".into()]);
         assert_eq!(qn.join("::"), "crate::module::func");
-
-        let parent = qn.parent().unwrap();
-        assert_eq!(parent.join("::"), "crate::module");
     }
 
     #[test]
     fn test_qualified_name_simple() {
         let qn = QualifiedName::simple("main");
-        assert_eq!(qn.name(), "main");
-        assert!(qn.parent().is_none());
-    }
-
-    #[test]
-    fn test_symbol_kind_predicates() {
-        assert!(SymbolKind::Module.is_container());
-        assert!(SymbolKind::Function.is_callable());
-        assert!(SymbolKind::Struct.is_type());
-
-        assert!(!SymbolKind::Variable.is_container());
-        assert!(!SymbolKind::Struct.is_callable());
-        assert!(!SymbolKind::Function.is_type());
+        assert_eq!(qn.join("::"), "main");
     }
 
     #[test]

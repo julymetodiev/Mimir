@@ -82,12 +82,12 @@ async fn test_sequential_edits_same_file() {
 
     // First edit
     let op1 = EditOp::replace(&path, Span::new(0, 5), "HELLO");
-    let result1 = editor.apply(&op1).await.unwrap();
+    let result1 = apply(&editor, &op1).await.unwrap();
 
     // Second edit - use new hash
     let op2 =
         EditOp::replace(&path, Span::new(6, 11), "WORLD").with_expected_hash(result1.new_hash);
-    editor.apply(&op2).await.unwrap();
+    apply(&editor, &op2).await.unwrap();
 
     let content = fs::read_to_string(&path).await.unwrap();
     assert_eq!(content, "HELLO WORLD");
@@ -107,7 +107,7 @@ async fn test_hash_chain_verification() {
         let op =
             EditOp::replace(&path, Span::new(0, 5), &new_content).with_expected_hash(current_hash);
 
-        let result = editor.apply(&op).await.unwrap();
+        let result = apply(&editor, &op).await.unwrap();
         current_hash = result.new_hash;
 
         let content = fs::read_to_string(&path).await.unwrap();

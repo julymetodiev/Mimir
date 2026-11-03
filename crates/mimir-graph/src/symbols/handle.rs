@@ -28,13 +28,6 @@ impl SymbolsHandle {
         }
     }
 
-    /// Create a handle from an existing table.
-    pub fn from_table(table: SymbolTable) -> Self {
-        Self {
-            inner: Arc::new(table),
-        }
-    }
-
     /// Insert a symbol.
     pub fn insert(&self, symbol: Symbol) -> Option<Arc<Symbol>> {
         self.inner.insert(symbol)
@@ -70,39 +63,19 @@ impl SymbolsHandle {
         self.inner.remove_file(file_id)
     }
 
-    /// Get all symbol IDs.
-    pub fn symbol_ids(&self) -> Vec<SymbolId> {
-        self.inner.symbol_ids()
-    }
-
     /// Get all symbols.
     pub fn all_symbols(&self) -> Vec<Arc<Symbol>> {
         self.inner.all_symbols()
     }
 
     /// Get the number of symbols.
-    pub fn len(&self) -> usize {
-        self.inner.len()
-    }
-
-    /// Check if the table is empty.
-    pub fn is_empty(&self) -> bool {
-        self.inner.is_empty()
-    }
-
-    /// Clear all symbols.
-    pub fn clear(&self) {
-        self.inner.clear()
+    pub fn count(&self) -> usize {
+        self.inner.count()
     }
 
     /// Get statistics.
     pub fn stats(&self) -> SymbolTableStats {
         self.inner.stats()
-    }
-
-    /// Get the number of strong references to the underlying table.
-    pub fn strong_count(&self) -> usize {
-        Arc::strong_count(&self.inner)
     }
 }
 
@@ -145,20 +118,7 @@ mod tests {
 
         // Should be visible through handle2
         assert!(handle2.get(id).is_some());
-        assert_eq!(handle2.len(), 1);
-    }
-
-    #[test]
-    fn test_handle_strong_count() {
-        let handle1 = SymbolsHandle::new();
-        assert_eq!(handle1.strong_count(), 1);
-
-        let handle2 = handle1.clone();
-        assert_eq!(handle1.strong_count(), 2);
-        assert_eq!(handle2.strong_count(), 2);
-
-        drop(handle2);
-        assert_eq!(handle1.strong_count(), 1);
+        assert_eq!(handle2.count(), 1);
     }
 
     #[test]
@@ -204,6 +164,6 @@ mod tests {
             t.join().unwrap();
         }
 
-        assert_eq!(handle.len(), 400);
+        assert_eq!(handle.count(), 400);
     }
 }

@@ -13,7 +13,6 @@ name = "mimir"
 path = "src/main.rs"
 
 [dependencies]
-mimir-types = { workspace = true }
 mimir-protocol = { workspace = true }
 mimir-client = { workspace = true }
 mimir-daemon = { workspace = true }

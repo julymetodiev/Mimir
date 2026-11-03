@@ -45,38 +45,6 @@ impl Language {
             .unwrap_or(Self::Unknown)
     }
 
-    /// Get the file extensions associated with this language.
-    pub const fn extensions(&self) -> &'static [&'static str] {
-        match self {
-            Self::Rust => &["rs"],
-            Self::TypeScript => &["ts", "tsx", "mts", "cts"],
-            Self::JavaScript => &["js", "jsx", "mjs", "cjs"],
-            Self::Python => &["py", "pyi", "pyw"],
-            Self::Go => &["go"],
-            Self::Java => &["java"],
-            Self::Kotlin => &["kt", "kts"],
-            Self::C => &["c", "h"],
-            Self::Cpp => &["cpp", "hpp", "cc", "cxx", "hh", "hxx"],
-            Self::Unknown => &[],
-        }
-    }
-
-    /// Get the primary file extension for this language.
-    pub const fn primary_extension(&self) -> Option<&'static str> {
-        match self {
-            Self::Rust => Some("rs"),
-            Self::TypeScript => Some("ts"),
-            Self::JavaScript => Some("js"),
-            Self::Python => Some("py"),
-            Self::Go => Some("go"),
-            Self::Java => Some("java"),
-            Self::Kotlin => Some("kt"),
-            Self::C => Some("c"),
-            Self::Cpp => Some("cpp"),
-            Self::Unknown => None,
-        }
-    }
-
     /// Get the display name for this language.
     pub const fn display_name(&self) -> &'static str {
         match self {
@@ -130,16 +98,6 @@ mod tests {
             Language::from_path(Path::new("README.md")),
             Language::Unknown
         );
-    }
-
-    #[test]
-    fn test_extensions() {
-        let rust_exts = Language::Rust.extensions();
-        assert!(rust_exts.contains(&"rs"));
-
-        let ts_exts = Language::TypeScript.extensions();
-        assert!(ts_exts.contains(&"ts"));
-        assert!(ts_exts.contains(&"tsx"));
     }
 
     #[test]

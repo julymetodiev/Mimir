@@ -109,24 +109,6 @@ impl RelationGraph {
         self.graph.store(Arc::new(new_inner));
     }
 
-    /// Remove all edges from a symbol.
-    pub fn remove_symbol_edges(&self, symbol_id: SymbolId) {
-        let current = self.graph.load();
-
-        if let Some(&node) = current.symbol_to_node.get(&symbol_id) {
-            let mut new_inner = (**current).clone();
-
-            // Collect edges to remove
-            let edges_to_remove: Vec<_> = new_inner.graph.edges(node).map(|e| e.id()).collect();
-
-            for edge in edges_to_remove {
-                new_inner.graph.remove_edge(edge);
-            }
-
-            self.graph.store(Arc::new(new_inner));
-        }
-    }
-
     /// Remove a symbol and all its edges.
     pub fn remove_symbol(&self, symbol_id: SymbolId) {
         let current = self.graph.load();
@@ -179,7 +161,7 @@ impl RelationGraph {
 
         self.outgoing(symbol_id)
             .into_iter()
-            .filter(|(_, e)| matches!(e.kind, EdgeKind::Calls | EdgeKind::Instantiates))
+            .filter(|(_, e)| e.kind == EdgeKind::Calls)
             .map(|(s, _)| s)
             .collect()
     }
@@ -190,41 +172,15 @@ impl RelationGraph {
 
         self.incoming(symbol_id)
             .into_iter()
-            .filter(|(_, e)| matches!(e.kind, EdgeKind::Calls | EdgeKind::Instantiates))
+            .filter(|(_, e)| e.kind == EdgeKind::Calls)
             .map(|(s, _)| s)
             .collect()
-    }
-
-    /// Check if a symbol exists in the graph.
-    pub fn contains(&self, symbol_id: SymbolId) -> bool {
-        let current = self.graph.load();
-        current.symbol_to_node.contains_key(&symbol_id)
-    }
-
-    /// Get the number of symbols in the graph.
-    pub fn symbol_count(&self) -> usize {
-        let current = self.graph.load();
-        current.graph.node_count()
     }
 
     /// Get the number of edges in the graph.
     pub fn edge_count(&self) -> usize {
         let current = self.graph.load();
         current.graph.edge_count()
-    }
-
-    /// Get all symbol IDs in the graph.
-    pub fn symbols(&self) -> Vec<SymbolId> {
-        let current = self.graph.load();
-        current.symbol_to_node.keys().copied().collect()
-    }
-
-    /// Clear the graph.
-    pub fn clear(&self) {
-        self.graph.store(Arc::new(GraphInner {
-            graph: StableGraph::new(),
-            symbol_to_node: HashMap::new(),
-        }));
     }
 }
 
@@ -247,10 +203,6 @@ mod tests {
 
         graph.add_symbol(sym1);
         graph.add_symbol(sym2);
-
-        assert!(graph.contains(sym1));
-        assert!(graph.contains(sym2));
-        assert_eq!(graph.symbol_count(), 2);
     }
 
     #[test]
@@ -266,8 +218,6 @@ mod tests {
             EdgeData::new(EdgeKind::Calls, Span::new(10, 20), Confidence::High),
         );
 
-        assert!(graph.contains(sym1));
-        assert!(graph.contains(sym2));
         assert_eq!(graph.edge_count(), 1);
     }
 
@@ -315,8 +265,6 @@ mod tests {
 
         let callees = graph.callees(main);
         assert_eq!(callees.len(), 2);
-        assert!(callees.contains(&helper1));
-        assert!(callees.contains(&helper2));
 
         let callers = graph.callers(helper1);
         assert_eq!(callers.len(), 1);
@@ -336,28 +284,6 @@ mod tests {
             EdgeData::new(EdgeKind::Calls, Span::new(10, 20), Confidence::High),
         );
 
-        assert_eq!(graph.symbol_count(), 2);
         graph.remove_symbol(sym1);
-        assert!(!graph.contains(sym1));
-        assert_eq!(graph.symbol_count(), 1);
-    }
-
-    #[test]
-    fn test_clear() {
-        let ids = ids();
-        let graph = RelationGraph::new();
-        let sym1: SymbolId = ids.next();
-        let sym2: SymbolId = ids.next();
-
-        graph.add_edge(
-            sym1,
-            sym2,
-            EdgeData::new(EdgeKind::Calls, Span::new(10, 20), Confidence::High),
-        );
-
-        assert_eq!(graph.symbol_count(), 2);
-        graph.clear();
-        assert_eq!(graph.symbol_count(), 0);
-        assert_eq!(graph.edge_count(), 0);
     }
 }

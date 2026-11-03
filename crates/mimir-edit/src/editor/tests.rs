@@ -4,6 +4,13 @@ use tempfile::tempdir;
 
 mod batch;
 
+async fn apply(editor: &Editor, op: &EditOp) -> EditResult<OpResult> {
+    editor
+        .apply_batch(std::slice::from_ref(op))
+        .await
+        .map(|mut results| results.remove(0))
+}
+
 async fn create_test_file(dir: &Path, name: &str, content: &str) -> std::path::PathBuf {
     let path = dir.join(name);
     fs::write(&path, content).await.unwrap();
@@ -18,7 +25,7 @@ async fn test_replace_operation() {
     let op = EditOp::replace(&path, Span::new(3, 8), "world");
     let editor = Editor::new();
 
-    let result = editor.apply(&op).await.unwrap();
+    let result = apply(&editor, &op).await.unwrap();
     assert_eq!(result.file_path, path);
 
     let content = fs::read_to_string(&path).await.unwrap();
@@ -33,7 +40,7 @@ async fn test_insert_operation() {
     let op = EditOp::insert(&path, 3, "pub ");
     let editor = Editor::new();
 
-    editor.apply(&op).await.unwrap();
+    apply(&editor, &op).await.unwrap();
 
     let content = fs::read_to_string(&path).await.unwrap();
     assert_eq!(content, "fn pub test() {}");
@@ -47,7 +54,7 @@ async fn test_delete_operation() {
     let op = EditOp::delete(&path, Span::new(8, 14)); // delete "_world"
     let editor = Editor::new();
 
-    editor.apply(&op).await.unwrap();
+    apply(&editor, &op).await.unwrap();
 
     let content = fs::read_to_string(&path).await.unwrap();
     assert_eq!(content, "fn hello() {}");
@@ -62,7 +69,7 @@ async fn test_replace_lines_operation() {
     let op = EditOp::replace_lines(&path, 2, 3, "new_line2\nnew_line3\n");
     let editor = Editor::new();
 
-    editor.apply(&op).await.unwrap();
+    apply(&editor, &op).await.unwrap();
 
     let result = fs::read_to_string(&path).await.unwrap();
     assert_eq!(result, "line1\nnew_line2\nnew_line3\nline4\n");
@@ -78,7 +85,7 @@ async fn test_optimistic_locking_success() {
     let op = EditOp::replace(&path, Span::new(0, 8), "modified").with_expected_hash(hash);
     let editor = Editor::new();
 
-    let result = editor.apply(&op).await;
+    let result = apply(&editor, &op).await;
     assert!(result.is_ok());
 }
 
@@ -91,7 +98,7 @@ async fn test_optimistic_locking_failure() {
     let op = EditOp::replace(&path, Span::new(0, 8), "modified").with_expected_hash(wrong_hash);
     let editor = Editor::new();
 
-    let result = editor.apply(&op).await;
+    let result = apply(&editor, &op).await;
     assert!(matches!(result, Err(EditError::HashMismatch { .. })));
 }
 
@@ -120,7 +127,7 @@ async fn test_invalid_span() {
     let op = EditOp::replace(&path, Span::new(0, 100), "new");
     let editor = Editor::new();
 
-    let result = editor.apply(&op).await;
+    let result = apply(&editor, &op).await;
     assert!(matches!(result, Err(EditError::InvalidSpan { .. })));
 }
 
@@ -132,7 +139,7 @@ async fn test_file_not_found() {
     let op = EditOp::replace(&path, Span::new(0, 5), "new");
     let editor = Editor::new();
 
-    let result = editor.apply(&op).await;
+    let result = apply(&editor, &op).await;
     assert!(matches!(result, Err(EditError::FileNotFound { .. })));
 }
 
@@ -144,7 +151,7 @@ async fn test_backup_creation() {
     let op = EditOp::replace(&path, Span::new(0, 8), "modified");
     let editor = Editor::new().with_backups();
 
-    editor.apply(&op).await.unwrap();
+    apply(&editor, &op).await.unwrap();
 
     let backup_path = path.with_extension("bak");
     let backup_content = fs::read_to_string(&backup_path).await.unwrap();
@@ -161,7 +168,7 @@ async fn test_empty_file_operations() {
 
     // Insert into empty file
     let op = EditOp::insert(&path, 0, "hello world");
-    let result = editor.apply(&op).await.unwrap();
+    let result = apply(&editor, &op).await.unwrap();
     assert_eq!(result.bytes_changed, 11);
 
     let content = fs::read_to_string(&path).await.unwrap();
@@ -179,7 +186,7 @@ async fn test_unicode_content() {
     let privet_end = "Привет".len(); // 12 bytes in UTF-8
 
     let op = EditOp::replace(&path, Span::new(0, privet_end as u32), "Здравей");
-    editor.apply(&op).await.unwrap();
+    apply(&editor, &op).await.unwrap();
 
     let content = fs::read_to_string(&path).await.unwrap();
     assert!(content.starts_with("Здравей"));
@@ -199,7 +206,7 @@ println!("World");
 
     // Replace lines 2-3 with a single line (4 lines -> 3 lines)
     let op = EditOp::replace_lines(&path, 2, 3, "    println!(\"Hello World\");\n");
-    editor.apply(&op).await.unwrap();
+    apply(&editor, &op).await.unwrap();
 
     let result = fs::read_to_string(&path).await.unwrap();
     assert!(result.contains("Hello World"));
@@ -217,7 +224,7 @@ async fn test_replace_first_line() {
     let editor = Editor::new();
 
     let op = EditOp::replace_lines(&path, 1, 1, "FIRST\n");
-    editor.apply(&op).await.unwrap();
+    apply(&editor, &op).await.unwrap();
 
     let result = fs::read_to_string(&path).await.unwrap();
     assert_eq!(result, "FIRST\nsecond\nthird\n");
@@ -231,7 +238,7 @@ async fn test_replace_last_line() {
     let editor = Editor::new();
 
     let op = EditOp::replace_lines(&path, 3, 3, "THIRD\n");
-    editor.apply(&op).await.unwrap();
+    apply(&editor, &op).await.unwrap();
 
     let result = fs::read_to_string(&path).await.unwrap();
     assert_eq!(result, "first\nsecond\nTHIRD\n");
@@ -245,7 +252,7 @@ async fn test_invalid_line_range_zero() {
 
     // Line 0 is invalid (1-indexed)
     let op = EditOp::replace_lines(&path, 0, 1, "new\n");
-    let result = editor.apply(&op).await;
+    let result = apply(&editor, &op).await;
     assert!(matches!(result, Err(EditError::InvalidLineRange { .. })));
 }
 
@@ -257,7 +264,7 @@ async fn test_invalid_line_range_reversed() {
 
     // start > end is invalid
     let op = EditOp::replace_lines(&path, 3, 1, "new\n");
-    let result = editor.apply(&op).await;
+    let result = apply(&editor, &op).await;
     assert!(matches!(result, Err(EditError::InvalidLineRange { .. })));
 }
 
@@ -269,7 +276,7 @@ async fn test_invalid_line_range_exceeds_file() {
 
     // Line 5 doesn't exist
     let op = EditOp::replace_lines(&path, 1, 5, "new\n");
-    let result = editor.apply(&op).await;
+    let result = apply(&editor, &op).await;
     assert!(matches!(result, Err(EditError::InvalidLineRange { .. })));
 }
 
@@ -288,7 +295,7 @@ async fn test_concurrent_modification_detected() {
     // Try to edit with old hash - should fail
     let op = EditOp::replace(&path, Span::new(0, 8), "my edit").with_expected_hash(original_hash);
 
-    let result = editor.apply(&op).await;
+    let result = apply(&editor, &op).await;
     assert!(matches!(result, Err(EditError::HashMismatch { .. })));
 
     // Verify the "other" modification is preserved
@@ -303,7 +310,7 @@ async fn test_insert_at_end() {
     let editor = Editor::new();
 
     let op = EditOp::insert(&path, 5, " world");
-    editor.apply(&op).await.unwrap();
+    apply(&editor, &op).await.unwrap();
 
     let content = fs::read_to_string(&path).await.unwrap();
     assert_eq!(content, "hello world");
@@ -316,7 +323,7 @@ async fn test_insert_at_start() {
     let editor = Editor::new();
 
     let op = EditOp::insert(&path, 0, "hello ");
-    editor.apply(&op).await.unwrap();
+    apply(&editor, &op).await.unwrap();
 
     let content = fs::read_to_string(&path).await.unwrap();
     assert_eq!(content, "hello world");
@@ -329,7 +336,7 @@ async fn test_delete_entire_content() {
     let editor = Editor::new();
 
     let op = EditOp::delete(&path, Span::new(0, 9));
-    let result = editor.apply(&op).await.unwrap();
+    let result = apply(&editor, &op).await.unwrap();
 
     assert_eq!(result.bytes_changed, -9);
 
@@ -366,7 +373,7 @@ async fn test_result_stats_accuracy() {
 
     // Replace 2 lines with 3 lines
     let op = EditOp::replace_lines(&path, 1, 2, "new1\nnew2\nnew3\n");
-    let result = editor.apply(&op).await.unwrap();
+    let result = apply(&editor, &op).await.unwrap();
 
     assert_eq!(result.lines_changed, 1); // 3 lines - 2 lines = +1
     assert!(result.bytes_changed > 0);
@@ -389,7 +396,7 @@ async fn test_large_file_edit() {
 
     // Edit line 500 (which contains "Line number 500")
     let op = EditOp::replace_lines(&path, 500, 500, "MODIFIED LINE 500\n");
-    let result = editor.apply(&op).await.unwrap();
+    let result = apply(&editor, &op).await.unwrap();
 
     assert!(result.bytes_changed != 0);
 
@@ -411,7 +418,7 @@ async fn test_special_characters_in_content() {
     // Content with special regex/shell characters
     let special = r#"$HOME/*.rs | grep -E "test\d+" && echo 'done'"#;
     let op = EditOp::replace(&path, Span::new(0, 11), special);
-    editor.apply(&op).await.unwrap();
+    apply(&editor, &op).await.unwrap();
 
     let content = fs::read_to_string(&path).await.unwrap();
     assert_eq!(content, special);
@@ -425,7 +432,7 @@ async fn test_newline_handling_no_trailing() {
     let editor = Editor::new();
 
     let op = EditOp::replace(&path, Span::new(3, 10), "NEWLINE");
-    editor.apply(&op).await.unwrap();
+    apply(&editor, &op).await.unwrap();
 
     let content = fs::read_to_string(&path).await.unwrap();
     assert_eq!(content, "no NEWLINE");
@@ -440,7 +447,7 @@ async fn test_newline_handling_with_trailing() {
     let editor = Editor::new();
 
     let op = EditOp::replace(&path, Span::new(5, 12), "NEWLINE");
-    editor.apply(&op).await.unwrap();
+    apply(&editor, &op).await.unwrap();
 
     let content = fs::read_to_string(&path).await.unwrap();
     assert_eq!(content, "with NEWLINE\n");

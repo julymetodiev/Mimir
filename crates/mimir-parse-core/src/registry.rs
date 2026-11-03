@@ -53,13 +53,6 @@ impl AdapterRegistry {
         self.by_language.get(&language).map(|r| r.clone())
     }
 
-    /// Get an adapter by file extension.
-    pub fn get_by_extension(&self, extension: &str) -> Option<Arc<dyn LanguageAdapter>> {
-        // Remove leading dot if present
-        let ext = extension.strip_prefix('.').unwrap_or(extension);
-        self.by_extension.get(ext).map(|r| r.clone())
-    }
-
     /// Get all registered languages.
     pub fn languages(&self) -> Vec<Language> {
         self.by_language.iter().map(|r| *r.key()).collect()
@@ -68,17 +61,6 @@ impl AdapterRegistry {
     /// Get all registered extensions.
     pub fn extensions(&self) -> Vec<String> {
         self.by_extension.iter().map(|r| r.key().clone()).collect()
-    }
-
-    /// Check if a language is registered.
-    pub fn has_language(&self, language: Language) -> bool {
-        self.by_language.contains_key(&language)
-    }
-
-    /// Check if an extension is registered.
-    pub fn has_extension(&self, extension: &str) -> bool {
-        let ext = extension.strip_prefix('.').unwrap_or(extension);
-        self.by_extension.contains_key(ext)
     }
 }
 
@@ -123,22 +105,13 @@ mod tests {
         let registry = AdapterRegistry::new();
         registry.register(Arc::new(MockAdapter));
 
-        assert!(registry.has_language(Language::Rust));
-        assert!(registry.has_extension("rs"));
-        assert!(registry.has_extension(".rs"));
-
         assert!(registry.get_by_language(Language::Rust).is_some());
-        assert!(registry.get_by_extension("rs").is_some());
     }
 
     #[test]
     fn test_missing_adapter() {
         let registry = AdapterRegistry::new();
 
-        assert!(!registry.has_language(Language::TypeScript));
-        assert!(!registry.has_extension("ts"));
-
         assert!(registry.get_by_language(Language::TypeScript).is_none());
-        assert!(registry.get_by_extension("ts").is_none());
     }
 }

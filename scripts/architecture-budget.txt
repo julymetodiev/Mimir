@@ -1,4 +1,4 @@
-allow_attrs 6
+allow_attrs 0
 anyhow_libs 0
 debug_names 0
 domain_io 0
@@ -11,6 +11,6 @@ string_errors 0
 super_paths 0
 swallowed 0
 transport_reach 0
-unused_deps 1
-unwrap_expect 2
+unused_deps 0
+unwrap_expect 0
 wrong_deps 0

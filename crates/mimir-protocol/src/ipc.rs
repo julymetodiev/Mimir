@@ -113,17 +113,7 @@ pub enum IpcResult {
     Err(String),
 }
 
-impl IpcResult {
-    /// Check if the result is ok.
-    pub fn is_ok(&self) -> bool {
-        matches!(self, IpcResult::Ok(_))
-    }
-
-    /// Check if the result is an error.
-    pub fn is_err(&self) -> bool {
-        matches!(self, IpcResult::Err(_))
-    }
-}
+impl IpcResult {}
 
 /// Data returned from IPC commands.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -202,13 +192,12 @@ mod tests {
         let json = serde_json::to_string(&resp).unwrap();
         let parsed: IpcResponse = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.id, 1);
-        assert!(parsed.result.is_ok());
     }
 
     #[test]
     fn test_error_response() {
         let resp = IpcResponse::err(42, "Something went wrong".to_string());
-        assert!(resp.result.is_err());
+        assert!(matches!(resp.result, IpcResult::Err(_)));
     }
 
     #[test]

@@ -32,12 +32,6 @@ macro_rules! define_id {
             pub const fn as_u64(&self) -> u64 {
                 self.0
             }
-
-            /// Create from u64.
-            #[inline]
-            pub const fn from_u64(value: u64) -> Self {
-                Self(value)
-            }
         }
 
         impl fmt::Debug for $name {
@@ -89,23 +83,10 @@ impl IdGenerator {
         }
     }
 
-    /// Create a new ID generator starting from a specific value.
-    pub const fn starting_from(start: u64) -> Self {
-        Self {
-            next: AtomicU64::new(start),
-        }
-    }
-
     /// Generate the next ID.
     #[inline]
     pub fn next<T: From<u64>>(&self) -> T {
         T::from(self.next.fetch_add(1, Ordering::Relaxed))
-    }
-
-    /// Get the current value without incrementing.
-    #[inline]
-    pub fn current(&self) -> u64 {
-        self.next.load(Ordering::Relaxed)
     }
 }
 

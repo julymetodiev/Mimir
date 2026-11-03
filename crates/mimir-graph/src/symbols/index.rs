@@ -44,26 +44,9 @@ impl NameIndex {
         }
     }
 
-    /// Get all names in the index.
-    #[allow(dead_code)]
-    pub fn names(&self) -> Vec<String> {
-        self.index.iter().map(|r| r.key().clone()).collect()
-    }
-
     /// Get the number of unique names.
     pub fn len(&self) -> usize {
         self.index.len()
-    }
-
-    /// Check if the index is empty.
-    #[allow(dead_code)]
-    pub fn is_empty(&self) -> bool {
-        self.index.is_empty()
-    }
-
-    /// Clear all entries.
-    pub fn clear(&self) {
-        self.index.clear();
     }
 }
 
@@ -116,26 +99,9 @@ impl FileIndex {
             .unwrap_or_default()
     }
 
-    /// Get all file IDs with symbols.
-    #[allow(dead_code)]
-    pub fn files(&self) -> Vec<FileId> {
-        self.index.iter().map(|r| *r.key()).collect()
-    }
-
     /// Get the number of files with symbols.
     pub fn len(&self) -> usize {
         self.index.len()
-    }
-
-    /// Check if the index is empty.
-    #[allow(dead_code)]
-    pub fn is_empty(&self) -> bool {
-        self.index.is_empty()
-    }
-
-    /// Clear all entries.
-    pub fn clear(&self) {
-        self.index.clear();
     }
 }
 
@@ -169,23 +135,6 @@ impl QualifiedIndex {
     /// Remove a qualified name mapping.
     pub fn remove(&self, qualified_name: &str) -> Option<SymbolId> {
         self.index.remove(qualified_name).map(|(_, id)| id)
-    }
-
-    /// Get the number of qualified names.
-    #[allow(dead_code)]
-    pub fn len(&self) -> usize {
-        self.index.len()
-    }
-
-    /// Check if the index is empty.
-    #[allow(dead_code)]
-    pub fn is_empty(&self) -> bool {
-        self.index.is_empty()
-    }
-
-    /// Clear all entries.
-    pub fn clear(&self) {
-        self.index.clear();
     }
 }
 
@@ -238,7 +187,7 @@ mod tests {
 
         index.remove("foo", id2);
         assert!(index.get("foo").is_empty());
-        assert!(index.is_empty());
+        assert_eq!(index.len(), 0);
     }
 
     #[test]

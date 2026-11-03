@@ -1,6 +1,6 @@
 //! Edge types for the relation graph.
 
-use mimir_types::{Confidence, ReferenceKind, Span};
+use mimir_types::{Confidence, Span};
 use serde::{Deserialize, Serialize};
 
 /// The kind of edge in the relation graph.
@@ -13,26 +13,8 @@ pub enum EdgeKind {
     UsesAsValue,
     /// Import relationship.
     Imports,
-    /// Type usage.
-    UsesType,
-    /// Instantiation.
-    Instantiates,
-    /// Field access.
-    AccessesField,
-    /// Inheritance (extends).
-    Extends,
     /// Implements trait/interface.
     Implements,
-    /// Contains (parent-child relationship).
-    Contains,
-    /// Reads variable.
-    Reads,
-    /// Writes variable.
-    Writes,
-    /// Borrows reference.
-    Borrows,
-    /// Mutably borrows reference.
-    MutablyBorrows,
 }
 
 impl EdgeKind {
@@ -42,35 +24,7 @@ impl EdgeKind {
             EdgeKind::Calls => "Calls",
             EdgeKind::UsesAsValue => "UsesAsValue",
             EdgeKind::Imports => "Imports",
-            EdgeKind::UsesType => "UsesType",
-            EdgeKind::Instantiates => "Instantiates",
-            EdgeKind::AccessesField => "AccessesField",
-            EdgeKind::Extends => "Extends",
             EdgeKind::Implements => "Implements",
-            EdgeKind::Contains => "Contains",
-            EdgeKind::Reads => "Reads",
-            EdgeKind::Writes => "Writes",
-            EdgeKind::Borrows => "Borrows",
-            EdgeKind::MutablyBorrows => "MutablyBorrows",
-        }
-    }
-}
-
-impl From<ReferenceKind> for EdgeKind {
-    fn from(kind: ReferenceKind) -> Self {
-        match kind {
-            ReferenceKind::Call => EdgeKind::Calls,
-            ReferenceKind::FunctionValue => EdgeKind::UsesAsValue,
-            ReferenceKind::Import => EdgeKind::Imports,
-            ReferenceKind::TypeUse => EdgeKind::UsesType,
-            ReferenceKind::Instantiation => EdgeKind::Instantiates,
-            ReferenceKind::FieldAccess => EdgeKind::AccessesField,
-            ReferenceKind::Inheritance => EdgeKind::Extends,
-            ReferenceKind::Implementation => EdgeKind::Implements,
-            ReferenceKind::Read | ReferenceKind::LocalRead => EdgeKind::Reads,
-            ReferenceKind::Write => EdgeKind::Writes,
-            ReferenceKind::Borrow => EdgeKind::Borrows,
-            ReferenceKind::MutableBorrow => EdgeKind::MutablyBorrows,
         }
     }
 }
@@ -97,30 +51,11 @@ impl EdgeData {
             confidence,
         }
     }
-
-    /// Create edge data from a reference kind.
-    pub fn from_reference(kind: ReferenceKind, span: Span, confidence: Confidence) -> Self {
-        Self {
-            kind: EdgeKind::from(kind),
-            span,
-            confidence,
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_edge_kind_from_reference_kind() {
-        assert_eq!(EdgeKind::from(ReferenceKind::Call), EdgeKind::Calls);
-        assert_eq!(EdgeKind::from(ReferenceKind::Import), EdgeKind::Imports);
-        assert_eq!(
-            EdgeKind::from(ReferenceKind::Implementation),
-            EdgeKind::Implements
-        );
-    }
 
     #[test]
     fn test_edge_data_creation() {

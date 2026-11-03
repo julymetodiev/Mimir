@@ -134,11 +134,6 @@ impl TraceResponse {
             matches: 1,
         }
     }
-
-    /// Check if the trace found any relationships.
-    pub fn has_relationships(&self) -> bool {
-        !self.callers.is_empty() || !self.callees.is_empty()
-    }
 }
 
 /// Response for stats queries.
@@ -220,7 +215,6 @@ mod tests {
         let root = make_test_symbol();
         let response = TraceResponse::new(root);
         assert_eq!(response.total_symbols, 1);
-        assert!(!response.has_relationships());
     }
 
     #[test]
@@ -232,7 +226,6 @@ mod tests {
             depth: 1,
             relationship: TraceRelation::Caller,
         });
-        assert!(response.has_relationships());
     }
 
     #[test]

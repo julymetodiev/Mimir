@@ -39,16 +39,6 @@ impl ParsedTree {
     pub fn source_bytes(&self) -> &[u8] {
         self.source.as_bytes()
     }
-
-    /// Get the text for a node.
-    pub fn node_text(&self, node: &Node<'_>) -> &str {
-        node.utf8_text(self.source_bytes()).unwrap_or("")
-    }
-
-    /// Check if the parse had errors.
-    pub fn has_errors(&self) -> bool {
-        self.tree.root_node().has_error()
-    }
 }
 
 #[cfg(test)]

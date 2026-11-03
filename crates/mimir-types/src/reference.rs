@@ -41,65 +41,15 @@ pub enum ReferenceKind {
     /// Import statement.
     Import,
 
-    /// Type annotation usage.
-    TypeUse,
-
-    /// Instantiation (new Foo() or Foo::new()).
-    Instantiation,
-
-    /// Field access (foo.bar).
-    FieldAccess,
-
-    /// Inheritance (extends, implements).
-    Inheritance,
-
-    /// Trait/interface implementation.
-    Implementation,
-
     // Data references
     /// Variable read.
     Read,
 
     /// A name bound in the function, read where a function could also be named.
     LocalRead,
-
-    /// Variable write/assignment.
-    Write,
-
-    /// Borrow (&foo).
-    Borrow,
-
-    /// Mutable borrow (&mut foo).
-    MutableBorrow,
 }
 
-impl ReferenceKind {
-    /// Check if this is a call-like reference.
-    pub fn is_call(&self) -> bool {
-        matches!(self, Self::Call | Self::Instantiation)
-    }
-
-    /// Check if this is a data access reference.
-    pub fn is_data_access(&self) -> bool {
-        matches!(
-            self,
-            Self::Read
-                | Self::LocalRead
-                | Self::Write
-                | Self::FieldAccess
-                | Self::Borrow
-                | Self::MutableBorrow
-        )
-    }
-
-    /// Check if this is a type relationship.
-    pub fn is_type_relation(&self) -> bool {
-        matches!(
-            self,
-            Self::TypeUse | Self::Inheritance | Self::Implementation
-        )
-    }
-}
+impl ReferenceKind {}
 
 impl fmt::Display for ReferenceKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -107,16 +57,8 @@ impl fmt::Display for ReferenceKind {
             Self::Call => "call",
             Self::FunctionValue => "fn_value",
             Self::Import => "import",
-            Self::TypeUse => "type_use",
-            Self::Instantiation => "new",
-            Self::FieldAccess => "field",
-            Self::Inheritance => "extends",
-            Self::Implementation => "impl",
             Self::Read => "read",
             Self::LocalRead => "local_read",
-            Self::Write => "write",
-            Self::Borrow => "borrow",
-            Self::MutableBorrow => "mut_borrow",
         };
         write!(f, "{}", s)
     }
@@ -140,22 +82,7 @@ pub enum Confidence {
     Low,
 }
 
-impl Confidence {
-    /// Convert to a numeric value (0.0 to 1.0).
-    pub fn as_f32(&self) -> f32 {
-        match self {
-            Self::Certain => 1.0,
-            Self::High => 0.9,
-            Self::Medium => 0.7,
-            Self::Low => 0.5,
-        }
-    }
-
-    /// Check if this confidence level is acceptable.
-    pub fn is_acceptable(&self) -> bool {
-        matches!(self, Self::Certain | Self::High | Self::Medium)
-    }
-}
+impl Confidence {}
 
 impl fmt::Display for Confidence {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -166,41 +93,5 @@ impl fmt::Display for Confidence {
             Self::Low => "low",
         };
         write!(f, "{}", s)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_reference_kind_predicates() {
-        assert!(ReferenceKind::Call.is_call());
-        assert!(ReferenceKind::Instantiation.is_call());
-        assert!(!ReferenceKind::Import.is_call());
-
-        assert!(ReferenceKind::Read.is_data_access());
-        assert!(ReferenceKind::FieldAccess.is_data_access());
-        assert!(!ReferenceKind::Call.is_data_access());
-
-        assert!(ReferenceKind::TypeUse.is_type_relation());
-        assert!(ReferenceKind::Inheritance.is_type_relation());
-        assert!(!ReferenceKind::Call.is_type_relation());
-    }
-
-    #[test]
-    fn test_confidence_values() {
-        assert_eq!(Confidence::Certain.as_f32(), 1.0);
-        assert_eq!(Confidence::High.as_f32(), 0.9);
-        assert_eq!(Confidence::Medium.as_f32(), 0.7);
-        assert_eq!(Confidence::Low.as_f32(), 0.5);
-    }
-
-    #[test]
-    fn test_confidence_acceptable() {
-        assert!(Confidence::Certain.is_acceptable());
-        assert!(Confidence::High.is_acceptable());
-        assert!(Confidence::Medium.is_acceptable());
-        assert!(!Confidence::Low.is_acceptable());
     }
 }

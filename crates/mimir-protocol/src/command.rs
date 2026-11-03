@@ -161,15 +161,6 @@ impl SyncResult {
             saved_to: None,
         }
     }
-
-    /// Check if any changes occurred.
-    pub fn has_changes(&self) -> bool {
-        self.files_added > 0
-            || self.files_updated > 0
-            || self.files_removed > 0
-            || self.symbols_added > 0
-            || self.symbols_removed > 0
-    }
 }
 
 #[cfg(test)]
@@ -197,13 +188,6 @@ mod tests {
     #[test]
     fn test_sync_result_empty() {
         let result = SyncResult::empty();
-        assert!(!result.has_changes());
-    }
-
-    #[test]
-    fn test_sync_result_has_changes() {
-        let mut result = SyncResult::empty();
-        result.files_added = 1;
-        assert!(result.has_changes());
+        assert_eq!(result.files_added, 0);
     }
 }

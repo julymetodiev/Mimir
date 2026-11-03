@@ -2,11 +2,10 @@
 
 use crate::relations::{EdgeData, EdgeKind, RelationsHandle};
 use crate::symbols::SymbolsHandle;
-use mimir_types::{Confidence, FileId, Span, Symbol, SymbolId, Visibility};
+use mimir_types::{FileId, Symbol, SymbolId};
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use crate::query::{QueryOptions, QueryResult};
 use crate::trace::{TraceNode, TraceOptions, TraceRelationship, TraceResult};
 
 /// The main code graph facade.
@@ -33,11 +32,6 @@ impl CodeGraph {
             symbols: SymbolsHandle::new(),
             relations: RelationsHandle::new(),
         }
-    }
-
-    /// Create from existing handles.
-    pub fn from_handles(symbols: SymbolsHandle, relations: RelationsHandle) -> Self {
-        Self { symbols, relations }
     }
 
     /// Get the symbols handle.
@@ -75,39 +69,6 @@ impl CodeGraph {
         self.symbols.find_by_qualified_name(qualified)
     }
 
-    /// Find symbols with options.
-    pub fn find_symbols(&self, name: &str, options: QueryOptions) -> QueryResult<Arc<Symbol>> {
-        let mut results = self.symbols.find_by_name(name);
-
-        // Apply filters
-        if let Some(lang) = options.language {
-            results.retain(|s| s.language == lang);
-        }
-
-        if let Some(kind) = options.kind {
-            results.retain(|s| s.kind == kind);
-        }
-
-        if options.public_only {
-            results.retain(|s| s.visibility == Visibility::Public);
-        }
-
-        // Apply limit
-        let has_more = if let Some(limit) = options.limit {
-            let has_more = results.len() > limit;
-            results.truncate(limit);
-            has_more
-        } else {
-            false
-        };
-
-        QueryResult {
-            total: results.len(),
-            items: results,
-            has_more,
-        }
-    }
-
     /// Get all symbols in a file.
     pub fn symbols_in_file(&self, file_id: FileId) -> Vec<Arc<Symbol>> {
         self.symbols.symbols_in_file(file_id)
@@ -129,81 +90,12 @@ impl CodeGraph {
         self.relations.replace_edges(edges);
     }
 
-    /// Add a call relationship between symbols.
-    pub fn add_call(&self, from: SymbolId, to: SymbolId, span: Span, confidence: Confidence) {
-        self.relations
-            .add_edge(from, to, EdgeData::new(EdgeKind::Calls, span, confidence));
-    }
-
-    /// Add an import relationship.
-    pub fn add_import(&self, from: SymbolId, to: SymbolId, span: Span) {
-        self.relations.add_edge(
-            from,
-            to,
-            EdgeData::new(EdgeKind::Imports, span, Confidence::Certain),
-        );
-    }
-
-    /// Add a type usage relationship.
-    pub fn add_type_use(&self, from: SymbolId, to: SymbolId, span: Span, confidence: Confidence) {
-        self.relations.add_edge(
-            from,
-            to,
-            EdgeData::new(EdgeKind::UsesType, span, confidence),
-        );
-    }
-
-    /// Add an inheritance relationship.
-    pub fn add_inheritance(&self, from: SymbolId, to: SymbolId, span: Span) {
-        self.relations.add_edge(
-            from,
-            to,
-            EdgeData::new(EdgeKind::Extends, span, Confidence::Certain),
-        );
-    }
-
-    /// Add an implementation relationship.
-    pub fn add_implementation(&self, from: SymbolId, to: SymbolId, span: Span) {
-        self.relations.add_edge(
-            from,
-            to,
-            EdgeData::new(EdgeKind::Implements, span, Confidence::Certain),
-        );
-    }
-
     // ============ Query Operations ============
-
-    /// Get symbols that this symbol calls.
-    pub fn get_callees(&self, symbol_id: SymbolId) -> Vec<Arc<Symbol>> {
-        self.relations
-            .callees(symbol_id)
-            .into_iter()
-            .filter_map(|id| self.symbols.get(id))
-            .collect()
-    }
-
-    /// Get symbols that call this symbol.
-    pub fn get_callers(&self, symbol_id: SymbolId) -> Vec<Arc<Symbol>> {
-        self.relations
-            .callers(symbol_id)
-            .into_iter()
-            .filter_map(|id| self.symbols.get(id))
-            .collect()
-    }
 
     /// Get all references from a symbol.
     pub fn get_outgoing(&self, symbol_id: SymbolId) -> Vec<(Arc<Symbol>, EdgeData)> {
         self.relations
             .outgoing(symbol_id)
-            .into_iter()
-            .filter_map(|(id, edge)| self.symbols.get(id).map(|s| (s, edge)))
-            .collect()
-    }
-
-    /// Get all references to a symbol.
-    pub fn get_incoming(&self, symbol_id: SymbolId) -> Vec<(Arc<Symbol>, EdgeData)> {
-        self.relations
-            .incoming(symbol_id)
             .into_iter()
             .filter_map(|(id, edge)| self.symbols.get(id).map(|s| (s, edge)))
             .collect()
@@ -350,25 +242,21 @@ impl CodeGraph {
 
     /// Get the number of symbols in the graph.
     pub fn symbol_count(&self) -> usize {
-        self.symbols.len()
+        self.symbols.count()
     }
 
     /// Get the number of edges in the graph.
     pub fn edge_count(&self) -> usize {
         self.relations.edge_count()
     }
-
-    /// Clear the entire graph.
-    pub fn clear(&self) {
-        self.symbols.clear();
-        self.relations.clear();
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mimir_types::{IdGenerator, Language, QualifiedName, Range, SymbolKind};
+    use mimir_types::{
+        Confidence, IdGenerator, Language, QualifiedName, Range, Span, SymbolKind, Visibility,
+    };
 
     fn ids() -> IdGenerator {
         IdGenerator::new()
@@ -407,29 +295,6 @@ mod tests {
     }
 
     #[test]
-    fn test_call_relationships() {
-        let ids = ids();
-        let graph = CodeGraph::new();
-        let file_id: FileId = ids.next();
-
-        let main = make_symbol("main", &ids, file_id);
-        let helper = make_symbol("helper", &ids, file_id);
-
-        let main_id = graph.add_symbol(main);
-        let helper_id = graph.add_symbol(helper);
-
-        graph.add_call(main_id, helper_id, Span::new(10, 20), Confidence::High);
-
-        let callees = graph.get_callees(main_id);
-        assert_eq!(callees.len(), 1);
-        assert_eq!(callees[0].name, "helper");
-
-        let callers = graph.get_callers(helper_id);
-        assert_eq!(callers.len(), 1);
-        assert_eq!(callers[0].name, "main");
-    }
-
-    #[test]
     fn test_trace() {
         let ids = ids();
         let graph = CodeGraph::new();
@@ -444,11 +309,29 @@ mod tests {
         let b_id = graph.add_symbol(b);
         let c_id = graph.add_symbol(c);
 
-        graph.add_call(a_id, b_id, Span::new(10, 20), Confidence::High);
-        graph.add_call(b_id, c_id, Span::new(30, 40), Confidence::High);
+        graph.relations().add_edge(
+            a_id,
+            b_id,
+            EdgeData::new(EdgeKind::Calls, Span::new(10, 20), Confidence::High),
+        );
+        graph.relations().add_edge(
+            b_id,
+            c_id,
+            EdgeData::new(EdgeKind::Calls, Span::new(30, 40), Confidence::High),
+        );
 
         // Trace from b
-        let result = graph.trace(b_id, TraceOptions::new()).unwrap();
+        let result = graph
+            .trace(
+                b_id,
+                TraceOptions {
+                    max_depth: Some(3),
+                    include_callers: true,
+                    include_callees: true,
+                    cross_language: false,
+                },
+            )
+            .unwrap();
 
         assert_eq!(result.root.name, "b");
         assert_eq!(result.callers.len(), 1);
@@ -473,27 +356,5 @@ mod tests {
         let removed = graph.remove_file(file1);
         assert_eq!(removed.len(), 2);
         assert_eq!(graph.symbol_count(), 1);
-    }
-
-    #[test]
-    fn test_find_with_options() {
-        let ids = ids();
-        let graph = CodeGraph::new();
-        let file_id: FileId = ids.next();
-
-        let sym1 = make_symbol("process", &ids, file_id);
-        let mut sym2 = make_symbol("process", &ids, file_id);
-        sym2.visibility = Visibility::Private;
-
-        graph.add_symbol(sym1);
-        graph.add_symbol(sym2);
-
-        // Find all
-        let all = graph.find_symbol("process");
-        assert_eq!(all.len(), 2);
-
-        // Find public only
-        let public = graph.find_symbols("process", QueryOptions::new().public_only());
-        assert_eq!(public.items.len(), 1);
     }
 }

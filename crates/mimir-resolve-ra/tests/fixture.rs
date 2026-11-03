@@ -166,11 +166,32 @@ fn label(symbol: &Symbol, files: &[ProjectFile]) -> String {
     }
 }
 
+fn trace_options(include_callers: bool, include_callees: bool, max_depth: usize) -> TraceOptions {
+    TraceOptions {
+        max_depth: Some(max_depth),
+        include_callers,
+        include_callees,
+        cross_language: false,
+    }
+}
+
+fn callees_of(
+    graph: &CodeGraph,
+    id: mimir_types::SymbolId,
+) -> Vec<std::sync::Arc<mimir_types::Symbol>> {
+    graph
+        .relations()
+        .callees(id)
+        .into_iter()
+        .filter_map(|callee| graph.get_symbol(callee))
+        .collect()
+}
+
 fn call_edges(graph: &CodeGraph, files: &[ProjectFile]) -> BTreeSet<Edge> {
     let mut edges = BTreeSet::new();
     for file in files {
         for symbol in graph.symbols_in_file(file.file_id) {
-            for callee in graph.get_callees(symbol.id) {
+            for callee in callees_of(graph, symbol.id) {
                 edges.insert((label(&symbol, files), label(&callee, files)));
             }
         }
@@ -256,7 +277,7 @@ fn semantic_index_finds_every_call() {
     assert_eq!(call_edges(&graph, &files), expected(CALLS));
     for caller in ["alpha::one_calls", "alpha::two_calls"] {
         let caller = find(&graph, &files, caller);
-        let callees = graph.get_callees(caller);
+        let callees = callees_of(&graph, caller);
         assert_eq!(callees.len(), 1);
         assert_eq!(
             callees[0].file_id,
@@ -283,10 +304,7 @@ fn semantic_index_finds_every_call() {
     // The implementation is reached by whoever calls the trait's method.
     let memory_load = find(&graph, &files, "alpha::Memory::load");
     let trace = graph
-        .trace(
-            memory_load,
-            TraceOptions::new().callers_only().with_max_depth(1),
-        )
+        .trace(memory_load, trace_options(true, false, 1))
         .unwrap();
     assert_eq!(
         names(&trace.callers, TraceRelationship::CallerViaTrait),
@@ -297,10 +315,7 @@ fn semantic_index_finds_every_call() {
     // Under a call through the trait, each implementation shows, and what it calls.
     let through_trait = find(&graph, &files, "beta::through_trait");
     let trace = graph
-        .trace(
-            through_trait,
-            TraceOptions::new().callees_only().with_max_depth(4),
-        )
+        .trace(through_trait, trace_options(false, true, 4))
         .unwrap();
     assert_eq!(
         names(&trace.callees, TraceRelationship::Implementation),
@@ -312,17 +327,13 @@ fn semantic_index_finds_every_call() {
 
     // A function held as a value shows on both sides, marked as such.
     let get = find(&graph, &files, "alpha::Disk::get");
-    let trace = graph
-        .trace(get, TraceOptions::new().callers_only().with_max_depth(1))
-        .unwrap();
+    let trace = graph.trace(get, trace_options(true, false, 1)).unwrap();
     assert_eq!(
         names(&trace.callers, TraceRelationship::CallerByValue),
         ["beta::method_as_value"]
     );
     let holder = find(&graph, &files, "beta::method_as_value");
-    let trace = graph
-        .trace(holder, TraceOptions::new().callees_only().with_max_depth(1))
-        .unwrap();
+    let trace = graph.trace(holder, trace_options(false, true, 1)).unwrap();
     assert_eq!(
         names(&trace.callees, TraceRelationship::CalleeByValue),
         ["alpha::Disk::get"]
@@ -330,9 +341,7 @@ fn semantic_index_finds_every_call() {
 
     // A function in a table is reached through whoever uses the table.
     let helper = find(&graph, &files, "beta::helper");
-    let trace = graph
-        .trace(helper, TraceOptions::new().callers_only().with_max_depth(3))
-        .unwrap();
+    let trace = graph.trace(helper, trace_options(true, false, 3)).unwrap();
     let reached = names(&trace.callers, TraceRelationship::CallerByValue);
     for holder in [
         "beta::HANDLERS",
