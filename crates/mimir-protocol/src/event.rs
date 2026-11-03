@@ -23,10 +23,7 @@ pub enum GraphEvent {
     },
 
     /// A file was removed from the graph.
-    FileRemoved {
-        file_id: FileId,
-        path: PathBuf,
-    },
+    FileRemoved { file_id: FileId, path: PathBuf },
 
     /// A symbol was added to the graph.
     SymbolAdded {
@@ -36,10 +33,7 @@ pub enum GraphEvent {
     },
 
     /// A symbol was removed from the graph.
-    SymbolRemoved {
-        symbol_id: SymbolId,
-        name: String,
-    },
+    SymbolRemoved { symbol_id: SymbolId, name: String },
 
     /// A sync operation started.
     SyncStarted,
@@ -51,9 +45,7 @@ pub enum GraphEvent {
     },
 
     /// An error occurred.
-    Error {
-        message: String,
-    },
+    Error { message: String },
 }
 
 impl GraphEvent {
@@ -87,10 +79,7 @@ pub enum FileEvent {
     Deleted(PathBuf),
 
     /// A file was renamed.
-    Renamed {
-        from: PathBuf,
-        to: PathBuf,
-    },
+    Renamed { from: PathBuf, to: PathBuf },
 }
 
 impl FileEvent {

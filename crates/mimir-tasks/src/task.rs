@@ -286,7 +286,8 @@ impl TaskBuilder {
 
     /// Add multiple relevant files.
     pub fn files(mut self, files: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        self.relevant_files.extend(files.into_iter().map(Into::into));
+        self.relevant_files
+            .extend(files.into_iter().map(Into::into));
         self
     }
 

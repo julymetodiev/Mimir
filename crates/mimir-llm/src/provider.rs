@@ -2,10 +2,10 @@
 
 use crate::{Completion, LlmResult, Message};
 use async_trait::async_trait;
+use futures::Stream;
 use mimir_tools::ToolSchema;
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
-use futures::Stream;
 
 /// Stream of completion chunks for streaming responses.
 pub type CompletionStream = Pin<Box<dyn Stream<Item = LlmResult<StreamChunk>> + Send>>;

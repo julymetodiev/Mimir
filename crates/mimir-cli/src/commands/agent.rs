@@ -7,15 +7,17 @@ use mimir_tasks::{Checkpoint, FileTaskStore, Task, TaskStatus};
 use mimir_tools::ToolRegistry;
 use std::io::{self, Write};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
-use crate::daemon::{check_daemon_running, DaemonGraphClient};
+use crate::daemon::{DaemonGraphClient, check_daemon_running};
 
 /// Spinner animation frames (Nordic runes - mystical rotation)
-const SPINNER_FRAMES: &[&str] = &["ᚠ", "ᚢ", "ᚦ", "ᚨ", "ᚱ", "ᚲ", "ᚷ", "ᚹ", "ᚺ", "ᚾ", "ᛁ", "ᛃ", "ᛇ", "ᛈ", "ᛉ", "ᛊ"];
+const SPINNER_FRAMES: &[&str] = &[
+    "ᚠ", "ᚢ", "ᚦ", "ᚨ", "ᚱ", "ᚲ", "ᚷ", "ᚹ", "ᚺ", "ᚾ", "ᛁ", "ᛃ", "ᛇ", "ᛈ", "ᛉ", "ᛊ",
+];
 
 /// Spinner controller for async operations.
 struct Spinner {
@@ -117,32 +119,37 @@ impl AgentCallback for CliCallback {
         }
 
         // In verbose mode, show edit_batch contents
-        if self.verbose && name == "edit_batch"
-            && let Some(edits) = input.get("edits").and_then(|v| v.as_array()) {
-                for edit in edits {
-                    if let Some(symbol) = edit.get("symbol").and_then(|v| v.as_str()) {
-                        let content_len = edit.get("content")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.len())
-                            .unwrap_or(0);
-                        println!("       → {} ({} chars)", symbol, content_len);
-                    }
+        if self.verbose
+            && name == "edit_batch"
+            && let Some(edits) = input.get("edits").and_then(|v| v.as_array())
+        {
+            for edit in edits {
+                if let Some(symbol) = edit.get("symbol").and_then(|v| v.as_str()) {
+                    let content_len = edit
+                        .get("content")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.len())
+                        .unwrap_or(0);
+                    println!("       → {} ({} chars)", symbol, content_len);
                 }
             }
+        }
 
         // Start spinner for shell commands (they can take a while)
         if name == "shell"
-            && let Ok(mut spinner) = self.spinner.lock() {
-                spinner.start("executing...");
-            }
+            && let Ok(mut spinner) = self.spinner.lock()
+        {
+            spinner.start("executing...");
+        }
     }
 
     fn on_tool_result(&self, name: &str, result: &str, is_error: bool) {
         // Stop spinner if it was running
         if name == "shell"
-            && let Ok(mut spinner) = self.spinner.lock() {
-                spinner.stop();
-            }
+            && let Ok(mut spinner) = self.spinner.lock()
+        {
+            spinner.stop();
+        }
 
         if is_error {
             let preview = &result[..result.len().min(80)];
@@ -172,7 +179,10 @@ impl AgentCallback for CliCallback {
         if let Ok(mut spinner) = self.spinner.lock() {
             spinner.stop();
         }
-        println!("\n  ᛏ  complete ({} actions, {} tokens)\n", task.tool_calls, task.tokens_used);
+        println!(
+            "\n  ᛏ  complete ({} actions, {} tokens)\n",
+            task.tool_calls, task.tokens_used
+        );
     }
 
     fn on_error(&self, error: &mimir_agent::AgentError) {
@@ -193,11 +203,13 @@ fn format_tool_action(name: &str, input: &serde_json::Value) -> (&'static str, S
     match name {
         "read" | "read_file" => {
             // Check for symbol first, then file/path
-            let target = input.get("symbol")
+            let target = input
+                .get("symbol")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
                 .or_else(|| {
-                    input.get("file")
+                    input
+                        .get("file")
                         .or_else(|| input.get("path"))
                         .and_then(|v| v.as_str())
                         .map(|p| p.rsplit('/').next().unwrap_or(p).to_string())
@@ -207,25 +219,30 @@ fn format_tool_action(name: &str, input: &serde_json::Value) -> (&'static str, S
         }
         "edit" | "edit_file" => {
             // Check for file/path first, then symbol for symbol-based editing
-            let target = input.get("file")
+            let target = input
+                .get("file")
                 .or_else(|| input.get("path"))
                 .and_then(|v| v.as_str())
                 .map(|p| p.rsplit('/').next().unwrap_or(p).to_string())
-                .or_else(|| input.get("symbol").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                .or_else(|| {
+                    input
+                        .get("symbol")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                })
                 .unwrap_or_else(|| "?".to_string());
             ("ᛟ ", format!("edit {}", target))
         }
         "edit_batch" => {
-            let edits = input.get("edits")
+            let edits = input
+                .get("edits")
                 .and_then(|v| v.as_array())
                 .map(|arr| arr.len())
                 .unwrap_or(0);
             ("᛫ ", format!("edit_batch ({} edits)", edits))
         }
         "shell" => {
-            let cmd = input.get("command")
-                .and_then(|v| v.as_str())
-                .unwrap_or("?");
+            let cmd = input.get("command").and_then(|v| v.as_str()).unwrap_or("?");
             // Truncate long commands
             let preview = if cmd.len() > 50 {
                 format!("{}...", &cmd[..47])
@@ -235,25 +252,22 @@ fn format_tool_action(name: &str, input: &serde_json::Value) -> (&'static str, S
             ("ᛊ ", format!("shell {}", preview))
         }
         "search" | "search_symbol" => {
-            let pattern = input.get("pattern")
-                .and_then(|v| v.as_str())
-                .unwrap_or("?");
+            let pattern = input.get("pattern").and_then(|v| v.as_str()).unwrap_or("?");
             ("ᚱ ", format!("search \"{}\"", pattern))
         }
         "trace" | "trace_symbol" => {
-            let symbol = input.get("symbol")
-                .and_then(|v| v.as_str())
-                .unwrap_or("?");
+            let symbol = input.get("symbol").and_then(|v| v.as_str()).unwrap_or("?");
             ("ᚠ ", format!("trace {}", symbol))
         }
         "append" => {
-            let file = input.get("file")
+            let file = input
+                .get("file")
                 .and_then(|v| v.as_str())
                 .map(|p| p.rsplit('/').next().unwrap_or(p))
                 .unwrap_or("?");
             ("᛫ ", format!("append {}", file))
         }
-        _ => ("᛫ ", name.to_string())
+        _ => ("᛫ ", name.to_string()),
     }
 }
 
@@ -261,8 +275,8 @@ fn format_tool_action(name: &str, input: &serde_json::Value) -> (&'static str, S
 fn create_provider(provider_name: &str) -> Result<Box<dyn LlmProvider>> {
     match provider_name {
         "zai" => {
-            let provider = ZaiProvider::from_env()
-                .context("ZAI_API_KEY environment variable not set")?;
+            let provider =
+                ZaiProvider::from_env().context("ZAI_API_KEY environment variable not set")?;
             Ok(Box::new(provider))
         }
         "openrouter" => {
@@ -270,7 +284,10 @@ fn create_provider(provider_name: &str) -> Result<Box<dyn LlmProvider>> {
                 .context("OPENROUTER_API_KEY environment variable not set")?;
             Ok(Box::new(provider))
         }
-        _ => anyhow::bail!("Unknown provider: {}. Supported: zai, openrouter", provider_name),
+        _ => anyhow::bail!(
+            "Unknown provider: {}. Supported: zai, openrouter",
+            provider_name
+        ),
     }
 }
 
@@ -311,8 +328,8 @@ pub async fn run_agent(
     println!("  ◇  {} / {}\n", provider_name, model);
 
     // Create agent with CLI callback
-    let mut agent = Agent::new(provider, config, registry)
-        .with_callback(Arc::new(CliCallback::new(verbose)));
+    let mut agent =
+        Agent::new(provider, config, registry).with_callback(Arc::new(CliCallback::new(verbose)));
 
     // Try to connect to daemon for semantic operations
     let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
@@ -356,8 +373,7 @@ pub async fn run_agent(
 
 /// List tasks from the task store.
 pub async fn list_tasks(task_dir: &Path, status: Option<TaskStatus>) -> Result<()> {
-    let store = FileTaskStore::new(task_dir)
-        .context("Failed to open task store")?;
+    let store = FileTaskStore::new(task_dir).context("Failed to open task store")?;
 
     let tasks = store.list_tasks()?;
 
@@ -371,9 +387,10 @@ pub async fn list_tasks(task_dir: &Path, status: Option<TaskStatus>) -> Result<(
 
     for task in tasks {
         if let Some(filter_status) = status
-            && task.status != filter_status {
-                continue;
-            }
+            && task.status != filter_status
+        {
+            continue;
+        }
 
         let status_str = match task.status {
             TaskStatus::Pending => "pending",
@@ -397,17 +414,11 @@ pub async fn list_tasks(task_dir: &Path, status: Option<TaskStatus>) -> Result<(
 }
 
 /// Resume a paused task.
-pub async fn resume_task(
-    task_id: &str,
-    task_dir: &Path,
-    verbose: bool,
-) -> Result<()> {
-    let store = FileTaskStore::new(task_dir)
-        .context("Failed to open task store")?;
+pub async fn resume_task(task_id: &str, task_dir: &Path, verbose: bool) -> Result<()> {
+    let store = FileTaskStore::new(task_dir).context("Failed to open task store")?;
 
     let task_id = mimir_tasks::TaskId::from_string(task_id);
-    let mut task = store.load_task(&task_id)
-        .context("Task not found")?;
+    let mut task = store.load_task(&task_id).context("Task not found")?;
 
     if !task.status.can_resume() {
         anyhow::bail!(
@@ -420,8 +431,7 @@ pub async fn resume_task(
     let checkpoint = store.load_latest_checkpoint(&task_id)?;
 
     // Get API key from environment
-    let provider = ZaiProvider::from_env()
-        .context("ZAI_API_KEY environment variable not set")?;
+    let provider = ZaiProvider::from_env().context("ZAI_API_KEY environment variable not set")?;
 
     // Create tool registry
     let registry = ToolRegistry::with_builtins();
@@ -434,17 +444,18 @@ pub async fn resume_task(
         .with_checkpoints(true);
 
     // Create agent with CLI callback
-    let mut agent = Agent::new(provider, config, registry)
-        .with_callback(Arc::new(CliCallback::new(verbose)));
+    let mut agent =
+        Agent::new(provider, config, registry).with_callback(Arc::new(CliCallback::new(verbose)));
 
     // Try to connect to daemon for semantic operations
     let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let agent_dir = cwd.join(".mimir");
 
     if check_daemon_running(&agent_dir)
-        && let Ok(client) = DaemonGraphClient::connect(&agent_dir, cwd).await {
-            agent = agent.with_graph_client(Arc::new(client));
-        }
+        && let Ok(client) = DaemonGraphClient::connect(&agent_dir, cwd).await
+    {
+        agent = agent.with_graph_client(Arc::new(client));
+    }
 
     // Resume or run
     let result = if let Some(cp) = checkpoint {

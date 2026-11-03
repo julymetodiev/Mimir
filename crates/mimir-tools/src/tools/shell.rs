@@ -23,22 +23,15 @@ pub struct ShellTool;
 
 /// Commands that are allowed to run.
 const ALLOWED_COMMANDS: &[&str] = &[
-    "ls", "pwd", "cat", "head", "tail", "wc", "grep", "find", "sed", "awk",
-    "cargo", "rustc", "rustfmt", "clippy",
-    "git", "gh",
-    "npm", "node", "npx", "yarn", "pnpm",
-    "python", "python3", "pip", "pip3",
-    "go", "gofmt",
-    "echo", "which", "env", "date",
-    "mkdir", "touch", "cp", "mv", "rm",
-    "curl", "wget",
+    "ls", "pwd", "cat", "head", "tail", "wc", "grep", "find", "sed", "awk", "cargo", "rustc",
+    "rustfmt", "clippy", "git", "gh", "npm", "node", "npx", "yarn", "pnpm", "python", "python3",
+    "pip", "pip3", "go", "gofmt", "echo", "which", "env", "date", "mkdir", "touch", "cp", "mv",
+    "rm", "curl", "wget",
 ];
 
 /// Commands that are never allowed.
 const BLOCKED_COMMANDS: &[&str] = &[
-    "sudo", "su", "chmod", "chown", "chgrp",
-    "rm -rf /", "mkfs", "dd",
-    "shutdown", "reboot", "halt",
+    "sudo", "su", "chmod", "chown", "chgrp", "rm -rf /", "mkfs", "dd", "shutdown", "reboot", "halt",
 ];
 
 #[async_trait]
@@ -108,15 +101,16 @@ impl ShellTool {
         for blocked in BLOCKED_COMMANDS {
             // Check if blocked command appears as a word (not part of another word)
             let patterns = [
-                format!("{} ", blocked),      // "su " at start/middle
-                format!(" {}", blocked),      // " su" at end
-                format!(" {} ", blocked),     // " su " in middle
+                format!("{} ", blocked),  // "su " at start/middle
+                format!(" {}", blocked),  // " su" at end
+                format!(" {} ", blocked), // " su " in middle
             ];
 
             // Also check if command starts with blocked command
             if command_part.starts_with(&format!("{} ", blocked))
                 || command_part == *blocked
-                || patterns.iter().any(|p| command_part.contains(p)) {
+                || patterns.iter().any(|p| command_part.contains(p))
+            {
                 return Err(format!("Command contains blocked pattern: {}", blocked));
             }
         }
@@ -135,28 +129,29 @@ impl ShellTool {
         if !ALLOWED_COMMANDS.contains(&executable) && !executable.starts_with("./") {
             return Err(format!(
                 "Command '{}' is not in the allowed list. Allowed: {:?}",
-                executable,
-                ALLOWED_COMMANDS
+                executable, ALLOWED_COMMANDS
             ));
         }
 
         Ok(())
     }
 
-    async fn run_command(&self, command: &str, timeout_secs: u64, context: &ToolContext) -> ToolResult {
-        let result = tokio::time::timeout(
-            std::time::Duration::from_secs(timeout_secs),
-            async {
-                Command::new("sh")
-                    .arg("-c")
-                    .arg(command)
-                    .current_dir(&context.project_root)
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .output()
-                    .await
-            },
-        )
+    async fn run_command(
+        &self,
+        command: &str,
+        timeout_secs: u64,
+        context: &ToolContext,
+    ) -> ToolResult {
+        let result = tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), async {
+            Command::new("sh")
+                .arg("-c")
+                .arg(command)
+                .current_dir(&context.project_root)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .output()
+                .await
+        })
         .await;
 
         match result {
@@ -168,12 +163,20 @@ impl ShellTool {
                 // Truncate output if too long
                 let max_len = 50000;
                 let stdout = if stdout.len() > max_len {
-                    format!("{}...\n[truncated, {} bytes total]", &stdout[..max_len], stdout.len())
+                    format!(
+                        "{}...\n[truncated, {} bytes total]",
+                        &stdout[..max_len],
+                        stdout.len()
+                    )
                 } else {
                     stdout
                 };
                 let stderr = if stderr.len() > max_len {
-                    format!("{}...\n[truncated, {} bytes total]", &stderr[..max_len], stderr.len())
+                    format!(
+                        "{}...\n[truncated, {} bytes total]",
+                        &stderr[..max_len],
+                        stderr.len()
+                    )
                 } else {
                     stderr
                 };
@@ -186,7 +189,9 @@ impl ShellTool {
                 })
             }
             Ok(Err(e)) => ToolResult::error(format!("Failed to execute command: {}", e)),
-            Err(_) => ToolResult::error(format!("Command timed out after {} seconds", timeout_secs)),
+            Err(_) => {
+                ToolResult::error(format!("Command timed out after {} seconds", timeout_secs))
+            }
         }
     }
 }
@@ -219,7 +224,10 @@ mod tests {
 mod user;
 use user::User;
 EOF"#;
-        assert!(tool.validate_command(cmd).is_ok(), "heredoc content should not trigger blocked pattern");
+        assert!(
+            tool.validate_command(cmd).is_ok(),
+            "heredoc content should not trigger blocked pattern"
+        );
 
         // But actual su command should still be blocked
         assert!(tool.validate_command("su -").is_err());

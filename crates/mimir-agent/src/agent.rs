@@ -25,29 +25,34 @@ fn compress_result(content: &str) -> String {
         // Helper to truncate array
         let truncate_array = |val: &mut serde_json::Value, limit: usize| -> bool {
             if let Some(arr) = val.as_array_mut()
-                && arr.len() > limit {
-                    arr.truncate(limit);
-                    return true;
-                }
+                && arr.len() > limit
+            {
+                arr.truncate(limit);
+                return true;
+            }
             false
         };
 
         if json.is_array() {
             if truncate_array(&mut json, 10) {
-                 // For root arrays, we can't easily add a "note", but keeping it valid JSON is better
-                 modified = true;
+                // For root arrays, we can't easily add a "note", but keeping it valid JSON is better
+                modified = true;
             }
         } else if let Some(obj) = json.as_object_mut() {
             for field in ["matches", "symbols", "callers", "callees", "references"] {
                 if let Some(val) = obj.get_mut(field)
-                    && truncate_array(val, 10) {
-                        modified = true;
-                    }
+                    && truncate_array(val, 10)
+                {
+                    modified = true;
+                }
             }
-            
+
             if modified {
                 // Add a warning field to indicate truncation
-                obj.insert("_warning".to_string(), serde_json::Value::String("Output truncated for brevity".to_string()));
+                obj.insert(
+                    "_warning".to_string(),
+                    serde_json::Value::String("Output truncated for brevity".to_string()),
+                );
             }
         }
 
@@ -55,7 +60,6 @@ fn compress_result(content: &str) -> String {
             return json.to_string();
         }
     }
-
 
     // Fallback: smart truncation keeping start and end (crucial for error logs)
     let keep_len = MAX_RESULT_SIZE / 2;
@@ -172,12 +176,18 @@ impl ToolCache {
 
     /// Check if a tool is a mutating operation that should invalidate the cache.
     pub fn is_mutating(tool_name: &str) -> bool {
-        matches!(tool_name, "edit" | "edit_batch" | "edit_file" | "apply_patch" | "shell" | "write")
+        matches!(
+            tool_name,
+            "edit" | "edit_batch" | "edit_file" | "apply_patch" | "shell" | "write"
+        )
     }
 
     /// Check if tool is an edit operation (not shell).
     pub fn is_edit(tool_name: &str) -> bool {
-        matches!(tool_name, "edit" | "edit_batch" | "edit_file" | "apply_patch" | "write")
+        matches!(
+            tool_name,
+            "edit" | "edit_batch" | "edit_file" | "apply_patch" | "write"
+        )
     }
 
     /// Extract file path from tool input if present.
@@ -389,8 +399,11 @@ impl<P: LlmProvider> Agent<P> {
                             {
                                 debug!("Cache hit for tool {}", name);
                                 self.callback.on_tool_cache_hit(name, input);
-                                self.callback
-                                    .on_tool_result(name, &cached_content, cached_is_error);
+                                self.callback.on_tool_result(
+                                    name,
+                                    &cached_content,
+                                    cached_is_error,
+                                );
                                 tool_results.push(ContentBlock::ToolResult {
                                     tool_use_id: id.clone(),
                                     content: cached_content,
@@ -433,7 +446,10 @@ impl<P: LlmProvider> Agent<P> {
                         let raw_content = if result.success {
                             result.output.to_string()
                         } else {
-                            result.error.clone().unwrap_or_else(|| "Unknown error".to_string())
+                            result
+                                .error
+                                .clone()
+                                .unwrap_or_else(|| "Unknown error".to_string())
                         };
                         let content = compress_result(&raw_content);
 
@@ -481,7 +497,10 @@ impl<P: LlmProvider> Agent<P> {
                     let raw_content = if result.success {
                         result.output.to_string()
                     } else {
-                        result.error.clone().unwrap_or_else(|| "Unknown error".to_string())
+                        result
+                            .error
+                            .clone()
+                            .unwrap_or_else(|| "Unknown error".to_string())
                     };
                     let content = compress_result(&raw_content);
 

@@ -26,8 +26,7 @@ pub struct Snapshot {
 }
 
 /// Metadata about a snapshot.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SnapshotMetadata {
     /// Number of files in the snapshot.
     pub files_count: usize,
@@ -71,7 +70,6 @@ impl Snapshot {
         self.file_hashes.get(path)
     }
 }
-
 
 #[cfg(test)]
 mod tests {

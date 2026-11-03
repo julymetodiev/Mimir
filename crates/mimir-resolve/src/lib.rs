@@ -78,7 +78,10 @@ pub fn link(graph: &CodeGraph, files: &[ProjectFile], indexes: &[ScipIndex]) -> 
 
     graph.replace_edges(edges.into_vec());
 
-    let semantic_files = files.iter().filter(|f| covered.contains(&f.file_id)).count();
+    let semantic_files = files
+        .iter()
+        .filter(|f| covered.contains(&f.file_id))
+        .count();
     LinkReport {
         semantic_calls,
         syntax_calls,
@@ -102,8 +105,11 @@ pub(crate) struct ConstantUse {
 /// Add an edge for each use of a constant that holds a function, directly or through another
 /// constant. Other constants are left out: `MAX_SIZE` under every function would hide the rest.
 fn add_uses_of_function_holders(graph: &CodeGraph, edges: &mut EdgeSet, uses: &[ConstantUse]) {
-    let is_constant =
-        |id: SymbolId| graph.get_symbol(id).is_some_and(|s| s.kind == SymbolKind::Constant);
+    let is_constant = |id: SymbolId| {
+        graph
+            .get_symbol(id)
+            .is_some_and(|s| s.kind == SymbolKind::Constant)
+    };
     let mut holders: HashSet<SymbolId> = edges
         .edges
         .iter()
@@ -114,7 +120,13 @@ fn add_uses_of_function_holders(graph: &CodeGraph, edges: &mut EdgeSet, uses: &[
         let mut grew = false;
         for used in uses {
             if holders.contains(&used.constant) && used.from != used.constant {
-                edges.add(used.from, used.constant, EdgeKind::UsesAsValue, used.span, used.confidence);
+                edges.add(
+                    used.from,
+                    used.constant,
+                    EdgeKind::UsesAsValue,
+                    used.span,
+                    used.confidence,
+                );
                 grew |= is_constant(used.from) && holders.insert(used.from);
             }
         }
@@ -141,7 +153,8 @@ impl EdgeSet {
         confidence: Confidence,
     ) {
         if self.seen.insert((from, to, kind)) {
-            self.edges.push((from, to, EdgeData::new(kind, span, confidence)));
+            self.edges
+                .push((from, to, EdgeData::new(kind, span, confidence)));
         }
     }
 
@@ -150,7 +163,10 @@ impl EdgeSet {
     }
 
     fn count(&self, kind: EdgeKind) -> usize {
-        self.edges.iter().filter(|(_, _, data)| data.kind == kind).count()
+        self.edges
+            .iter()
+            .filter(|(_, _, data)| data.kind == kind)
+            .count()
     }
 
     fn into_vec(self) -> Vec<(SymbolId, SymbolId, EdgeData)> {

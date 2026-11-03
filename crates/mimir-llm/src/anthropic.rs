@@ -2,8 +2,8 @@
 
 use crate::{
     ChunkType, Completion, CompletionRequest, CompletionStream, ContentBlock, LlmError,
-    LlmProvider, LlmResult, Message, ProviderConfig, Role, StopReason, StreamChunk,
-    ToolUseChunk, Usage,
+    LlmProvider, LlmResult, Message, ProviderConfig, Role, StopReason, StreamChunk, ToolUseChunk,
+    Usage,
 };
 use async_trait::async_trait;
 use futures::StreamExt;
@@ -44,10 +44,7 @@ impl AnthropicProvider {
     }
 
     fn base_url(&self) -> &str {
-        self.config
-            .base_url
-            .as_deref()
-            .unwrap_or(ANTHROPIC_API_URL)
+        self.config.base_url.as_deref().unwrap_or(ANTHROPIC_API_URL)
     }
 
     fn build_request(&self, request: &CompletionRequest) -> AnthropicRequest {
@@ -60,7 +57,13 @@ impl AnthropicProvider {
         let tools: Option<Vec<Value>> = if request.tools.is_empty() {
             None
         } else {
-            Some(request.tools.iter().map(|t| t.to_anthropic_format()).collect())
+            Some(
+                request
+                    .tools
+                    .iter()
+                    .map(|t| t.to_anthropic_format())
+                    .collect(),
+            )
         };
 
         AnthropicRequest {
@@ -176,8 +179,7 @@ impl LlmProvider for AnthropicProvider {
 }
 
 fn parse_sse_chunk(bytes: &[u8]) -> LlmResult<StreamChunk> {
-    let text = std::str::from_utf8(bytes)
-        .map_err(|e| LlmError::Stream(e.to_string()))?;
+    let text = std::str::from_utf8(bytes).map_err(|e| LlmError::Stream(e.to_string()))?;
 
     // Parse SSE format
     for line in text.lines() {
@@ -320,9 +322,19 @@ impl AnthropicMessage {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum AnthropicContent {
-    Text { text: String },
-    ToolUse { id: String, name: String, input: Value },
-    ToolResult { tool_use_id: String, content: String, is_error: bool },
+    Text {
+        text: String,
+    },
+    ToolUse {
+        id: String,
+        name: String,
+        input: Value,
+    },
+    ToolResult {
+        tool_use_id: String,
+        content: String,
+        is_error: bool,
+    },
 }
 
 #[derive(Debug, Deserialize)]

@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use crate::app::{Config, find_project_root};
 use crate::commands::sync::sync_project;
-use crate::daemon::{check_daemon_running, DaemonClient};
+use crate::daemon::{DaemonClient, check_daemon_running};
 
 /// Edit mode specifying the type of edit operation.
 #[derive(Debug, Clone, Copy)]
@@ -64,7 +64,16 @@ pub struct EditRequest<'a> {
 
 /// Execute the edit command.
 pub async fn execute(request: EditRequest<'_>) -> Result<()> {
-    let EditRequest { file, symbol, mode, start, end, content, preview, backup } = request;
+    let EditRequest {
+        file,
+        symbol,
+        mode,
+        start,
+        end,
+        content,
+        preview,
+        backup,
+    } = request;
     // Verify we're in a mimir project
     let root = find_project_root().context("Not in a Mimir project. Run 'mimir init' first.")?;
     let config = Config::new(&root);
@@ -81,7 +90,9 @@ pub async fn execute(request: EditRequest<'_>) -> Result<()> {
     // Resolve symbol location if provided
     let symbol_loc = if let Some(sym_name) = symbol {
         if !check_daemon_running(&config.agent_dir) {
-            anyhow::bail!("Daemon not running. Start with 'mimir daemon start' for symbol-based editing.");
+            anyhow::bail!(
+                "Daemon not running. Start with 'mimir daemon start' for symbol-based editing."
+            );
         }
 
         let mut client = DaemonClient::connect(&config.agent_dir).await?;
@@ -98,7 +109,13 @@ pub async fn execute(request: EditRequest<'_>) -> Result<()> {
         }
 
         let resolved_path = root.join(&sym.file_path);
-        println!("Resolved symbol '{}' to {}:{}-{}", sym_name, sym.file_path.display(), sym.start_line, sym.end_line);
+        println!(
+            "Resolved symbol '{}' to {}:{}-{}",
+            sym_name,
+            sym.file_path.display(),
+            sym.start_line,
+            sym.end_line
+        );
 
         Some(SymbolLocation {
             file_path: resolved_path,
@@ -131,11 +148,19 @@ pub async fn execute(request: EditRequest<'_>) -> Result<()> {
             EditOp::replace_lines(&file_path, loc.start_line, loc.end_line, content)
         }
         EditMode::Lines => {
-            let line_offset = symbol_loc.as_ref().map(|l| l.start_line.saturating_sub(1)).unwrap_or(0);
+            let line_offset = symbol_loc
+                .as_ref()
+                .map(|l| l.start_line.saturating_sub(1))
+                .unwrap_or(0);
             let start_val = start.context("Lines mode requires --start parameter")?;
             let end_val = end.context("Lines mode requires --end parameter")?;
             let content = content.context("Lines mode requires --content parameter")?;
-            EditOp::replace_lines(&file_path, start_val + line_offset, end_val + line_offset, content)
+            EditOp::replace_lines(
+                &file_path,
+                start_val + line_offset,
+                end_val + line_offset,
+                content,
+            )
         }
         EditMode::Replace => {
             let start_val = start.context("Replace mode requires --start parameter")?;
@@ -179,8 +204,7 @@ pub async fn execute(request: EditRequest<'_>) -> Result<()> {
         );
         println!(
             "  Lines: {} modified (net: {:+})",
-            result.lines_modified,
-            result.lines_changed
+            result.lines_modified, result.lines_changed
         );
 
         // Auto-sync after edit if enabled (default: true)
@@ -199,8 +223,8 @@ fn select_best_symbol<'a>(symbols: &'a [SymbolInfo], query: &str) -> &'a SymbolI
     // Priority order (lower = better)
     fn kind_priority(kind: &SymbolKind) -> u8 {
         match kind {
-            SymbolKind::Impl => 0,        // impl blocks highest priority
-            SymbolKind::Struct => 1,      // structs next
+            SymbolKind::Impl => 0,   // impl blocks highest priority
+            SymbolKind::Struct => 1, // structs next
             SymbolKind::Class => 1,
             SymbolKind::Function => 2,
             SymbolKind::Method => 2,
@@ -213,19 +237,22 @@ fn select_best_symbol<'a>(symbols: &'a [SymbolInfo], query: &str) -> &'a SymbolI
         }
     }
 
-    symbols.iter().min_by(|a, b| {
-        // First: prefer exact name match
-        let a_exact = a.name == query;
-        let b_exact = b.name == query;
-        if a_exact != b_exact {
-            return b_exact.cmp(&a_exact);
-        }
+    symbols
+        .iter()
+        .min_by(|a, b| {
+            // First: prefer exact name match
+            let a_exact = a.name == query;
+            let b_exact = b.name == query;
+            if a_exact != b_exact {
+                return b_exact.cmp(&a_exact);
+            }
 
-        // Second: prefer by kind priority
-        let a_priority = kind_priority(&a.kind);
-        let b_priority = kind_priority(&b.kind);
-        a_priority.cmp(&b_priority)
-    }).unwrap_or(&symbols[0])
+            // Second: prefer by kind priority
+            let a_priority = kind_priority(&a.kind);
+            let b_priority = kind_priority(&b.kind);
+            a_priority.cmp(&b_priority)
+        })
+        .unwrap_or(&symbols[0])
 }
 
 /// Symbol batch edit operation.
@@ -277,9 +304,20 @@ pub async fn execute_batch_symbols(json_input: &str, preview: bool, backup: bool
         }
 
         let file_path = root.join(&sym.file_path);
-        println!("  {} → {}:{}-{}", edit.symbol, sym.file_path.display(), sym.start_line, sym.end_line);
+        println!(
+            "  {} → {}:{}-{}",
+            edit.symbol,
+            sym.file_path.display(),
+            sym.start_line,
+            sym.end_line
+        );
 
-        ops.push(EditOp::replace_lines(&file_path, sym.start_line, sym.end_line, &edit.content));
+        ops.push(EditOp::replace_lines(
+            &file_path,
+            sym.start_line,
+            sym.end_line,
+            &edit.content,
+        ));
     }
 
     // Create editor

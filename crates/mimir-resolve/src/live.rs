@@ -80,7 +80,11 @@ impl Analyzers {
         if !self.running.contains_key(root) {
             let started = Instant::now();
             let analyzer = Analyzer::start(root)?;
-            info!("rust-analyzer ready for {:?} in {:?}", root, started.elapsed());
+            info!(
+                "rust-analyzer ready for {:?} in {:?}",
+                root,
+                started.elapsed()
+            );
             self.running.insert(root.to_path_buf(), analyzer);
         }
         let analyzer = self.running.get_mut(root).ok_or("no analyzer")?;
@@ -100,15 +104,27 @@ fn resolve_documents(
     stale: &[&ProjectFile],
 ) -> Result<HashMap<PathBuf, LiveDocument>, String> {
     let project = project.canonicalize().map_err(|e| e.to_string())?;
-    let sources: HashMap<&Path, &str> = files.iter().map(|f| (f.path.as_path(), &*f.source)).collect();
+    let sources: HashMap<&Path, &str> = files
+        .iter()
+        .map(|f| (f.path.as_path(), &*f.source))
+        .collect();
     for file in stale {
         analyzer.update(&project.join(&file.path), &file.source)?;
     }
     let target = |found: Location| {
         let path = found.path.strip_prefix(&project).ok()?.to_path_buf();
-        let line = sources.get(path.as_path())?.split('\n').nth(found.line as usize)?;
-        let name = line.get(found.column as usize..found.end_column as usize)?.to_string();
-        Some(Target { path, line: found.line + 1, name })
+        let line = sources
+            .get(path.as_path())?
+            .split('\n')
+            .nth(found.line as usize)?;
+        let name = line
+            .get(found.column as usize..found.end_column as usize)?
+            .to_string();
+        Some(Target {
+            path,
+            line: found.line + 1,
+            name,
+        })
     };
 
     let mut documents = HashMap::new();
@@ -116,18 +132,29 @@ fn resolve_documents(
         let path = project.join(&file.path);
         let mut document = LiveDocument::default();
         for reference in file.references.iter().filter(|r| {
-            matches!(r.kind, ReferenceKind::Call | ReferenceKind::FunctionValue | ReferenceKind::Read)
+            matches!(
+                r.kind,
+                ReferenceKind::Call | ReferenceKind::FunctionValue | ReferenceKind::Read
+            )
         }) {
             let (line, column) = site_of(reference);
-            let found = analyzer.definition(&path, line - 1, column)?.into_iter().filter_map(target).collect();
+            let found = analyzer
+                .definition(&path, line - 1, column)?
+                .into_iter()
+                .filter_map(target)
+                .collect();
             if let Some(found) = choose(found, &reference.name)
-                && (found.name == reference.name || !FORWARDING_METHODS.contains(&reference.name.as_str()))
+                && (found.name == reference.name
+                    || !FORWARDING_METHODS.contains(&reference.name.as_str()))
             {
                 document.sites.insert((line, column), found);
             }
         }
         for (line, column) in impl_trait_names(&file.source) {
-            let found = analyzer.definition(&path, line - 1, column)?.into_iter().find_map(target);
+            let found = analyzer
+                .definition(&path, line - 1, column)?
+                .into_iter()
+                .find_map(target);
             if let Some(found) = found {
                 document.traits.insert(line, found);
             }
@@ -159,7 +186,10 @@ fn impl_trait_names(source: &str) -> Vec<(u32, u32)> {
     for (i, line) in source.split('\n').enumerate() {
         let text = line.trim_start();
         let text = text.strip_prefix("unsafe ").unwrap_or(text);
-        let Some(rest) = text.strip_prefix("impl").filter(|r| r.starts_with([' ', '<'])) else {
+        let Some(rest) = text
+            .strip_prefix("impl")
+            .filter(|r| r.starts_with([' ', '<']))
+        else {
             continue;
         };
         let rest = skip_generics(rest).trim_start();
@@ -170,7 +200,12 @@ fn impl_trait_names(source: &str) -> Vec<(u32, u32)> {
         let at = rest.as_ptr() as usize - line.as_ptr() as usize;
         if let Some(offset) = implemented.find(name).filter(|_| !name.is_empty()) {
             // The last segment of the path, not an earlier one that contains its text.
-            let offset = implemented.split('<').next().unwrap_or(implemented).rfind(name).unwrap_or(offset);
+            let offset = implemented
+                .split('<')
+                .next()
+                .unwrap_or(implemented)
+                .rfind(name)
+                .unwrap_or(offset);
             found.push((i as u32 + 1, (at + offset) as u32));
         }
     }
@@ -246,7 +281,14 @@ impl Analyzer {
         let writer = stdin.clone();
         std::thread::spawn(move || read_messages(stdout, &writer, &answers_tx, &status_tx));
 
-        let mut analyzer = Self { child, stdin, answers, status, next_id: 0, open: HashMap::new() };
+        let mut analyzer = Self {
+            child,
+            stdin,
+            answers,
+            status,
+            next_id: 0,
+            open: HashMap::new(),
+        };
         let uri = uri_of(&root);
         let capabilities = json!({
             "window": {"workDoneProgress": true},
@@ -256,13 +298,17 @@ impl Analyzer {
             "general": {"positionEncodings": ["utf-8"]},
             "experimental": {"serverStatusNotification": true},
         });
-        let init = analyzer.request("initialize", json!({
-            "processId": std::process::id(),
-            "rootUri": uri,
-            "workspaceFolders": [{"uri": uri, "name": "project"}],
-            "initializationOptions": config(),
-            "capabilities": capabilities,
-        }), LOAD_TIMEOUT)?;
+        let init = analyzer.request(
+            "initialize",
+            json!({
+                "processId": std::process::id(),
+                "rootUri": uri,
+                "workspaceFolders": [{"uri": uri, "name": "project"}],
+                "initializationOptions": config(),
+                "capabilities": capabilities,
+            }),
+            LOAD_TIMEOUT,
+        )?;
         if init["capabilities"]["positionEncoding"] != "utf-8" {
             return Err("rust-analyzer does not offer byte columns".to_string());
         }
@@ -274,11 +320,19 @@ impl Analyzer {
     fn wait_until_loaded(&self) -> Result<(), String> {
         let started = Instant::now();
         loop {
-            let left = LOAD_TIMEOUT.checked_sub(started.elapsed()).ok_or("rust-analyzer did not load in time")?;
-            let status = self.status.recv_timeout(left).map_err(|_| "rust-analyzer did not load in time")?;
+            let left = LOAD_TIMEOUT
+                .checked_sub(started.elapsed())
+                .ok_or("rust-analyzer did not load in time")?;
+            let status = self
+                .status
+                .recv_timeout(left)
+                .map_err(|_| "rust-analyzer did not load in time")?;
             if status["quiescent"] == true {
                 return match status["health"].as_str() {
-                    Some("error") => Err(format!("rust-analyzer could not load: {}", status["message"])),
+                    Some("error") => Err(format!(
+                        "rust-analyzer could not load: {}",
+                        status["message"]
+                    )),
                     _ => Ok(()),
                 };
             }
@@ -293,10 +347,13 @@ impl Analyzer {
             Some((known, _)) if known == hash => Ok(()),
             Some((_, version)) => {
                 self.open.insert(path.to_path_buf(), (hash, version + 1));
-                self.notify("textDocument/didChange", json!({
-                    "textDocument": {"uri": uri, "version": version + 1},
-                    "contentChanges": [{"text": text}],
-                }))
+                self.notify(
+                    "textDocument/didChange",
+                    json!({
+                        "textDocument": {"uri": uri, "version": version + 1},
+                        "contentChanges": [{"text": text}],
+                    }),
+                )
             }
             None => {
                 self.open.insert(path.to_path_buf(), (hash, 1));
@@ -309,10 +366,14 @@ impl Analyzer {
 
     /// The definitions of what is at a 0-based position.
     fn definition(&mut self, path: &Path, line: u32, column: u32) -> Result<Vec<Location>, String> {
-        let result = self.request("textDocument/definition", json!({
-            "textDocument": {"uri": uri_of(path)},
-            "position": {"line": line, "character": column},
-        }), QUERY_TIMEOUT)?;
+        let result = self.request(
+            "textDocument/definition",
+            json!({
+                "textDocument": {"uri": uri_of(path)},
+                "position": {"line": line, "character": column},
+            }),
+            QUERY_TIMEOUT,
+        )?;
         let one = std::slice::from_ref(&result);
         let answers = result.as_array().map_or(one, Vec::as_slice);
         let number = |v: &Value| v.as_u64().map(|n| n as u32);
@@ -334,11 +395,19 @@ impl Analyzer {
         for attempt in 0..ATTEMPTS {
             self.next_id += 1;
             let id = self.next_id;
-            write_message(&self.stdin, &json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}))?;
+            write_message(
+                &self.stdin,
+                &json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}),
+            )?;
             let started = Instant::now();
             loop {
-                let left = timeout.checked_sub(started.elapsed()).ok_or_else(|| format!("{method} timed out"))?;
-                let answer = self.answers.recv_timeout(left).map_err(|_| format!("{method} timed out"))?;
+                let left = timeout
+                    .checked_sub(started.elapsed())
+                    .ok_or_else(|| format!("{method} timed out"))?;
+                let answer = self
+                    .answers
+                    .recv_timeout(left)
+                    .map_err(|_| format!("{method} timed out"))?;
                 if answer["id"] != id {
                     continue;
                 }
@@ -348,7 +417,9 @@ impl Analyzer {
                         std::thread::sleep(Duration::from_millis(100 * (attempt as u64 + 1)));
                         break;
                     }
-                    Some(_) => return Err(format!("{method} failed: {}", answer["error"]["message"])),
+                    Some(_) => {
+                        return Err(format!("{method} failed: {}", answer["error"]["message"]));
+                    }
                     None => return Ok(answer["result"].clone()),
                 }
             }
@@ -357,7 +428,10 @@ impl Analyzer {
     }
 
     fn notify(&self, method: &str, params: Value) -> Result<(), String> {
-        write_message(&self.stdin, &json!({"jsonrpc": "2.0", "method": method, "params": params}))
+        write_message(
+            &self.stdin,
+            &json!({"jsonrpc": "2.0", "method": method, "params": params}),
+        )
     }
 }
 
@@ -390,7 +464,10 @@ fn read_messages(
             (Some("workspace/configuration"), Some(id)) => {
                 let items = message["params"]["items"].as_array().map_or(0, Vec::len);
                 let result: Vec<Value> = (0..items).map(|_| config()).collect();
-                let _ = write_message(stdin, &json!({"jsonrpc": "2.0", "id": id, "result": result}));
+                let _ = write_message(
+                    stdin,
+                    &json!({"jsonrpc": "2.0", "id": id, "result": result}),
+                );
             }
             (Some(_), Some(id)) => {
                 let _ = write_message(stdin, &json!({"jsonrpc": "2.0", "id": id, "result": null}));
@@ -432,7 +509,9 @@ fn uri_of(path: &Path) -> String {
     let mut uri = String::from("file://");
     for byte in path.to_string_lossy().bytes() {
         match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'/' | b'-' | b'_' | b'.' | b'~' => uri.push(byte as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'/' | b'-' | b'_' | b'.' | b'~' => {
+                uri.push(byte as char)
+            }
             _ => uri.push_str(&format!("%{byte:02X}")),
         }
     }
@@ -462,11 +541,23 @@ mod tests {
 
     #[test]
     fn chooses_the_answer_with_the_name_at_the_site() {
-        let target = |name: &str| Target { path: PathBuf::from("a.rs"), line: 1, name: name.to_string() };
-        let chosen = |found: &[&str], name| choose(found.iter().map(|n| target(n)).collect(), name).map(|t| t.name);
+        let target = |name: &str| Target {
+            path: PathBuf::from("a.rs"),
+            line: 1,
+            name: name.to_string(),
+        };
+        let chosen = |found: &[&str], name| {
+            choose(found.iter().map(|n| target(n)).collect(), name).map(|t| t.name)
+        };
 
-        assert_eq!(chosen(&["block_on", "helper"], "helper").as_deref(), Some("helper"));
-        assert_eq!(chosen(&["original"], "renamed").as_deref(), Some("original"));
+        assert_eq!(
+            chosen(&["block_on", "helper"], "helper").as_deref(),
+            Some("helper")
+        );
+        assert_eq!(
+            chosen(&["original"], "renamed").as_deref(),
+            Some("original")
+        );
         assert_eq!(chosen(&[], "helper"), None);
     }
 
@@ -482,7 +573,12 @@ mod tests {
         let lines: Vec<&str> = source.split('\n').collect();
         let names: Vec<(u32, &str)> = impl_trait_names(source)
             .into_iter()
-            .map(|(line, column)| (line, &lines[line as usize - 1][column as usize..column as usize + 2]))
+            .map(|(line, column)| {
+                (
+                    line,
+                    &lines[line as usize - 1][column as usize..column as usize + 2],
+                )
+            })
             .collect();
         assert_eq!(names, [(2, "Tr"), (3, "Tr"), (4, "Tr")]);
     }

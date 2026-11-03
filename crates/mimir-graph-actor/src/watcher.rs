@@ -4,14 +4,14 @@ use mimir_error::GraphError;
 use mimir_protocol::{CommandSender, GraphCommand};
 use mimir_types::Language;
 use notify::RecursiveMode;
-use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
+use notify_debouncer_mini::{DebouncedEventKind, new_debouncer};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
-use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio::sync::{RwLock, mpsc, oneshot};
 use tracing::{debug, error, info, warn};
 
 /// Default patterns to ignore when watching.
@@ -41,7 +41,10 @@ impl Default for WatcherConfig {
     fn default() -> Self {
         Self {
             debounce: Duration::from_millis(100),
-            ignore_dirs: DEFAULT_IGNORE_PATTERNS.iter().map(|s| s.to_string()).collect(),
+            ignore_dirs: DEFAULT_IGNORE_PATTERNS
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
             recursive: true,
         }
     }
@@ -85,9 +88,10 @@ pub struct WatcherHandle {
 impl WatcherHandle {
     /// Request shutdown of the watcher.
     pub async fn shutdown(&self) -> Result<(), GraphError> {
-        self.shutdown_tx.send(()).await.map_err(|_| {
-            GraphError::WatcherError("watcher already shut down".to_string())
-        })
+        self.shutdown_tx
+            .send(())
+            .await
+            .map_err(|_| GraphError::WatcherError("watcher already shut down".to_string()))
     }
 }
 
@@ -281,11 +285,12 @@ impl FileWatcher {
                     })
                     .await
                     .is_ok()
-                    && let Ok(Ok(file_id)) = reply_rx.await {
-                        let mut ids = file_ids.write().await;
-                        ids.insert(path.clone(), file_id);
-                        info!("File changed: {}", path.display());
-                    }
+                    && let Ok(Ok(file_id)) = reply_rx.await
+                {
+                    let mut ids = file_ids.write().await;
+                    ids.insert(path.clone(), file_id);
+                    info!("File changed: {}", path.display());
+                }
             }
 
             WatchEvent::Removed(path) => {

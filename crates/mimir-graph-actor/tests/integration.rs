@@ -27,7 +27,9 @@ async fn test_full_sync_workflow() {
 
     // Create main.rs
     let mut main_file = std::fs::File::create(src_dir.join("main.rs")).unwrap();
-    main_file.write_all(b"
+    main_file
+        .write_all(
+            b"
 fn main() {
     helper();
 }
@@ -35,11 +37,15 @@ fn main() {
 fn helper() {
     println!(\"Hello!\");
 }
-").unwrap();
+",
+        )
+        .unwrap();
 
     // Create lib.rs
     let mut lib_file = std::fs::File::create(src_dir.join("lib.rs")).unwrap();
-    lib_file.write_all(b"
+    lib_file
+        .write_all(
+            b"
 pub fn public_func() {}
 
 fn private_func() {}
@@ -53,22 +59,19 @@ impl MyStruct {
         Self { field: 0 }
     }
 }
-").unwrap();
+",
+        )
+        .unwrap();
 
     // Set up channels and actor
     let (cmd_tx, cmd_rx) = command_channel(64);
     let (event_tx, _event_rx) = event_channel(64);
     let event_tx_clone = event_tx.clone();
 
-    let actor = GraphActor::with_registry(
-        temp_dir.path().to_path_buf(),
-        create_test_registry(),
-    );
+    let actor = GraphActor::with_registry(temp_dir.path().to_path_buf(), create_test_registry());
 
     // Start actor
-    let actor_handle = tokio::spawn(async move {
-        actor.run(cmd_rx, event_tx).await
-    });
+    let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
     let handle = GraphHandle::new(cmd_tx, event_tx_clone);
 
@@ -77,7 +80,10 @@ impl MyStruct {
 
     // Verify sync found our files
     assert_eq!(sync_result.files_added, 2, "Expected 2 files to be added");
-    assert!(sync_result.symbols_added > 0, "Expected some symbols to be added");
+    assert!(
+        sync_result.symbols_added > 0,
+        "Expected some symbols to be added"
+    );
 
     // Verify we can find symbols
     let main_result = handle.find_symbol("main").await.unwrap();
@@ -87,7 +93,10 @@ impl MyStruct {
     assert!(helper_result.has_results(), "Should find 'helper' symbol");
 
     let public_func_result = handle.find_symbol("public_func").await.unwrap();
-    assert!(public_func_result.has_results(), "Should find 'public_func' symbol");
+    assert!(
+        public_func_result.has_results(),
+        "Should find 'public_func' symbol"
+    );
 
     let struct_result = handle.find_symbol("MyStruct").await.unwrap();
     assert!(struct_result.has_results(), "Should find 'MyStruct' symbol");
@@ -116,14 +125,9 @@ async fn test_incremental_sync() {
     let (event_tx, _event_rx) = event_channel(64);
     let event_tx_clone = event_tx.clone();
 
-    let actor = GraphActor::with_registry(
-        temp_dir.path().to_path_buf(),
-        create_test_registry(),
-    );
+    let actor = GraphActor::with_registry(temp_dir.path().to_path_buf(), create_test_registry());
 
-    let actor_handle = tokio::spawn(async move {
-        actor.run(cmd_rx, event_tx).await
-    });
+    let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
     let handle = GraphHandle::new(cmd_tx, event_tx_clone);
 
@@ -144,7 +148,9 @@ async fn test_incremental_sync() {
 
     // Modify the first file
     let mut file1 = std::fs::File::create(temp_dir.path().join("file1.rs")).unwrap();
-    file1.write_all(b"fn modified() {}\nfn another() {}").unwrap();
+    file1
+        .write_all(b"fn modified() {}\nfn another() {}")
+        .unwrap();
 
     // Third sync should detect the modification
     let third_sync = handle.sync().await.unwrap();
@@ -169,27 +175,28 @@ async fn test_add_file_directly() {
     let (event_tx, mut event_rx) = event_channel(64);
     let event_tx_clone = event_tx.clone();
 
-    let actor = GraphActor::with_registry(
-        PathBuf::from("/tmp"),
-        create_test_registry(),
-    );
+    let actor = GraphActor::with_registry(PathBuf::from("/tmp"), create_test_registry());
 
-    let actor_handle = tokio::spawn(async move {
-        actor.run(cmd_rx, event_tx).await
-    });
+    let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
     let handle = GraphHandle::new(cmd_tx, event_tx_clone);
 
     // Add file directly
-    let file_id = handle.add_file(
-        PathBuf::from("test.rs"),
-        "fn test_fn() {}\nstruct TestStruct {}".to_string(),
-        Language::Rust,
-    ).await.unwrap();
+    let file_id = handle
+        .add_file(
+            PathBuf::from("test.rs"),
+            "fn test_fn() {}\nstruct TestStruct {}".to_string(),
+            Language::Rust,
+        )
+        .await
+        .unwrap();
 
     // Check we received the event
     let event = event_rx.recv().await.unwrap();
-    assert!(matches!(event, mimir_protocol::GraphEvent::FileAdded { .. }));
+    assert!(matches!(
+        event,
+        mimir_protocol::GraphEvent::FileAdded { .. }
+    ));
 
     // Find the symbols
     let fn_result = handle.find_symbol("test_fn").await.unwrap();
@@ -217,28 +224,27 @@ async fn test_trace_symbols() {
     let (event_tx, _event_rx) = event_channel(64);
     let event_tx_clone = event_tx.clone();
 
-    let actor = GraphActor::with_registry(
-        PathBuf::from("/tmp"),
-        create_test_registry(),
-    );
+    let actor = GraphActor::with_registry(PathBuf::from("/tmp"), create_test_registry());
 
-    let actor_handle = tokio::spawn(async move {
-        actor.run(cmd_rx, event_tx).await
-    });
+    let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
     let handle = GraphHandle::new(cmd_tx, event_tx_clone);
 
     // Add file with function calls
-    handle.add_file(
-        PathBuf::from("caller.rs"),
-        r#"
+    handle
+        .add_file(
+            PathBuf::from("caller.rs"),
+            r#"
 fn caller() {
     callee();
 }
 fn callee() {}
-"#.to_string(),
-        Language::Rust,
-    ).await.unwrap();
+"#
+            .to_string(),
+            Language::Rust,
+        )
+        .await
+        .unwrap();
 
     // Find the caller symbol
     let find_result = handle.find_symbol("caller").await.unwrap();
@@ -250,7 +256,10 @@ fn callee() {}
     let trace_result = handle.trace(caller_id).await.unwrap();
 
     // The trace should include the root symbol
-    assert_eq!(trace_result.root.id, caller_id, "Root should be the caller symbol");
+    assert_eq!(
+        trace_result.root.id, caller_id,
+        "Root should be the caller symbol"
+    );
     assert_eq!(trace_result.root.name, "caller");
 
     // Shutdown
@@ -265,7 +274,11 @@ async fn settled_callers(handle: &GraphHandle, name: &str) -> Vec<String> {
     for _ in 0..600 {
         let trace = handle.trace(found.symbols[0].id).await.unwrap();
         if !trace.provisional {
-            return trace.callers.iter().map(|c| c.symbol.name.clone()).collect();
+            return trace
+                .callers
+                .iter()
+                .map(|c| c.symbol.name.clone())
+                .collect();
         }
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }
@@ -276,14 +289,24 @@ async fn settled_callers(handle: &GraphHandle, name: &str) -> Vec<String> {
 /// and a later query gets the rest.
 #[tokio::test]
 async fn test_query_answers_before_the_index_is_done() {
-    if std::process::Command::new("rust-analyzer").arg("--version").output().is_err() {
+    if std::process::Command::new("rust-analyzer")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
         eprintln!("skipped: rust-analyzer is not installed");
         return;
     }
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/resolve-workspace");
     let temp_dir = TempDir::new().unwrap();
     let project = temp_dir.path().canonicalize().unwrap();
-    for file in ["Cargo.toml", "alpha/Cargo.toml", "alpha/src/lib.rs", "beta/Cargo.toml", "beta/src/lib.rs"] {
+    for file in [
+        "Cargo.toml",
+        "alpha/Cargo.toml",
+        "alpha/src/lib.rs",
+        "beta/Cargo.toml",
+        "beta/src/lib.rs",
+    ] {
         let target = project.join(file);
         std::fs::create_dir_all(target.parent().unwrap()).unwrap();
         std::fs::copy(fixture.join(file), target).unwrap();
@@ -298,24 +321,40 @@ async fn test_query_answers_before_the_index_is_done() {
 
     let found = handle.find_symbol("load_twice").await.unwrap();
     let trace = handle.trace(found.symbols[0].id).await.unwrap();
-    assert!(trace.provisional, "an index takes longer than no wait at all");
+    assert!(
+        trace.provisional,
+        "an index takes longer than no wait at all"
+    );
     // `store.load_twice()` needs types, so syntax leaves it out rather than guess.
     assert!(trace.callers.is_empty());
 
-    assert_eq!(settled_callers(&handle, "load_twice").await, ["through_trait"]);
+    assert_eq!(
+        settled_callers(&handle, "load_twice").await,
+        ["through_trait"]
+    );
     handle.shutdown().await.unwrap();
 }
 
 #[tokio::test]
 async fn test_edit_keeps_callers_in_other_files() {
-    if std::process::Command::new("rust-analyzer").arg("--version").output().is_err() {
+    if std::process::Command::new("rust-analyzer")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
         eprintln!("skipped: rust-analyzer is not installed");
         return;
     }
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/resolve-workspace");
     let temp_dir = TempDir::new().unwrap();
     let project = temp_dir.path().canonicalize().unwrap();
-    for file in ["Cargo.toml", "alpha/Cargo.toml", "alpha/src/lib.rs", "beta/Cargo.toml", "beta/src/lib.rs"] {
+    for file in [
+        "Cargo.toml",
+        "alpha/Cargo.toml",
+        "alpha/src/lib.rs",
+        "beta/Cargo.toml",
+        "beta/src/lib.rs",
+    ] {
         let target = project.join(file);
         std::fs::create_dir_all(target.parent().unwrap()).unwrap();
         std::fs::copy(fixture.join(file), target).unwrap();
@@ -333,7 +372,10 @@ async fn test_edit_keeps_callers_in_other_files() {
     let path = project.join("alpha/src/lib.rs");
     let content = std::fs::read_to_string(&path).unwrap() + "\n// edited\n";
     std::fs::write(&path, &content).unwrap();
-    handle.add_file(path, content, Language::Rust).await.unwrap();
+    handle
+        .add_file(path, content, Language::Rust)
+        .await
+        .unwrap();
 
     assert_eq!(callers(&handle).await, ["through_trait"]);
     handle.shutdown().await.unwrap();

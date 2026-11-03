@@ -96,7 +96,9 @@ pub fn load_or_generate(
                 warn!("No semantic index, using syntax rules: {e}");
                 break;
             }
-            Err(LoadError::Failed(e)) => warn!("No semantic index for {:?}, using syntax rules: {e}", root),
+            Err(LoadError::Failed(e)) => {
+                warn!("No semantic index for {:?}, using syntax rules: {e}", root)
+            }
             Err(LoadError::NotSaved) => {}
         }
     }
@@ -119,7 +121,8 @@ impl From<String> for LoadError {
 
 impl ScipIndex {
     fn covers(&self, path: &Path) -> bool {
-        path.strip_prefix(&self.root).is_ok_and(|p| self.documents.contains_key(p))
+        path.strip_prefix(&self.root)
+            .is_ok_and(|p| self.documents.contains_key(p))
     }
 
     /// Whether a file changed since the index, so its entries here no longer hold.
@@ -129,7 +132,9 @@ impl ScipIndex {
 
     /// Whether the index holds any file under a directory.
     fn reaches(&self, dir: &Path) -> bool {
-        self.documents.keys().any(|path| self.root.join(path).starts_with(dir))
+        self.documents
+            .keys()
+            .any(|path| self.root.join(path).starts_with(dir))
     }
 }
 
@@ -138,7 +143,12 @@ impl ScipIndex {
 ///
 /// A crate an index already reaches is left out. Its files missing from that index are behind
 /// `cfg` or a feature, or in no module tree, and indexing the crate alone does not find them.
-fn next_cargo_root(project: &Path, file: &Path, tried: &HashSet<PathBuf>, indexes: &[ScipIndex]) -> Option<PathBuf> {
+fn next_cargo_root(
+    project: &Path,
+    file: &Path,
+    tried: &HashSet<PathBuf>,
+    indexes: &[ScipIndex],
+) -> Option<PathBuf> {
     let dirs: Vec<&Path> = file.ancestors().skip(1).collect();
     dirs.into_iter()
         .rev()
@@ -160,9 +170,18 @@ fn load_root(
 ) -> Result<ScipIndex, LoadError> {
     let abs = project.join(root);
     let snapshot = Snapshot::of(project, root, files);
-    let stem = format!("scip-{}", ContentHash::compute(root.to_string_lossy().as_bytes()).to_hex());
-    let (index_file, key_file) = (cache_dir.join(format!("{stem}.scip")), cache_dir.join(format!("{stem}.key")));
-    let (log_file, failed_file) = (cache_dir.join(format!("{stem}.log")), cache_dir.join(format!("{stem}.macros")));
+    let stem = format!(
+        "scip-{}",
+        ContentHash::compute(root.to_string_lossy().as_bytes()).to_hex()
+    );
+    let (index_file, key_file) = (
+        cache_dir.join(format!("{stem}.scip")),
+        cache_dir.join(format!("{stem}.key")),
+    );
+    let (log_file, failed_file) = (
+        cache_dir.join(format!("{stem}.log")),
+        cache_dir.join(format!("{stem}.macros")),
+    );
     let read = || -> Result<ScipIndex, LoadError> {
         let bytes = fs::read(&index_file).map_err(|e| LoadError::Failed(e.to_string()))?;
         let mut index = decode(&bytes)?;
@@ -170,13 +189,20 @@ fn load_root(
         Ok(index)
     };
 
-    let saved = fs::read_to_string(&key_file).ok().filter(|_| index_file.is_file()).map(|text| Snapshot::parse(&text));
+    let saved = fs::read_to_string(&key_file)
+        .ok()
+        .filter(|_| index_file.is_file())
+        .map(|text| Snapshot::parse(&text));
     let failed = || macro_failures(&failed_file, files);
     if refresh == Refresh::Saved {
         let saved = saved.ok_or(LoadError::NotSaved)?;
         let mut index = read()?;
         let edited = edited_files(&index, &saved, &snapshot, files);
-        index.unanswered = edited.into_iter().chain(failed()).map(|f| f.path.clone()).collect();
+        index.unanswered = edited
+            .into_iter()
+            .chain(failed())
+            .map(|f| f.path.clone())
+            .collect();
         return Ok(index);
     }
     let usable = saved.filter(|saved| match refresh {
@@ -199,10 +225,16 @@ fn load_root(
                 }
                 // A new index would not help files whose macros may fail again.
                 Err(e) if edits_only => {
-                    warn!("No running analyzer for {:?}, keeping what the index says: {e}", root);
+                    warn!(
+                        "No running analyzer for {:?}, keeping what the index says: {e}",
+                        root
+                    );
                     return Ok(index);
                 }
-                Err(e) => warn!("No running analyzer for {:?}, writing a new index: {e}", root),
+                Err(e) => warn!(
+                    "No running analyzer for {:?}, writing a new index: {e}",
+                    root
+                ),
             }
         }
     }
@@ -213,23 +245,44 @@ fn load_root(
     let started = Instant::now();
     run_rust_analyzer(&abs, &index_file, &log_file)?;
     fs::write(&key_file, snapshot.text()).map_err(|e| LoadError::Failed(e.to_string()))?;
-    info!("Semantic index for {:?} written in {:?}", root, started.elapsed());
+    info!(
+        "Semantic index for {:?} written in {:?}",
+        root,
+        started.elapsed()
+    );
 
     let mut index = read()?;
     let log = fs::read_to_string(&log_file).unwrap_or_default();
-    let failures: Vec<&str> = log.lines().filter(|line| line.contains(MACRO_FAILURE)).collect();
+    let failures: Vec<&str> = log
+        .lines()
+        .filter(|line| line.contains(MACRO_FAILURE))
+        .collect();
     if !failures.is_empty() {
         let suspects: Vec<&ProjectFile> = files
             .iter()
             .filter(|f| f.path.starts_with(root) && index.covers(&f.path))
-            .filter(|f| macros_on_impls(&f.source).iter().any(|name| failures.iter().any(|l| names_macro(l, name))))
+            .filter(|f| {
+                macros_on_impls(&f.source)
+                    .iter()
+                    .any(|name| failures.iter().any(|l| names_macro(l, name)))
+            })
             .collect();
-        warn!("A proc macro failed in the index for {:?}: {} files go to a running analyzer", root, suspects.len());
-        let list: String = suspects.iter().map(|f| format!("{}\n", f.path.display())).collect();
+        warn!(
+            "A proc macro failed in the index for {:?}: {} files go to a running analyzer",
+            root,
+            suspects.len()
+        );
+        let list: String = suspects
+            .iter()
+            .map(|f| format!("{}\n", f.path.display()))
+            .collect();
         fs::write(&failed_file, list).map_err(|e| LoadError::Failed(e.to_string()))?;
         match analyzers.resolve(project, &abs, files, &suspects) {
             Ok(live) => index.live = live,
-            Err(e) => warn!("No running analyzer for {:?}, keeping what the index says: {e}", root),
+            Err(e) => warn!(
+                "No running analyzer for {:?}, keeping what the index says: {e}",
+                root
+            ),
         }
     }
     Ok(index)
@@ -250,7 +303,10 @@ fn macro_failures<'a>(list: &Path, files: &'a [ProjectFile]) -> Vec<&'a ProjectF
         return Vec::new();
     };
     let listed: HashSet<&Path> = list.lines().map(Path::new).collect();
-    files.iter().filter(|f| listed.contains(f.path.as_path())).collect()
+    files
+        .iter()
+        .filter(|f| listed.contains(f.path.as_path()))
+        .collect()
 }
 
 /// The attribute macros on `impl`s: the items a macro with state can fail on, as `#[napi]` does
@@ -272,7 +328,8 @@ fn macros_on_impls(source: &str) -> Vec<&str> {
 
 /// Whether a line of the log names a macro, as a whole word.
 fn names_macro(line: &str, name: &str) -> bool {
-    line.split(|c: char| !c.is_alphanumeric() && c != '_').any(|word| word == name)
+    line.split(|c: char| !c.is_alphanumeric() && c != '_')
+        .any(|word| word == name)
 }
 
 /// Files whose index entries no longer hold: changed ones it covered, and new ones.
@@ -339,13 +396,20 @@ impl Snapshot {
         let mut text = String::new();
         for manifest in manifests {
             if let Ok(bytes) = fs::read(project.join(&manifest)) {
-                text.push_str(&format!("{} {}\n", manifest.display(), ContentHash::compute(&bytes).to_hex()));
+                text.push_str(&format!(
+                    "{} {}\n",
+                    manifest.display(),
+                    ContentHash::compute(&bytes).to_hex()
+                ));
             }
         }
         sources.sort_by_key(|(path, _)| *path);
         Self {
             manifests: ContentHash::compute(text.as_bytes()).to_hex(),
-            sources: sources.into_iter().map(|(path, hash)| (path.to_path_buf(), hash.to_hex())).collect(),
+            sources: sources
+                .into_iter()
+                .map(|(path, hash)| (path.to_path_buf(), hash.to_hex()))
+                .collect(),
         }
     }
 }
@@ -407,7 +471,10 @@ pub(crate) fn resolve(
             if index.is_edited(&file.path) {
                 // The positions are old, so find each function again by name and order.
                 let mut seen: HashMap<&str, usize> = HashMap::new();
-                let mut own: Vec<_> = occurrences.iter().filter(|o| o.roles & ROLE_DEFINITION != 0 && is_function(&o.symbol)).collect();
+                let mut own: Vec<_> = occurrences
+                    .iter()
+                    .filter(|o| o.roles & ROLE_DEFINITION != 0 && is_function(&o.symbol))
+                    .collect();
                 own.sort_by_key(|o| (o.line, o.column));
                 for o in own {
                     let name = symbol_name(&o.symbol);
@@ -418,7 +485,10 @@ pub(crate) fn resolve(
                     *n += 1;
                 }
                 let mut seen: HashMap<&str, usize> = HashMap::new();
-                let mut own: Vec<_> = occurrences.iter().filter(|o| o.roles & ROLE_DEFINITION != 0 && is_term(&o.symbol)).collect();
+                let mut own: Vec<_> = occurrences
+                    .iter()
+                    .filter(|o| o.roles & ROLE_DEFINITION != 0 && is_term(&o.symbol))
+                    .collect();
                 own.sort_by_key(|o| (o.line, o.column));
                 for o in own {
                     let name = symbol_name(&o.symbol);
@@ -430,14 +500,27 @@ pub(crate) fn resolve(
                 }
                 continue;
             }
-            for o in occurrences.iter().filter(|o| o.roles & ROLE_DEFINITION != 0 && is_term(&o.symbol)) {
-                let name = lines.get(o.line as usize).and_then(|l| l.get(o.column as usize..o.end_column as usize));
-                if let Some(symbol) = name.and_then(|name| table.constant_at(file.file_id, o.line + 1, name)) {
+            for o in occurrences
+                .iter()
+                .filter(|o| o.roles & ROLE_DEFINITION != 0 && is_term(&o.symbol))
+            {
+                let name = lines
+                    .get(o.line as usize)
+                    .and_then(|l| l.get(o.column as usize..o.end_column as usize));
+                if let Some(symbol) =
+                    name.and_then(|name| table.constant_at(file.file_id, o.line + 1, name))
+                {
                     constants.add(o.symbol.as_str(), symbol);
                 }
             }
-            for o in occurrences.iter().filter(|o| o.roles & ROLE_DEFINITION != 0 && is_function(&o.symbol)) {
-                let Some(name) = lines.get(o.line as usize).and_then(|l| l.get(o.column as usize..o.end_column as usize)) else {
+            for o in occurrences
+                .iter()
+                .filter(|o| o.roles & ROLE_DEFINITION != 0 && is_function(&o.symbol))
+            {
+                let Some(name) = lines
+                    .get(o.line as usize)
+                    .and_then(|l| l.get(o.column as usize..o.end_column as usize))
+                else {
                     continue;
                 };
                 if let Some(symbol) = table.definition_at(file.file_id, o.line + 1, name) {
@@ -446,7 +529,10 @@ pub(crate) fn resolve(
             }
         }
 
-        for (file, lines, occurrences) in documents.iter().filter(|(file, ..)| !index.is_edited(&file.path)) {
+        for (file, lines, occurrences) in documents
+            .iter()
+            .filter(|(file, ..)| !index.is_edited(&file.path))
+        {
             // rust-analyzer does not set the import role on the paths in a `use`.
             let imports: Vec<Span> = file
                 .references
@@ -461,11 +547,16 @@ pub(crate) fn resolve(
                 .filter(|r| r.kind == ReferenceKind::LocalRead)
                 .map(|r| r.span.start)
                 .collect();
-            for o in occurrences.iter().filter(|o| o.roles & (ROLE_DEFINITION | ROLE_IMPORT) == 0 && is_function(&o.symbol)) {
+            for o in occurrences.iter().filter(|o| {
+                o.roles & (ROLE_DEFINITION | ROLE_IMPORT) == 0 && is_function(&o.symbol)
+            }) {
                 let Some(target) = definitions.get(o.symbol.as_str(), file.file_id) else {
                     continue;
                 };
-                let Some(after) = lines.get(o.end_line as usize).and_then(|l| l.get(o.end_column as usize..)) else {
+                let Some(after) = lines
+                    .get(o.end_line as usize)
+                    .and_then(|l| l.get(o.end_column as usize..))
+                else {
                     continue;
                 };
                 let start = byte_offset(lines, o.line, o.column);
@@ -476,7 +567,10 @@ pub(crate) fn resolve(
                     .and_then(|l| l.get(o.column as usize..))
                     .is_some_and(|t| t.starts_with(|c: char| c.is_alphabetic() || c == '_'));
                 let (from, kind) = if is_call(after) {
-                    (table.callable_at(file.file_id, o.line + 1, o.column), EdgeKind::Calls)
+                    (
+                        table.callable_at(file.file_id, o.line + 1, o.column),
+                        EdgeKind::Calls,
+                    )
                 } else if !named
                     || imports.iter().any(|i| i.start <= start && start < i.end)
                     || locals.contains(&start)
@@ -489,7 +583,10 @@ pub(crate) fn resolve(
                     edges.add(from.id, target.id, kind, span, Confidence::Certain);
                 }
             }
-            for o in occurrences.iter().filter(|o| o.roles & (ROLE_DEFINITION | ROLE_IMPORT) == 0 && is_term(&o.symbol)) {
+            for o in occurrences
+                .iter()
+                .filter(|o| o.roles & (ROLE_DEFINITION | ROLE_IMPORT) == 0 && is_term(&o.symbol))
+            {
                 let Some(constant) = constants.get(o.symbol.as_str(), file.file_id) else {
                     continue;
                 };
@@ -508,13 +605,32 @@ pub(crate) fn resolve(
             }
         }
 
-        for (file, lines, occurrences) in documents.iter().filter(|(file, ..)| !index.is_edited(&file.path)) {
+        for (file, lines, occurrences) in documents
+            .iter()
+            .filter(|(file, ..)| !index.is_edited(&file.path))
+        {
             for (method, trait_name) in table.trait_impls_in(file.file_id) {
-                let declaration = table.impl_at(file.file_id, method.range.start_line).and_then(|block| {
-                    declared_method(block, method, trait_name, lines, occurrences, &definitions, file.file_id)
-                });
+                let declaration = table
+                    .impl_at(file.file_id, method.range.start_line)
+                    .and_then(|block| {
+                        declared_method(
+                            block,
+                            method,
+                            trait_name,
+                            lines,
+                            occurrences,
+                            &definitions,
+                            file.file_id,
+                        )
+                    });
                 if let Some(declaration) = declaration {
-                    edges.add(method.id, declaration.id, EdgeKind::Implements, method.span, Confidence::Certain);
+                    edges.add(
+                        method.id,
+                        declaration.id,
+                        EdgeKind::Implements,
+                        method.span,
+                        Confidence::Certain,
+                    );
                 }
             }
         }
@@ -539,16 +655,22 @@ struct Definitions<'a> {
 
 impl<'a> Definitions<'a> {
     fn add(&mut self, symbol: &'a str, definition: &Arc<Symbol>) {
-        self.by_symbol.entry(symbol).or_default().push(definition.clone());
+        self.by_symbol
+            .entry(symbol)
+            .or_default()
+            .push(definition.clone());
     }
 
     /// What a symbol means in a file: the one defined there, or else the only one there is.
     fn get(&self, symbol: &str, file: FileId) -> Option<&Arc<Symbol>> {
         let found = self.by_symbol.get(symbol)?;
-        found.iter().find(|s| s.file_id == file).or(match found.as_slice() {
-            [one] => Some(one),
-            _ => None,
-        })
+        found
+            .iter()
+            .find(|s| s.file_id == file)
+            .or(match found.as_slice() {
+                [one] => Some(one),
+                _ => None,
+            })
     }
 }
 
@@ -564,11 +686,12 @@ fn resolve_live(
     for reference in &file.references {
         let (line, column) = (reference.range.start_line, reference.range.start_col);
         if reference.kind == ReferenceKind::Read {
-            let constant = document
-                .sites
-                .get(&(line, column))
-                .and_then(|t| table.constant_at(by_path.get(t.path.as_path())?.file_id, t.line, &t.name));
-            if let (Some(constant), Some(from)) = (constant, table.any_at(file.file_id, reference.span.start)) {
+            let constant = document.sites.get(&(line, column)).and_then(|t| {
+                table.constant_at(by_path.get(t.path.as_path())?.file_id, t.line, &t.name)
+            });
+            if let (Some(constant), Some(from)) =
+                (constant, table.any_at(file.file_id, reference.span.start))
+            {
                 constant_uses.push(ConstantUse {
                     from: from.id,
                     constant: constant.id,
@@ -579,16 +702,27 @@ fn resolve_live(
             continue;
         }
         let (from, kind) = match reference.kind {
-            ReferenceKind::Call => (table.callable_at(file.file_id, line, column), EdgeKind::Calls),
-            ReferenceKind::FunctionValue => (table.any_at(file.file_id, reference.span.start), EdgeKind::UsesAsValue),
+            ReferenceKind::Call => (
+                table.callable_at(file.file_id, line, column),
+                EdgeKind::Calls,
+            ),
+            ReferenceKind::FunctionValue => (
+                table.any_at(file.file_id, reference.span.start),
+                EdgeKind::UsesAsValue,
+            ),
             _ => continue,
         };
-        let target = document
-            .sites
-            .get(&(line, column))
-            .and_then(|t| table.definition_at(by_path.get(t.path.as_path())?.file_id, t.line, &t.name));
+        let target = document.sites.get(&(line, column)).and_then(|t| {
+            table.definition_at(by_path.get(t.path.as_path())?.file_id, t.line, &t.name)
+        });
         if let (Some(from), Some(target)) = (from, target) {
-            edges.add(from.id, target.id, kind, reference.span, Confidence::Certain);
+            edges.add(
+                from.id,
+                target.id,
+                kind,
+                reference.span,
+                Confidence::Certain,
+            );
         }
     }
     for (method, _) in table.trait_impls_in(file.file_id) {
@@ -604,7 +738,13 @@ fn resolve_live(
                     .find(|s| s.file_id == defined_in.file_id && trait_of(s).is_none())
             });
         if let Some(declared) = declared {
-            edges.add(method.id, declared.id, EdgeKind::Implements, method.span, Confidence::Certain);
+            edges.add(
+                method.id,
+                declared.id,
+                EdgeKind::Implements,
+                method.span,
+                Confidence::Certain,
+            );
         }
     }
 }
@@ -623,8 +763,17 @@ fn declared_method<'a>(
 ) -> Option<&'a Arc<Symbol>> {
     occurrences
         .iter()
-        .filter(|o| o.symbol.ends_with('#') && o.line + 1 >= block.range.start_line && o.line + 1 < method.range.start_line.max(block.range.start_line + 1))
-        .filter(|o| lines.get(o.line as usize).and_then(|l| l.get(o.column as usize..o.end_column as usize)) == Some(trait_name))
+        .filter(|o| {
+            o.symbol.ends_with('#')
+                && o.line + 1 >= block.range.start_line
+                && o.line + 1 < method.range.start_line.max(block.range.start_line + 1)
+        })
+        .filter(|o| {
+            lines
+                .get(o.line as usize)
+                .and_then(|l| l.get(o.column as usize..o.end_column as usize))
+                == Some(trait_name)
+        })
         .find_map(|o| definitions.get(format!("{}{}().", o.symbol, method.name).as_str(), file))
 }
 
@@ -657,8 +806,13 @@ fn byte_offset(lines: &[&str], line: u32, column: u32) -> u32 {
 
 /// The name in a function's SCIP symbol: `run` for `a 0.1.0 impl#[T]run().`.
 fn symbol_name(symbol: &str) -> &str {
-    let descriptor = symbol.strip_suffix("().").or_else(|| symbol.strip_suffix('.')).unwrap_or(symbol);
-    let start = descriptor.rfind(['/', '#', ']', ' ']).map_or(0, |at| at + 1);
+    let descriptor = symbol
+        .strip_suffix("().")
+        .or_else(|| symbol.strip_suffix('.'))
+        .unwrap_or(symbol);
+    let start = descriptor
+        .rfind(['/', '#', ']', ' '])
+        .map_or(0, |at| at + 1);
     &descriptor[start..]
 }
 
@@ -682,7 +836,9 @@ pub fn decode(bytes: &[u8]) -> Result<ScipIndex, String> {
             let mut occurrences = Vec::new();
             for field in Fields::new(document) {
                 match field? {
-                    (1, Value::Bytes(p)) => path = Some(PathBuf::from(String::from_utf8_lossy(p).into_owned())),
+                    (1, Value::Bytes(p)) => {
+                        path = Some(PathBuf::from(String::from_utf8_lossy(p).into_owned()))
+                    }
                     (2, Value::Bytes(o)) => occurrences.push(decode_occurrence(o)?),
                     _ => {}
                 }
@@ -716,7 +872,14 @@ fn decode_occurrence(bytes: &[u8]) -> Result<Occurrence, String> {
         [l, c, el, ec] => (l, c, el, ec),
         _ => return Err(format!("bad occurrence range {range:?}")),
     };
-    Ok(Occurrence { line, column, end_line, end_column, symbol, roles })
+    Ok(Occurrence {
+        line,
+        column,
+        end_line,
+        end_column,
+        symbol,
+        roles,
+    })
 }
 
 enum Value<'a> {
@@ -743,7 +906,11 @@ impl<'a> Fields<'a> {
             1 => self.skip(8)?,
             2 => {
                 let len = varint(self.bytes, &mut self.at)? as usize;
-                let end = self.at.checked_add(len).filter(|e| *e <= self.bytes.len()).ok_or("truncated field")?;
+                let end = self
+                    .at
+                    .checked_add(len)
+                    .filter(|e| *e <= self.bytes.len())
+                    .ok_or("truncated field")?;
                 let value = &self.bytes[self.at..end];
                 self.at = end;
                 Value::Bytes(value)
@@ -826,7 +993,8 @@ mod tests {
 
     #[test]
     fn a_crate_an_index_reaches_gets_no_index_of_its_own() {
-        let project = std::env::temp_dir().join(format!("mimir-resolve-roots-{}", std::process::id()));
+        let project =
+            std::env::temp_dir().join(format!("mimir-resolve-roots-{}", std::process::id()));
         for dir in ["", "crates/member", "other"] {
             fs::create_dir_all(project.join(dir)).unwrap();
             fs::write(project.join(dir).join("Cargo.toml"), "").unwrap();
@@ -837,7 +1005,14 @@ mod tests {
             ..ScipIndex::default()
         };
         let tried = HashSet::from([PathBuf::new()]);
-        let next = |file: &str| next_cargo_root(&project, Path::new(file), &tried, std::slice::from_ref(&index));
+        let next = |file: &str| {
+            next_cargo_root(
+                &project,
+                Path::new(file),
+                &tried,
+                std::slice::from_ref(&index),
+            )
+        };
 
         let behind_cfg = next("crates/member/src/linux_only.rs");
         let own_workspace = next("other/src/lib.rs");
@@ -863,8 +1038,14 @@ mod tests {
     #[test]
     fn finds_the_macros_on_impls() {
         assert_eq!(macros_on_impls("#[napi]\nimpl Core {}\n"), ["napi"]);
-        assert_eq!(macros_on_impls("#[napi]\n// why\nimpl<T> Core<T> {}\n"), ["napi"]);
-        assert_eq!(macros_on_impls("    #[async_trait::async_trait]\n    impl A for B {}\n"), ["async_trait"]);
+        assert_eq!(
+            macros_on_impls("#[napi]\n// why\nimpl<T> Core<T> {}\n"),
+            ["napi"]
+        );
+        assert_eq!(
+            macros_on_impls("    #[async_trait::async_trait]\n    impl A for B {}\n"),
+            ["async_trait"]
+        );
         assert!(macros_on_impls("#[napi]\npub struct Core;\nimpl Core {}\n").is_empty());
         assert!(macros_on_impls("#[napi]\nimplement();\n").is_empty());
     }
@@ -879,8 +1060,13 @@ mod tests {
 
     #[test]
     fn a_snapshot_survives_being_saved() {
-        let mut snapshot = Snapshot { manifests: "m".to_string(), ..Snapshot::default() };
-        snapshot.sources.insert(PathBuf::from("a b/c.rs"), "h".to_string());
+        let mut snapshot = Snapshot {
+            manifests: "m".to_string(),
+            ..Snapshot::default()
+        };
+        snapshot
+            .sources
+            .insert(PathBuf::from("a b/c.rs"), "h".to_string());
         assert_eq!(Snapshot::parse(&snapshot.text()), snapshot);
     }
 
@@ -888,7 +1074,10 @@ mod tests {
     fn finds_the_name_in_a_symbol() {
         assert_eq!(symbol_name("rust-analyzer cargo a 0.1.0 run()."), "run");
         assert_eq!(symbol_name("rust-analyzer cargo a 0.1.0 m/T#run()."), "run");
-        assert_eq!(symbol_name("rust-analyzer cargo a 0.1.0 m/impl#[T]run()."), "run");
+        assert_eq!(
+            symbol_name("rust-analyzer cargo a 0.1.0 m/impl#[T]run()."),
+            "run"
+        );
         assert_eq!(symbol_name("rust-analyzer cargo a 0.1.0 m/TABLE."), "TABLE");
     }
 

@@ -87,27 +87,37 @@ impl Tool for TraceTool {
                     let callers: Vec<TraceSymbol> = if callees_only {
                         vec![]
                     } else {
-                        result.callers.into_iter().enumerate().map(|(i, s)| TraceSymbol {
-                            name: s.name,
-                            kind: s.kind,
-                            file: s.file,
-                            start_line: s.start_line,
-                            end_line: s.end_line,
-                            depth: i as u32 + 1,
-                        }).collect()
+                        result
+                            .callers
+                            .into_iter()
+                            .enumerate()
+                            .map(|(i, s)| TraceSymbol {
+                                name: s.name,
+                                kind: s.kind,
+                                file: s.file,
+                                start_line: s.start_line,
+                                end_line: s.end_line,
+                                depth: i as u32 + 1,
+                            })
+                            .collect()
                     };
 
                     let callees: Vec<TraceSymbol> = if callers_only {
                         vec![]
                     } else {
-                        result.callees.into_iter().enumerate().map(|(i, s)| TraceSymbol {
-                            name: s.name,
-                            kind: s.kind,
-                            file: s.file,
-                            start_line: s.start_line,
-                            end_line: s.end_line,
-                            depth: i as u32 + 1,
-                        }).collect()
+                        result
+                            .callees
+                            .into_iter()
+                            .enumerate()
+                            .map(|(i, s)| TraceSymbol {
+                                name: s.name,
+                                kind: s.kind,
+                                file: s.file,
+                                start_line: s.start_line,
+                                end_line: s.end_line,
+                                depth: i as u32 + 1,
+                            })
+                            .collect()
                     };
 
                     // Optionally read source code
@@ -140,7 +150,9 @@ impl Tool for TraceTool {
         }
 
         // Fallback: no graph client
-        ToolResult::error("Trace requires daemon connection. Start daemon with 'mimir daemon start'")
+        ToolResult::error(
+            "Trace requires daemon connection. Start daemon with 'mimir daemon start'",
+        )
     }
 }
 
@@ -164,6 +176,13 @@ mod tests {
         let tool = TraceTool;
         let schema = tool.schema();
         assert_eq!(schema.name, "trace");
-        assert!(schema.parameters.required.as_ref().unwrap().contains(&"symbol".to_string()));
+        assert!(
+            schema
+                .parameters
+                .required
+                .as_ref()
+                .unwrap()
+                .contains(&"symbol".to_string())
+        );
     }
 }

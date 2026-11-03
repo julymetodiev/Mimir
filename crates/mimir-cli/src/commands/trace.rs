@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use crate::app::{Config, find_project_root};
 use crate::commands::sync::{load_graph, sync_project};
-use crate::daemon::{check_daemon_running, DaemonClient};
+use crate::daemon::{DaemonClient, check_daemon_running};
 
 /// Which implementation a trait call reaches is decided at runtime, so these are possibilities.
 const VIA_TRAIT: &str = " [via trait, possible]";
@@ -42,9 +42,42 @@ pub async fn execute(
     let in_project = find_project_root().is_some_and(|root| Config::new(&root).is_initialized());
     match file {
         // Callers live in other files, so a file in a project is traced through the project.
-        Some(f) if in_project => execute_from_graph(Some(f), symbol_name, depth, json, show_code, callers_only, callees_only).await,
-        Some(f) => execute_single_file(f, symbol_name, depth, json, show_code, callers_only, callees_only).await,
-        None => execute_from_graph(None, symbol_name, depth, json, show_code, callers_only, callees_only).await,
+        Some(f) if in_project => {
+            execute_from_graph(
+                Some(f),
+                symbol_name,
+                depth,
+                json,
+                show_code,
+                callers_only,
+                callees_only,
+            )
+            .await
+        }
+        Some(f) => {
+            execute_single_file(
+                f,
+                symbol_name,
+                depth,
+                json,
+                show_code,
+                callers_only,
+                callees_only,
+            )
+            .await
+        }
+        None => {
+            execute_from_graph(
+                None,
+                symbol_name,
+                depth,
+                json,
+                show_code,
+                callers_only,
+                callees_only,
+            )
+            .await
+        }
     }
 }
 
@@ -119,12 +152,26 @@ async fn execute_single_file(
     link(&graph, std::slice::from_ref(&project_file), &[]);
 
     // Find and trace the symbol
-    let view = TraceView { depth, json, show_code, callers_only, callees_only };
+    let view = TraceView {
+        depth,
+        json,
+        show_code,
+        callers_only,
+        callees_only,
+    };
     trace_symbol(&graph, symbol_name, view, Some((file, file_id)))
 }
 
 /// Execute trace from the synced graph.
-async fn execute_from_graph(file: Option<&Path>, symbol_name: &str, depth: usize, json: bool, show_code: bool, callers_only: bool, callees_only: bool) -> Result<()> {
+async fn execute_from_graph(
+    file: Option<&Path>,
+    symbol_name: &str,
+    depth: usize,
+    json: bool,
+    show_code: bool,
+    callers_only: bool,
+    callees_only: bool,
+) -> Result<()> {
     // Find project root
     let root = find_project_root().context("Not in a Mimir project. Run 'mimir init' first.")?;
     let config = Config::new(&root);
@@ -135,7 +182,16 @@ async fn execute_from_graph(file: Option<&Path>, symbol_name: &str, depth: usize
 
     // Check if daemon is running - use it for automatic updates
     if file.is_none() && check_daemon_running(&config.agent_dir) {
-        return execute_via_daemon(&config, symbol_name, depth, json, show_code, callers_only, callees_only).await;
+        return execute_via_daemon(
+            &config,
+            symbol_name,
+            depth,
+            json,
+            show_code,
+            callers_only,
+            callees_only,
+        )
+        .await;
     }
 
     // Fallback: sync and query locally
@@ -156,14 +212,24 @@ async fn execute_from_graph(file: Option<&Path>, symbol_name: &str, depth: usize
         .transpose()?;
 
     // Find and trace the symbol
-    let view = TraceView { depth, json, show_code, callers_only, callees_only };
+    let view = TraceView {
+        depth,
+        json,
+        show_code,
+        callers_only,
+        callees_only,
+    };
     trace_symbol(&graph, symbol_name, view, scope)
 }
 
 /// The graph's id for a file given as a path.
 fn project_file_id(root: &Path, file: &Path, file_ids: &HashMap<String, FileId>) -> Result<FileId> {
-    let absolute = file.canonicalize().with_context(|| format!("File not found: {}", file.display()))?;
-    let relative = absolute.strip_prefix(root.canonicalize()?).unwrap_or(&absolute);
+    let absolute = file
+        .canonicalize()
+        .with_context(|| format!("File not found: {}", file.display()))?;
+    let relative = absolute
+        .strip_prefix(root.canonicalize()?)
+        .unwrap_or(&absolute);
     file_ids
         .get(&*relative.to_string_lossy())
         .copied()
@@ -171,7 +237,15 @@ fn project_file_id(root: &Path, file: &Path, file_ids: &HashMap<String, FileId>)
 }
 
 /// Execute trace via the daemon.
-async fn execute_via_daemon(config: &Config, symbol_name: &str, depth: usize, json: bool, show_code: bool, callers_only: bool, callees_only: bool) -> Result<()> {
+async fn execute_via_daemon(
+    config: &Config,
+    symbol_name: &str,
+    depth: usize,
+    json: bool,
+    show_code: bool,
+    callers_only: bool,
+    callees_only: bool,
+) -> Result<()> {
     let mut client = DaemonClient::connect(&config.agent_dir).await?;
 
     let options = IpcTraceOptions {
@@ -189,7 +263,10 @@ async fn execute_via_daemon(config: &Config, symbol_name: &str, depth: usize, js
         println!("{}", output);
     } else {
         println!("Trace for: {} ({:?})", result.root.name, result.root.kind);
-        println!("  Lines: {}-{}", result.root.start_line, result.root.end_line);
+        println!(
+            "  Lines: {}-{}",
+            result.root.start_line, result.root.end_line
+        );
         println!("  (via daemon)");
 
         // Show code snippet if requested
@@ -218,7 +295,10 @@ async fn execute_via_daemon(config: &Config, symbol_name: &str, depth: usize, js
                     TraceRelation::CallerByValue => AS_VALUE,
                     _ => "",
                 };
-                println!("{}← {} ({:?}){}", indent, node.symbol.name, node.symbol.kind, via);
+                println!(
+                    "{}← {} ({:?}){}",
+                    indent, node.symbol.name, node.symbol.kind, via
+                );
             }
             println!();
         }
@@ -228,10 +308,20 @@ async fn execute_via_daemon(config: &Config, symbol_name: &str, depth: usize, js
             for node in &result.callees {
                 let indent = "  ".repeat(node.depth as usize);
                 if node.relationship == TraceRelation::Implementation {
-                    let name = node.symbol.qualified_name.as_deref().unwrap_or(&node.symbol.name);
-                    println!("{}→ {} ({:?}){}", indent, name, node.symbol.kind, IMPLEMENTATION);
+                    let name = node
+                        .symbol
+                        .qualified_name
+                        .as_deref()
+                        .unwrap_or(&node.symbol.name);
+                    println!(
+                        "{}→ {} ({:?}){}",
+                        indent, name, node.symbol.kind, IMPLEMENTATION
+                    );
                 } else if node.relationship == TraceRelation::CalleeByValue {
-                    println!("{}→ {} ({:?}){}", indent, node.symbol.name, node.symbol.kind, AS_VALUE);
+                    println!(
+                        "{}→ {} ({:?}){}",
+                        indent, node.symbol.name, node.symbol.kind, AS_VALUE
+                    );
                 } else {
                     println!("{}→ {} ({:?})", indent, node.symbol.name, node.symbol.kind);
                 }
@@ -244,7 +334,9 @@ async fn execute_via_daemon(config: &Config, symbol_name: &str, depth: usize, js
             result.total_symbols, result.max_depth_reached
         );
         if result.provisional {
-            println!("Partial: rust-analyzer is still working, so some calls may be missing. Run this again shortly.");
+            println!(
+                "Partial: rust-analyzer is still working, so some calls may be missing. Run this again shortly."
+            );
         }
     }
 
@@ -258,7 +350,13 @@ fn trace_symbol(
     view: TraceView,
     scope: Option<(&Path, FileId)>,
 ) -> Result<()> {
-    let TraceView { depth, json, show_code, callers_only, callees_only } = view;
+    let TraceView {
+        depth,
+        json,
+        show_code,
+        callers_only,
+        callees_only,
+    } = view;
     let file = scope.map(|(path, _)| path);
 
     // Find the target symbol
@@ -296,25 +394,34 @@ fn trace_symbol(
     } else {
         println!("Trace for: {} ({})", result.root.name, result.root.kind);
         if let Some(f) = file {
-            println!("  File: {}:{}-{}", f.display(), result.root.range.start_line, result.root.range.end_line);
+            println!(
+                "  File: {}:{}-{}",
+                f.display(),
+                result.root.range.start_line,
+                result.root.range.end_line
+            );
         } else {
-            println!("  Lines: {}-{}", result.root.range.start_line, result.root.range.end_line);
+            println!(
+                "  Lines: {}-{}",
+                result.root.range.start_line, result.root.range.end_line
+            );
         }
 
         // Show code snippet if requested
         if show_code
             && let Some(f) = file
-                && let Ok(source) = std::fs::read_to_string(f) {
-                    let lines: Vec<&str> = source.lines().collect();
-                    let start = (result.root.range.start_line as usize).saturating_sub(1);
-                    let end = (result.root.range.end_line as usize).min(lines.len());
-                    println!();
-                    println!("```");
-                    for (i, line) in lines[start..end].iter().enumerate() {
-                        println!("{:4}│ {}", start + i + 1, line);
-                    }
-                    println!("```");
-                }
+            && let Ok(source) = std::fs::read_to_string(f)
+        {
+            let lines: Vec<&str> = source.lines().collect();
+            let start = (result.root.range.start_line as usize).saturating_sub(1);
+            let end = (result.root.range.end_line as usize).min(lines.len());
+            println!();
+            println!("```");
+            for (i, line) in lines[start..end].iter().enumerate() {
+                println!("{:4}│ {}", start + i + 1, line);
+            }
+            println!("```");
+        }
         println!();
 
         if !callees_only && !result.callers.is_empty() {
@@ -326,7 +433,10 @@ fn trace_symbol(
                     TraceRelationship::CallerByValue => AS_VALUE,
                     _ => "",
                 };
-                println!("{}← {} ({}){}", indent, node.symbol.name, node.symbol.kind, via);
+                println!(
+                    "{}← {} ({}){}",
+                    indent, node.symbol.name, node.symbol.kind, via
+                );
             }
             println!();
         }
@@ -336,9 +446,15 @@ fn trace_symbol(
             for node in &result.callees {
                 let indent = "  ".repeat(node.depth);
                 if node.relationship == TraceRelationship::Implementation {
-                    println!("{}→ {} ({}){}", indent, node.symbol.qualified_name, node.symbol.kind, IMPLEMENTATION);
+                    println!(
+                        "{}→ {} ({}){}",
+                        indent, node.symbol.qualified_name, node.symbol.kind, IMPLEMENTATION
+                    );
                 } else if node.relationship == TraceRelationship::CalleeByValue {
-                    println!("{}→ {} ({}){}", indent, node.symbol.name, node.symbol.kind, AS_VALUE);
+                    println!(
+                        "{}→ {} ({}){}",
+                        indent, node.symbol.name, node.symbol.kind, AS_VALUE
+                    );
                 } else {
                     println!("{}→ {} ({})", indent, node.symbol.name, node.symbol.kind);
                 }

@@ -99,7 +99,15 @@ fn extract_call(node: &Node, source: &[u8], container: Option<&str>) -> Option<E
 
     let name = name_node.utf8_text(source).ok()?.to_string();
     let qualifier = qualifier.and_then(|q| q.utf8_text(source).ok());
-    Some(call_reference(ReferenceKind::Call, name, name_node, form, confidence, qualifier, container))
+    Some(call_reference(
+        ReferenceKind::Call,
+        name,
+        name_node,
+        form,
+        confidence,
+        qualifier,
+        container,
+    ))
 }
 
 /// A function named without being called, as in `.map(name)` or `.map(Type::name)`.
@@ -119,7 +127,11 @@ fn extract_function_value(
         *node
     };
     let (name_node, qualifier, form, confidence) = match path.kind() {
-        "identifier" if node.parent().is_some_and(|p| p.kind() == "shorthand_field_initializer") => {
+        "identifier"
+            if node
+                .parent()
+                .is_some_and(|p| p.kind() == "shorthand_field_initializer") =>
+        {
             (path, None, CallForm::Shorthand, Confidence::Medium)
         }
         "identifier" => (path, None, CallForm::Plain, Confidence::Medium),
@@ -154,12 +166,18 @@ fn extract_function_value(
 }
 
 /// A use of a constant or static, by its `SCREAMING_CASE` name: it may hold a function.
-fn extract_constant_read(node: &Node, source: &[u8], container: Option<&str>) -> Option<ExtractedReference> {
+fn extract_constant_read(
+    node: &Node,
+    source: &[u8],
+    container: Option<&str>,
+) -> Option<ExtractedReference> {
     let parent = node.parent()?;
     let name_node = match node.kind() {
         "identifier" => {
             let is_segment = parent.kind() == "scoped_identifier";
-            let is_declared = parent.child_by_field_name("name").is_some_and(|name| name == *node);
+            let is_declared = parent
+                .child_by_field_name("name")
+                .is_some_and(|name| name == *node);
             if is_segment || is_declared {
                 return None;
             }
@@ -171,7 +189,11 @@ fn extract_constant_read(node: &Node, source: &[u8], container: Option<&str>) ->
     constant_read(name_node, source, container)
 }
 
-fn constant_read(name_node: Node, source: &[u8], container: Option<&str>) -> Option<ExtractedReference> {
+fn constant_read(
+    name_node: Node,
+    source: &[u8],
+    container: Option<&str>,
+) -> Option<ExtractedReference> {
     let name = name_node.utf8_text(source).ok()?;
     if !is_constant_name(name) {
         return None;
@@ -201,15 +223,26 @@ fn in_value_position(node: &Node) -> bool {
     };
     let field = match parent.kind() {
         // Only a block's tail is a bare expression; a statement is wrapped.
-        "arguments" | "array_expression" | "tuple_expression" | "return_expression"
-        | "shorthand_field_initializer" | "block" => return true,
-        "let_declaration" | "const_item" | "static_item" | "field_initializer" | "reference_expression"
-        | "match_arm" | "type_cast_expression" => "value",
+        "arguments"
+        | "array_expression"
+        | "tuple_expression"
+        | "return_expression"
+        | "shorthand_field_initializer"
+        | "block" => return true,
+        "let_declaration"
+        | "const_item"
+        | "static_item"
+        | "field_initializer"
+        | "reference_expression"
+        | "match_arm"
+        | "type_cast_expression" => "value",
         "assignment_expression" => "right",
         "closure_expression" => "body",
         _ => return false,
     };
-    parent.child_by_field_name(field).is_some_and(|value| value == *node)
+    parent
+        .child_by_field_name(field)
+        .is_some_and(|value| value == *node)
 }
 
 /// Every name a function binds: parameters, `let`, `for`, closures and match arms.
@@ -252,7 +285,9 @@ fn extract_from_tokens(
     references: &mut Vec<ExtractedReference>,
     container: Option<&str>,
 ) {
-    let tokens: Vec<Node> = (0..node.child_count()).filter_map(|i| node.child(i)).collect();
+    let tokens: Vec<Node> = (0..node.child_count())
+        .filter_map(|i| node.child(i))
+        .collect();
     for (i, token) in tokens.iter().enumerate() {
         if token.kind() == "identifier"
             && let Some(reference) = constant_read(*token, source, container)
@@ -281,7 +316,15 @@ fn extract_from_tokens(
             Some("::") => (CallForm::Scoped, Confidence::High, qualifier),
             _ => (CallForm::Plain, Confidence::Medium, None),
         };
-        references.push(call_reference(ReferenceKind::Call, name.to_string(), name_node, form, confidence, qualifier, container));
+        references.push(call_reference(
+            ReferenceKind::Call,
+            name.to_string(),
+            name_node,
+            form,
+            confidence,
+            qualifier,
+            container,
+        ));
     }
 }
 

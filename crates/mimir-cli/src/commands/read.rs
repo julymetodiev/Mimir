@@ -4,8 +4,8 @@ use anyhow::{Context, Result};
 use mimir_protocol::FindOptions;
 use serde::Serialize;
 
-use crate::app::{find_project_root, Config};
-use crate::daemon::{check_daemon_running, DaemonClient};
+use crate::app::{Config, find_project_root};
+use crate::daemon::{DaemonClient, check_daemon_running};
 
 /// Output structure for JSON mode.
 #[derive(Serialize)]
@@ -75,7 +75,9 @@ pub async fn execute(
                 _ => 60,
             }
         })
-        .ok_or_else(|| anyhow::anyhow!("Symbol '{}' not found with exact name match", symbol_name))?;
+        .ok_or_else(|| {
+            anyhow::anyhow!("Symbol '{}' not found with exact name match", symbol_name)
+        })?;
     if sym.file_path.as_os_str().is_empty() {
         anyhow::bail!("Symbol '{}' has no file path", symbol_name);
     }
@@ -98,7 +100,12 @@ pub async fn execute(
     if json {
         // JSON output
         let mut line_outputs = Vec::new();
-        for (i, line) in lines.iter().enumerate().take(display_end).skip(display_start) {
+        for (i, line) in lines
+            .iter()
+            .enumerate()
+            .take(display_end)
+            .skip(display_start)
+        {
             line_outputs.push(LineOutput {
                 number: (i + 1) as u32,
                 content: line.to_string(),
@@ -130,7 +137,12 @@ pub async fn execute(
         );
         println!();
 
-        for (i, line) in lines.iter().enumerate().take(display_end).skip(display_start) {
+        for (i, line) in lines
+            .iter()
+            .enumerate()
+            .take(display_end)
+            .skip(display_start)
+        {
             let line_num = i + 1;
             let is_symbol_line = i >= sym_start && i < sym_end;
 

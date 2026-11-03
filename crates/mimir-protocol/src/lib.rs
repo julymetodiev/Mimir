@@ -58,17 +58,20 @@ pub mod ipc;
 mod response;
 
 pub use channel::{
-    command_channel, event_channel, CommandReceiver, CommandSender, EventReceiver, EventSender,
-    DEFAULT_COMMAND_BUFFER, DEFAULT_EVENT_CAPACITY,
+    CommandReceiver, CommandSender, DEFAULT_COMMAND_BUFFER, DEFAULT_EVENT_CAPACITY, EventReceiver,
+    EventSender, command_channel, event_channel,
 };
 
 pub use command::{FindOptions, GraphCommand, SearchOptions, SyncResult, TraceOptions};
 
 pub use event::{FileEvent, GraphEvent};
 
-pub use response::{FindResponse, SearchResponse, StatsResponse, SymbolInfo, TraceNode, TraceRelation, TraceResponse};
+pub use response::{
+    FindResponse, SearchResponse, StatsResponse, SymbolInfo, TraceNode, TraceRelation,
+    TraceResponse,
+};
 
 pub use ipc::{
-    DaemonStatus, IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult, RequestId,
-    SOCKET_NAME, socket_path,
+    DaemonStatus, IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult, RequestId, SOCKET_NAME,
+    socket_path,
 };

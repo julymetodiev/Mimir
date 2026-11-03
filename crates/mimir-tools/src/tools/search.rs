@@ -70,7 +70,9 @@ impl Tool for SearchTool {
         // Use graph client if available
         let client = match &context.graph_client {
             Some(c) => c,
-            None => return ToolResult::error("Search requires daemon. Start with: mimir daemon start"),
+            None => {
+                return ToolResult::error("Search requires daemon. Start with: mimir daemon start");
+            }
         };
 
         // Search with much higher limit to account for filtering
@@ -85,15 +87,24 @@ impl Tool for SearchTool {
                     .filter(|s| {
                         if definitions_only {
                             // Only keep top-level definitions
-                            matches!(s.kind.to_lowercase().as_str(),
-                                "struct" | "impl" | "enum" | "trait" | "function" | "interface" | "class")
+                            matches!(
+                                s.kind.to_lowercase().as_str(),
+                                "struct"
+                                    | "impl"
+                                    | "enum"
+                                    | "trait"
+                                    | "function"
+                                    | "interface"
+                                    | "class"
+                            )
                         } else {
                             true
                         }
                     })
                     .take(limit)
                     .map(|s| {
-                        let code = self.read_symbol_code(&s.file, s.start_line, s.end_line, context);
+                        let code =
+                            self.read_symbol_code(&s.file, s.start_line, s.end_line, context);
                         SearchMatch {
                             name: s.name,
                             qualified_name: s.qualified_name,
@@ -162,6 +173,13 @@ mod tests {
         let tool = SearchTool;
         let schema = tool.schema();
         assert_eq!(schema.name, "search");
-        assert!(schema.parameters.required.as_ref().unwrap().contains(&"pattern".to_string()));
+        assert!(
+            schema
+                .parameters
+                .required
+                .as_ref()
+                .unwrap()
+                .contains(&"pattern".to_string())
+        );
     }
 }

@@ -27,7 +27,10 @@ impl DaemonGraphClient {
     }
 
     /// Try to connect to the daemon.
-    pub async fn connect(agent_dir: &std::path::Path, project_root: PathBuf) -> Result<Self, GraphError> {
+    pub async fn connect(
+        agent_dir: &std::path::Path,
+        project_root: PathBuf,
+    ) -> Result<Self, GraphError> {
         let client = DaemonClient::connect(agent_dir)
             .await
             .map_err(|e| GraphError::new(e.to_string()))?;

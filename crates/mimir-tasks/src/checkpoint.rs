@@ -343,11 +343,13 @@ mod tests {
         let task_id = TaskId::new();
         let mut manager = CheckpointManager::new(task_id);
 
-        let cp1 = manager.create_checkpoint()
+        let cp1 = manager
+            .create_checkpoint()
             .with_message(ConversationMessage::user("First"));
         manager.save(cp1);
 
-        let cp2 = manager.create_checkpoint()
+        let cp2 = manager
+            .create_checkpoint()
             .with_message(ConversationMessage::user("Second"));
         manager.save(cp2);
 

@@ -3,8 +3,8 @@
 use anyhow::{Context, Result};
 use std::process::Command;
 
-use crate::app::{find_project_root, Config};
-use crate::daemon::{check_daemon_running, DaemonClient, DaemonServer};
+use crate::app::{Config, find_project_root};
+use crate::daemon::{DaemonClient, DaemonServer, check_daemon_running};
 
 /// Start the daemon in foreground mode.
 pub async fn execute_start(foreground: bool) -> Result<()> {
@@ -96,7 +96,10 @@ pub async fn execute_status() -> Result<()> {
 
     println!("Daemon: running");
     println!("  Project: {}", config.root.display());
-    println!("  Socket: {}", config.agent_dir.join("daemon.sock").display());
+    println!(
+        "  Socket: {}",
+        config.agent_dir.join("daemon.sock").display()
+    );
     println!("  Files indexed: {}", stats.files_count);
     println!("  Symbols indexed: {}", stats.symbols_count);
     println!("  References: {}", stats.references_count);
@@ -118,10 +121,14 @@ pub async fn execute_sync_via_daemon() -> Result<()> {
     let result = client.sync().await?;
 
     println!("Sync complete:");
-    println!("  Files: +{} ~{} -{}",
-        result.files_added, result.files_updated, result.files_removed);
-    println!("  Symbols: +{} -{}",
-        result.symbols_added, result.symbols_removed);
+    println!(
+        "  Files: +{} ~{} -{}",
+        result.files_added, result.files_updated, result.files_removed
+    );
+    println!(
+        "  Symbols: +{} -{}",
+        result.symbols_added, result.symbols_removed
+    );
     println!("  Duration: {}ms", result.duration_ms);
 
     Ok(())

@@ -76,11 +76,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_checkpoints(false); // Disable for simple test
 
     // Create agent
-    let agent = Agent::new(provider, config, registry)
-        .with_callback(Arc::new(PrintCallback));
+    let agent = Agent::new(provider, config, registry).with_callback(Arc::new(PrintCallback));
 
     // Create a simple task
-    let mut task = Task::new("List the files in the current directory and tell me what project this is");
+    let mut task =
+        Task::new("List the files in the current directory and tell me what project this is");
 
     // Run the agent
     match agent.run(&mut task).await {

@@ -3,7 +3,7 @@
 //! Uses the same structured patch format as Codex for reliable file editing.
 //! The format is simpler and more robust than ad-hoc diff formats.
 
-use crate::{Tool, ToolContext, ToolResult, ToolSchema, ToolParameter};
+use crate::{Tool, ToolContext, ToolParameter, ToolResult, ToolSchema};
 use async_trait::async_trait;
 use serde_json::Value;
 use std::fs;
@@ -90,22 +90,46 @@ impl std::fmt::Display for PatchError {
                 write!(f, "Invalid patch at line {}: {}", line, message)
             }
             PatchError::FileNotFound(path) => {
-                write!(f, "File not found: {}. Use '*** Add File:' to create new files.", path)
+                write!(
+                    f,
+                    "File not found: {}. Use '*** Add File:' to create new files.",
+                    path
+                )
             }
             PatchError::FileAlreadyExists(path) => {
-                write!(f, "File already exists: {}. Use '*** Update File:' to modify.", path)
+                write!(
+                    f,
+                    "File already exists: {}. Use '*** Update File:' to modify.",
+                    path
+                )
             }
             PatchError::LinesNotFound { file, lines } => {
-                write!(f, "Could not find lines in '{}':\n{}\nHint: Read the file to verify current content.",
+                write!(
+                    f,
+                    "Could not find lines in '{}':\n{}\nHint: Read the file to verify current content.",
                     file,
-                    lines.iter().take(5).map(|l| format!("  {}", l)).collect::<Vec<_>>().join("\n"))
+                    lines
+                        .iter()
+                        .take(5)
+                        .map(|l| format!("  {}", l))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                )
             }
             PatchError::IoError(msg) => write!(f, "IO error: {}", msg),
             PatchError::PatchTooLarge { lines, max } => {
-                write!(f, "Patch too large: {} lines (max {}). Make smaller, targeted changes instead of rewriting entire files. Use multiple smaller patches if needed.", lines, max)
+                write!(
+                    f,
+                    "Patch too large: {} lines (max {}). Make smaller, targeted changes instead of rewriting entire files. Use multiple smaller patches if needed.",
+                    lines, max
+                )
             }
             PatchError::TooManyContextLines { count, max } => {
-                write!(f, "Too many context lines: {} (max {}). Include only 2-3 context lines before/after each change.", count, max)
+                write!(
+                    f,
+                    "Too many context lines: {} (max {}). Include only 2-3 context lines before/after each change.",
+                    count, max
+                )
             }
         }
     }
@@ -131,7 +155,7 @@ impl ApplyPatchTool {
 
         if first_line != Some(BEGIN_PATCH_MARKER) {
             return Err(PatchError::MissingMarkers(
-                "Patch must start with '*** Begin Patch'".into()
+                "Patch must start with '*** Begin Patch'".into(),
             ));
         }
 
@@ -170,18 +194,22 @@ impl ApplyPatchTool {
 
             if let Some(path) = line.strip_prefix(ADD_FILE_MARKER) {
                 // Add File
-                let (op, consumed) = Self::parse_add_file(path, &content_lines[idx+1..], line_num)?;
+                let (op, consumed) =
+                    Self::parse_add_file(path, &content_lines[idx + 1..], line_num)?;
                 ops.push(op);
                 idx += 1 + consumed;
                 line_num += 1 + consumed;
             } else if let Some(path) = line.strip_prefix(DELETE_FILE_MARKER) {
                 // Delete File
-                ops.push(PatchOp::DeleteFile { path: path.to_string() });
+                ops.push(PatchOp::DeleteFile {
+                    path: path.to_string(),
+                });
                 idx += 1;
                 line_num += 1;
             } else if let Some(path) = line.strip_prefix(UPDATE_FILE_MARKER) {
                 // Update File
-                let (op, consumed) = Self::parse_update_file(path, &content_lines[idx+1..], line_num)?;
+                let (op, consumed) =
+                    Self::parse_update_file(path, &content_lines[idx + 1..], line_num)?;
                 ops.push(op);
                 idx += 1 + consumed;
                 line_num += 1 + consumed;
@@ -197,7 +225,11 @@ impl ApplyPatchTool {
     }
 
     /// Parse an Add File section
-    fn parse_add_file(path: &str, lines: &[&str], _start_line: usize) -> Result<(PatchOp, usize), PatchError> {
+    fn parse_add_file(
+        path: &str,
+        lines: &[&str],
+        _start_line: usize,
+    ) -> Result<(PatchOp, usize), PatchError> {
         let mut content = String::new();
         let mut consumed = 0;
 
@@ -211,24 +243,32 @@ impl ApplyPatchTool {
             }
         }
 
-        Ok((PatchOp::AddFile {
-            path: path.to_string(),
-            content
-        }, consumed))
+        Ok((
+            PatchOp::AddFile {
+                path: path.to_string(),
+                content,
+            },
+            consumed,
+        ))
     }
 
     /// Parse an Update File section
-    fn parse_update_file(path: &str, lines: &[&str], start_line: usize) -> Result<(PatchOp, usize), PatchError> {
+    fn parse_update_file(
+        path: &str,
+        lines: &[&str],
+        start_line: usize,
+    ) -> Result<(PatchOp, usize), PatchError> {
         let mut move_to = None;
         let mut chunks = Vec::new();
         let mut idx = 0;
 
         // Check for optional Move to
         if let Some(line) = lines.first()
-            && let Some(new_path) = line.strip_prefix(MOVE_TO_MARKER) {
-                move_to = Some(new_path.to_string());
-                idx += 1;
-            }
+            && let Some(new_path) = line.strip_prefix(MOVE_TO_MARKER)
+        {
+            move_to = Some(new_path.to_string());
+            idx += 1;
+        }
 
         // Parse chunks
         while idx < lines.len() {
@@ -246,7 +286,8 @@ impl ApplyPatchTool {
             }
 
             // Parse one chunk
-            let (chunk, consumed) = Self::parse_chunk(&lines[idx..], start_line + idx, chunks.is_empty())?;
+            let (chunk, consumed) =
+                Self::parse_chunk(&lines[idx..], start_line + idx, chunks.is_empty())?;
             chunks.push(chunk);
             idx += consumed;
         }
@@ -258,15 +299,22 @@ impl ApplyPatchTool {
             });
         }
 
-        Ok((PatchOp::UpdateFile {
-            path: path.to_string(),
-            move_to,
-            chunks,
-        }, idx))
+        Ok((
+            PatchOp::UpdateFile {
+                path: path.to_string(),
+                move_to,
+                chunks,
+            },
+            idx,
+        ))
     }
 
     /// Parse a single chunk (context marker + change lines)
-    fn parse_chunk(lines: &[&str], start_line: usize, allow_no_marker: bool) -> Result<(UpdateChunk, usize), PatchError> {
+    fn parse_chunk(
+        lines: &[&str],
+        start_line: usize,
+        allow_no_marker: bool,
+    ) -> Result<(UpdateChunk, usize), PatchError> {
         let mut context = None;
         let mut old_lines = Vec::new();
         let mut new_lines = Vec::new();
@@ -352,12 +400,15 @@ impl ApplyPatchTool {
             });
         }
 
-        Ok((UpdateChunk {
-            context,
-            old_lines,
-            new_lines,
-            is_eof,
-        }, idx))
+        Ok((
+            UpdateChunk {
+                context,
+                old_lines,
+                new_lines,
+                is_eof,
+            },
+            idx,
+        ))
     }
 
     // ========================================================================
@@ -375,8 +426,9 @@ impl ApplyPatchTool {
                 }
 
                 if let Some(parent) = full_path.parent() {
-                    fs::create_dir_all(parent)
-                        .map_err(|e| PatchError::IoError(format!("Failed to create directory: {}", e)))?;
+                    fs::create_dir_all(parent).map_err(|e| {
+                        PatchError::IoError(format!("Failed to create directory: {}", e))
+                    })?;
                 }
 
                 fs::write(&full_path, content)
@@ -396,7 +448,11 @@ impl ApplyPatchTool {
 
                 Ok(format!("D {}", path))
             }
-            PatchOp::UpdateFile { path, move_to, chunks } => {
+            PatchOp::UpdateFile {
+                path,
+                move_to,
+                chunks,
+            } => {
                 let full_path = root.join(path);
 
                 if !full_path.exists() {
@@ -424,11 +480,13 @@ impl ApplyPatchTool {
                 let target_path = if let Some(new_path) = move_to {
                     let new_full_path = root.join(new_path);
                     if let Some(parent) = new_full_path.parent() {
-                        fs::create_dir_all(parent)
-                            .map_err(|e| PatchError::IoError(format!("Failed to create directory: {}", e)))?;
+                        fs::create_dir_all(parent).map_err(|e| {
+                            PatchError::IoError(format!("Failed to create directory: {}", e))
+                        })?;
                     }
-                    fs::remove_file(&full_path)
-                        .map_err(|e| PatchError::IoError(format!("Failed to delete old file: {}", e)))?;
+                    fs::remove_file(&full_path).map_err(|e| {
+                        PatchError::IoError(format!("Failed to delete old file: {}", e))
+                    })?;
                     new_full_path
                 } else {
                     full_path
@@ -447,7 +505,12 @@ impl ApplyPatchTool {
     }
 
     /// Apply a single chunk to lines, return new search position
-    fn apply_chunk(lines: &mut Vec<String>, chunk: &UpdateChunk, path: &str, start: usize) -> Result<usize, PatchError> {
+    fn apply_chunk(
+        lines: &mut Vec<String>,
+        chunk: &UpdateChunk,
+        path: &str,
+        start: usize,
+    ) -> Result<usize, PatchError> {
         // If we have a context marker, find it first
         let search_start = if let Some(ref ctx) = chunk.context {
             Self::find_context(lines, ctx, start).unwrap_or(start)
@@ -508,7 +571,12 @@ impl ApplyPatchTool {
     }
 
     /// Find a sequence of lines using 4-stage fuzzy matching (like Codex)
-    fn seek_sequence(lines: &[String], pattern: &[String], start: usize, eof: bool) -> Option<usize> {
+    fn seek_sequence(
+        lines: &[String],
+        pattern: &[String],
+        start: usize,
+        eof: bool,
+    ) -> Option<usize> {
         if pattern.is_empty() {
             return Some(start);
         }
@@ -544,40 +612,50 @@ impl ApplyPatchTool {
         }
 
         // Stage 4: Unicode normalization
-        (search_start..=lines.len().saturating_sub(pattern.len())).find(|&i| Self::matches_normalized(lines, pattern, i))
+        (search_start..=lines.len().saturating_sub(pattern.len()))
+            .find(|&i| Self::matches_normalized(lines, pattern, i))
     }
 
     fn matches_exact(lines: &[String], pattern: &[String], pos: usize) -> bool {
-        pattern.iter().enumerate().all(|(j, p)| lines[pos + j] == *p)
+        pattern
+            .iter()
+            .enumerate()
+            .all(|(j, p)| lines[pos + j] == *p)
     }
 
     fn matches_rstrip(lines: &[String], pattern: &[String], pos: usize) -> bool {
-        pattern.iter().enumerate().all(|(j, p)| {
-            lines[pos + j].trim_end() == p.trim_end()
-        })
+        pattern
+            .iter()
+            .enumerate()
+            .all(|(j, p)| lines[pos + j].trim_end() == p.trim_end())
     }
 
     fn matches_trim(lines: &[String], pattern: &[String], pos: usize) -> bool {
-        pattern.iter().enumerate().all(|(j, p)| {
-            lines[pos + j].trim() == p.trim()
-        })
+        pattern
+            .iter()
+            .enumerate()
+            .all(|(j, p)| lines[pos + j].trim() == p.trim())
     }
 
     fn matches_normalized(lines: &[String], pattern: &[String], pos: usize) -> bool {
-        pattern.iter().enumerate().all(|(j, p)| {
-            Self::normalize(&lines[pos + j]) == Self::normalize(p)
-        })
+        pattern
+            .iter()
+            .enumerate()
+            .all(|(j, p)| Self::normalize(&lines[pos + j]) == Self::normalize(p))
     }
 
     /// Normalize unicode characters (fancy quotes, dashes → ASCII)
     fn normalize(s: &str) -> String {
-        s.trim().chars().map(|c| match c {
-            '\u{2010}'..='\u{2015}' | '\u{2212}' => '-',
-            '\u{2018}'..='\u{201B}' => '\'',
-            '\u{201C}'..='\u{201F}' => '"',
-            '\u{00A0}' | '\u{2002}'..='\u{200A}' | '\u{202F}' | '\u{205F}' | '\u{3000}' => ' ',
-            other => other,
-        }).collect()
+        s.trim()
+            .chars()
+            .map(|c| match c {
+                '\u{2010}'..='\u{2015}' | '\u{2212}' => '-',
+                '\u{2018}'..='\u{201B}' => '\'',
+                '\u{201C}'..='\u{201F}' => '"',
+                '\u{00A0}' | '\u{2002}'..='\u{200A}' | '\u{202F}' | '\u{205F}' | '\u{3000}' => ' ',
+                other => other,
+            })
+            .collect()
     }
 
     /// Validate that patch operations aren't too large
@@ -596,7 +674,9 @@ impl ApplyPatchTool {
                 PatchOp::UpdateFile { chunks, .. } => {
                     for chunk in chunks {
                         // Count context lines (lines that appear in both old and new)
-                        let context_count = chunk.old_lines.iter()
+                        let context_count = chunk
+                            .old_lines
+                            .iter()
                             .zip(&chunk.new_lines)
                             .filter(|(old, new)| old == new)
                             .count();
@@ -704,19 +784,22 @@ It is important to remember:
     }
 
     fn schema(&self) -> ToolSchema {
-        ToolSchema::new("apply_patch", self.description())
-            .with_param(ToolParameter::required_string(
+        ToolSchema::new("apply_patch", self.description()).with_param(
+            ToolParameter::required_string(
                 "patch",
-                "The patch content with *** Begin Patch and *** End Patch markers"
-            ))
+                "The patch content with *** Begin Patch and *** End Patch markers",
+            ),
+        )
     }
 
     async fn execute(&self, params: Value, context: &ToolContext) -> ToolResult {
         let patch_str = match params.get("patch").and_then(|v| v.as_str()) {
             Some(s) => s,
-            None => return ToolResult::error(
-                "Missing 'patch' parameter. Provide patch content with *** Begin Patch and *** End Patch markers."
-            ),
+            None => {
+                return ToolResult::error(
+                    "Missing 'patch' parameter. Provide patch content with *** Begin Patch and *** End Patch markers.",
+                );
+            }
         };
 
         // Check raw patch size first (quick reject for massive patches)
@@ -744,17 +827,21 @@ It is important to remember:
         }
 
         if context.dry_run {
-            let summary = ops.iter().map(|op| match op {
-                PatchOp::AddFile { path, .. } => format!("Would create: {}", path),
-                PatchOp::DeleteFile { path } => format!("Would delete: {}", path),
-                PatchOp::UpdateFile { path, move_to, .. } => {
-                    if let Some(new_path) = move_to {
-                        format!("Would rename: {} -> {}", path, new_path)
-                    } else {
-                        format!("Would modify: {}", path)
+            let summary = ops
+                .iter()
+                .map(|op| match op {
+                    PatchOp::AddFile { path, .. } => format!("Would create: {}", path),
+                    PatchOp::DeleteFile { path } => format!("Would delete: {}", path),
+                    PatchOp::UpdateFile { path, move_to, .. } => {
+                        if let Some(new_path) = move_to {
+                            format!("Would rename: {} -> {}", path, new_path)
+                        } else {
+                            format!("Would modify: {}", path)
+                        }
                     }
-                }
-            }).collect::<Vec<_>>().join("\n");
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
             return ToolResult::success(format!("[Dry run]\n{}", summary));
         }
 
@@ -846,18 +933,30 @@ mod tests {
         std::fs::write(&file, "fn a() {}\nfn b() {}\n").unwrap();
 
         let cut_off = "*** Begin Patch\n*** Update File: test.rs\n@@\n-fn a() {}\n+fn a() { half";
-        let result = ApplyPatchTool.execute(serde_json::json!({ "patch": cut_off }), &context).await;
+        let result = ApplyPatchTool
+            .execute(serde_json::json!({ "patch": cut_off }), &context)
+            .await;
 
         assert!(!result.success);
-        assert!(result.error.as_deref().is_some_and(|e| e.contains("cut off")), "{:?}", result.error);
-        assert_eq!(std::fs::read_to_string(&file).unwrap(), "fn a() {}\nfn b() {}\n");
+        assert!(
+            result
+                .error
+                .as_deref()
+                .is_some_and(|e| e.contains("cut off")),
+            "{:?}",
+            result.error
+        );
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            "fn a() {}\nfn b() {}\n"
+        );
     }
 
     #[test]
     fn test_fuzzy_matching() {
         let lines: Vec<String> = vec![
             "fn main() {".to_string(),
-            "    old();  ".to_string(),  // trailing whitespace
+            "    old();  ".to_string(), // trailing whitespace
             "}".to_string(),
         ];
 

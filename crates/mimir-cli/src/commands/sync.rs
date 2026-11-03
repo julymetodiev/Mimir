@@ -41,7 +41,10 @@ pub struct SyncStats {
 
 /// Sync the project and return the graph.
 /// This is the core sync function that can be called by other commands.
-pub async fn sync_project(config: &Config, verbose: bool) -> Result<(CodeGraph, IdGenerator, HashMap<String, FileId>, SyncStats)> {
+pub async fn sync_project(
+    config: &Config,
+    verbose: bool,
+) -> Result<(CodeGraph, IdGenerator, HashMap<String, FileId>, SyncStats)> {
     sync_project_with(config, verbose, Refresh::Edits).await
 }
 
@@ -153,13 +156,26 @@ async fn sync_project_with(
     }
 
     let indexes = {
-        let (root, cache_dir, files) = (config.root.clone(), config.graph_dir.clone(), project_files.clone());
+        let (root, cache_dir, files) = (
+            config.root.clone(),
+            config.graph_dir.clone(),
+            project_files.clone(),
+        );
         // Here the analyzer lives as long as this sync, which still saves most of a new index.
-        tokio::task::spawn_blocking(move || load_or_generate(&root, &cache_dir, &files, &mut Analyzers::default(), refresh))
-            .await?
+        tokio::task::spawn_blocking(move || {
+            load_or_generate(
+                &root,
+                &cache_dir,
+                &files,
+                &mut Analyzers::default(),
+                refresh,
+            )
+        })
+        .await?
     };
     let linked = link(&graph, &project_files, &indexes);
-    let total_refs = linked.semantic_calls + linked.syntax_calls + linked.implementations + linked.imports;
+    let total_refs =
+        linked.semantic_calls + linked.syntax_calls + linked.implementations + linked.imports;
 
     if verbose {
         println!(
@@ -206,7 +222,12 @@ pub async fn execute(full: bool) -> Result<()> {
         anyhow::bail!("Project not initialized. Run 'mimir init' first.");
     }
 
-    let (_graph, _ids, _file_ids, _stats) = sync_project_with(&config, true, if full { Refresh::Full } else { Refresh::Edits }).await?;
+    let (_graph, _ids, _file_ids, _stats) = sync_project_with(
+        &config,
+        true,
+        if full { Refresh::Full } else { Refresh::Edits },
+    )
+    .await?;
 
     Ok(())
 }
@@ -298,26 +319,28 @@ pub async fn load_graph(
     let edges = persisted
         .edges
         .into_iter()
-        .map(|(from_id, to_id, kind_str, span_start, span_end, confidence_str)| {
-            let kind = match kind_str.as_str() {
-                "Imports" => EdgeKind::Imports,
-                "Implements" => EdgeKind::Implements,
-                "UsesAsValue" => EdgeKind::UsesAsValue,
-                _ => EdgeKind::Calls,
-            };
-            let confidence = match confidence_str.as_str() {
-                "Certain" => Confidence::Certain,
-                "High" => Confidence::High,
-                "Medium" => Confidence::Medium,
-                "Low" => Confidence::Low,
-                _ => Confidence::Medium,
-            };
-            (
-                mimir_types::SymbolId::from_u64(from_id),
-                mimir_types::SymbolId::from_u64(to_id),
-                EdgeData::new(kind, Span::new(span_start, span_end), confidence),
-            )
-        })
+        .map(
+            |(from_id, to_id, kind_str, span_start, span_end, confidence_str)| {
+                let kind = match kind_str.as_str() {
+                    "Imports" => EdgeKind::Imports,
+                    "Implements" => EdgeKind::Implements,
+                    "UsesAsValue" => EdgeKind::UsesAsValue,
+                    _ => EdgeKind::Calls,
+                };
+                let confidence = match confidence_str.as_str() {
+                    "Certain" => Confidence::Certain,
+                    "High" => Confidence::High,
+                    "Medium" => Confidence::Medium,
+                    "Low" => Confidence::Low,
+                    _ => Confidence::Medium,
+                };
+                (
+                    mimir_types::SymbolId::from_u64(from_id),
+                    mimir_types::SymbolId::from_u64(to_id),
+                    EdgeData::new(kind, Span::new(span_start, span_end), confidence),
+                )
+            },
+        )
         .collect();
     graph.replace_edges(edges);
 

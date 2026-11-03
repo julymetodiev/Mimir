@@ -2,7 +2,7 @@
 //!
 //! Simpler alternative to apply_patch when complete file replacement is needed.
 
-use crate::{Tool, ToolContext, ToolResult, ToolSchema, ToolParameter};
+use crate::{Tool, ToolContext, ToolParameter, ToolResult, ToolSchema};
 use async_trait::async_trait;
 use serde_json::Value;
 use std::fs;
@@ -43,11 +43,11 @@ EXAMPLE:
         ToolSchema::new("write", self.description())
             .with_param(ToolParameter::required_string(
                 "path",
-                "File path relative to project root"
+                "File path relative to project root",
             ))
             .with_param(ToolParameter::required_string(
                 "content",
-                "Complete file content to write"
+                "Complete file content to write",
             ))
     }
 
@@ -65,18 +65,25 @@ EXAMPLE:
         let full_path = context.project_root.join(path);
 
         if context.dry_run {
-            let action = if full_path.exists() { "overwrite" } else { "create" };
+            let action = if full_path.exists() {
+                "overwrite"
+            } else {
+                "create"
+            };
             return ToolResult::success(format!(
                 "[Dry run] Would {} '{}' ({} bytes)",
-                action, path, content.len()
+                action,
+                path,
+                content.len()
             ));
         }
 
         // Create parent directories if needed
         if let Some(parent) = full_path.parent()
-            && let Err(e) = fs::create_dir_all(parent) {
-                return ToolResult::error(format!("Failed to create directory: {}", e));
-            }
+            && let Err(e) = fs::create_dir_all(parent)
+        {
+            return ToolResult::error(format!("Failed to create directory: {}", e));
+        }
 
         // Check if file exists for reporting
         let existed = full_path.exists();

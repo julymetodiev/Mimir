@@ -116,7 +116,10 @@ impl JsonSchema {
         if self.properties.is_none() {
             self.properties = Some(HashMap::new());
         }
-        self.properties.as_mut().unwrap().insert(name.into(), schema);
+        self.properties
+            .as_mut()
+            .unwrap()
+            .insert(name.into(), schema);
         self
     }
 
@@ -128,7 +131,12 @@ impl JsonSchema {
 
     /// Set enum values.
     pub fn with_enum(mut self, values: Vec<&str>) -> Self {
-        self.enum_values = Some(values.into_iter().map(|s| Value::String(s.to_string())).collect());
+        self.enum_values = Some(
+            values
+                .into_iter()
+                .map(|s| Value::String(s.to_string()))
+                .collect(),
+        );
         self
     }
 
@@ -194,10 +202,16 @@ impl ToolParameter {
     }
 
     /// Create an optional boolean parameter with default.
-    pub fn optional_bool(name: impl Into<String>, description: impl Into<String>, default: bool) -> Self {
+    pub fn optional_bool(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        default: bool,
+    ) -> Self {
         Self {
             name: name.into(),
-            schema: JsonSchema::boolean().with_description(description).with_default(default),
+            schema: JsonSchema::boolean()
+                .with_description(description)
+                .with_default(default),
             required: false,
         }
     }
@@ -212,7 +226,11 @@ impl ToolParameter {
     }
 
     /// Create a required array parameter with typed items.
-    pub fn required_array_of(name: impl Into<String>, description: impl Into<String>, items: JsonSchema) -> Self {
+    pub fn required_array_of(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        items: JsonSchema,
+    ) -> Self {
         Self {
             name: name.into(),
             schema: JsonSchema::array(items).with_description(description),
@@ -296,10 +314,20 @@ mod tests {
     fn test_tool_schema() {
         let schema = ToolSchema::new("read_file", "Read a file from disk")
             .with_param(ToolParameter::required_string("path", "File path to read"))
-            .with_param(ToolParameter::optional_integer("limit", "Max lines to read"));
+            .with_param(ToolParameter::optional_integer(
+                "limit",
+                "Max lines to read",
+            ));
 
         assert_eq!(schema.name, "read_file");
-        assert!(schema.parameters.properties.as_ref().unwrap().contains_key("path"));
+        assert!(
+            schema
+                .parameters
+                .properties
+                .as_ref()
+                .unwrap()
+                .contains_key("path")
+        );
         assert_eq!(schema.parameters.required, Some(vec!["path".to_string()]));
     }
 

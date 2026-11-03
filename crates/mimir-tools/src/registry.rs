@@ -29,7 +29,7 @@ impl ToolRegistry {
         registry.register(crate::tools::ReadTool);
         registry.register(crate::tools::TraceTool);
         registry.register(crate::tools::InspectTool);
-        registry.register(crate::tools::EditTool);  // Primary edit tool (string replacement)
+        registry.register(crate::tools::EditTool); // Primary edit tool (string replacement)
         registry.register(crate::tools::WriteTool);
         registry.register(crate::tools::ShellTool);
         registry
@@ -69,12 +69,18 @@ impl ToolRegistry {
 
     /// Get tool schemas in Anthropic format.
     pub fn to_anthropic_tools(&self) -> Vec<Value> {
-        self.schemas().iter().map(|s| s.to_anthropic_format()).collect()
+        self.schemas()
+            .iter()
+            .map(|s| s.to_anthropic_format())
+            .collect()
     }
 
     /// Get tool schemas in OpenAI format.
     pub fn to_openai_functions(&self) -> Vec<Value> {
-        self.schemas().iter().map(|s| s.to_openai_format()).collect()
+        self.schemas()
+            .iter()
+            .map(|s| s.to_openai_format())
+            .collect()
     }
 
     /// Execute a tool by name.

@@ -268,7 +268,12 @@ impl CodeGraph {
             .outgoing(symbol_id)
             .into_iter()
             .filter(|(_, edge)| edge.kind == EdgeKind::Implements)
-            .flat_map(|(declared, _)| self.relations.callers(declared).into_iter().chain(value_users(declared)))
+            .flat_map(|(declared, _)| {
+                self.relations
+                    .callers(declared)
+                    .into_iter()
+                    .chain(value_users(declared))
+            })
             .map(|caller| (caller, TraceRelationship::CallerViaTrait));
         let by_value = value_users(symbol_id).map(|user| (user, TraceRelationship::CallerByValue));
         let direct = self
@@ -284,7 +289,11 @@ impl CodeGraph {
             }
 
             if let Some(symbol) = self.symbols.get(caller_id) {
-                result.push(TraceNode { symbol, depth, relationship });
+                result.push(TraceNode {
+                    symbol,
+                    depth,
+                    relationship,
+                });
                 self.trace_callers(caller_id, depth + 1, max_depth, visited, result);
             }
         }
@@ -327,7 +336,11 @@ impl CodeGraph {
             }
 
             if let Some(symbol) = self.symbols.get(target_id) {
-                result.push(TraceNode { symbol, depth, relationship });
+                result.push(TraceNode {
+                    symbol,
+                    depth,
+                    relationship,
+                });
                 self.trace_callees(target_id, depth + 1, max_depth, visited, result);
             }
         }

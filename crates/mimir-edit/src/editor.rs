@@ -35,13 +35,14 @@ impl Editor {
 
         // Check optimistic lock
         if let Some(expected) = op.expected_hash()
-            && &old_hash != expected {
-                return Err(EditError::HashMismatch {
-                    path: path.clone(),
-                    expected: *expected,
-                    actual: old_hash,
-                });
-            }
+            && &old_hash != expected
+        {
+            return Err(EditError::HashMismatch {
+                path: path.clone(),
+                expected: *expected,
+                actual: old_hash,
+            });
+        }
 
         // Create backup if enabled
         if self.create_backups {
@@ -127,13 +128,14 @@ impl Editor {
             // Check all expected hashes
             for op in &file_ops {
                 if let Some(expected) = op.expected_hash()
-                    && &old_hash != expected {
-                        return Err(EditError::HashMismatch {
-                            path: path.clone(),
-                            expected: *expected,
-                            actual: old_hash,
-                        });
-                    }
+                    && &old_hash != expected
+                {
+                    return Err(EditError::HashMismatch {
+                        path: path.clone(),
+                        expected: *expected,
+                        actual: old_hash,
+                    });
+                }
             }
 
             // Create backup if enabled
@@ -345,9 +347,10 @@ impl Editor {
 
         for window in spans.windows(2) {
             if let [(_, end1), (start2, _)] = window
-                && end1 > start2 {
-                    return Err(EditError::OverlappingEdits);
-                }
+                && end1 > start2
+            {
+                return Err(EditError::OverlappingEdits);
+            }
         }
 
         Ok(())

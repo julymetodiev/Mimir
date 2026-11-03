@@ -13,7 +13,7 @@ struct InspectOutput {
     code_preview: String,
     callers: Vec<String>,
     callees: Vec<String>,
-    summary: String, 
+    summary: String,
 }
 
 /// Tool for inspecting symbols deeply.
@@ -30,11 +30,10 @@ impl Tool for InspectTool {
     }
 
     fn schema(&self) -> ToolSchema {
-        ToolSchema::new(self.name(), self.description())
-            .with_param(ToolParameter::required_string(
-                "symbol",
-                "Symbol name to inspect",
-            ))
+        ToolSchema::new(self.name(), self.description()).with_param(ToolParameter::required_string(
+            "symbol",
+            "Symbol name to inspect",
+        ))
     }
 
     async fn execute(&self, params: Value, context: &ToolContext) -> ToolResult {
@@ -58,22 +57,24 @@ impl Tool for InspectTool {
         // 2. Get Dependencies
         let trace = match client.trace(symbol_name, 1).await {
             Ok(t) => t,
-            Err(_) => {
-                crate::graph_client::TraceResult {
-                    symbol: info.clone(),
-                    callers: vec![],
-                    callees: vec![],
-                }
-            }
+            Err(_) => crate::graph_client::TraceResult {
+                symbol: info.clone(),
+                callers: vec![],
+                callees: vec![],
+            },
         };
 
         // 3. Format Output
-        let callers_list: Vec<String> = trace.callers.iter()
+        let callers_list: Vec<String> = trace
+            .callers
+            .iter()
             .map(|s| format!("{} ({}:{})", s.name, s.file, s.start_line))
             .take(10)
             .collect();
-        
-        let callees_list: Vec<String> = trace.callees.iter()
+
+        let callees_list: Vec<String> = trace
+            .callees
+            .iter()
             .map(|s| format!("{} ({}:{})", s.name, s.file, s.start_line))
             .take(10)
             .collect();
@@ -81,8 +82,11 @@ impl Tool for InspectTool {
         // Summary
         let mut summary = String::new();
         summary.push_str(&format!("# Symbol: {}\n", info.name));
-        summary.push_str(&format!("- Location: {}:{}-{}\n", info.file, info.start_line, info.end_line));
-        
+        summary.push_str(&format!(
+            "- Location: {}:{}-{}\n",
+            info.file, info.start_line, info.end_line
+        ));
+
         summary.push_str("## Source Code\n```rust\n");
         summary.push_str(&code);
         summary.push_str("\n```\n");

@@ -1,6 +1,6 @@
 //! Common types for OpenAI-compatible APIs (Z.ai, OpenRouter, etc.)
 
-use crate::{ContentBlock, Message, Role, Completion, StopReason, Usage};
+use crate::{Completion, ContentBlock, Message, Role, StopReason, Usage};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -175,9 +175,10 @@ impl OpenAIResponse {
 
         // Add text content
         if let Some(text) = choice.message.content
-            && !text.is_empty() {
-                content.push(ContentBlock::Text { text });
-            }
+            && !text.is_empty()
+        {
+            content.push(ContentBlock::Text { text });
+        }
 
         // Add tool calls
         if let Some(tool_calls) = choice.message.tool_calls {

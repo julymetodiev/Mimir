@@ -2,8 +2,7 @@
 
 use anyhow::{Context, Result};
 use mimir_protocol::{
-    socket_path, FindOptions, IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult,
-    TraceOptions,
+    FindOptions, IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult, TraceOptions, socket_path,
 };
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -70,8 +69,8 @@ impl DaemonClient {
         let mut line = String::new();
         reader.read_line(&mut line).await?;
 
-        let response: IpcResponse = serde_json::from_str(&line)
-            .context("Failed to parse daemon response")?;
+        let response: IpcResponse =
+            serde_json::from_str(&line).context("Failed to parse daemon response")?;
 
         Ok(response)
     }
@@ -183,21 +182,20 @@ pub fn check_daemon_running(agent_dir: &Path) -> bool {
 
     // Check if PID is still running
     if let Ok(pid_str) = std::fs::read_to_string(&pid_file)
-        && let Ok(pid) = pid_str.trim().parse::<u32>() {
-            // On Unix, check if process exists
-            #[cfg(unix)]
-            {
-                use std::process::Command;
-                let output = Command::new("kill")
-                    .args(["-0", &pid.to_string()])
-                    .output();
-                return output.map(|o| o.status.success()).unwrap_or(false);
-            }
-            #[cfg(not(unix))]
-            {
-                return true; // Assume running on non-Unix
-            }
+        && let Ok(pid) = pid_str.trim().parse::<u32>()
+    {
+        // On Unix, check if process exists
+        #[cfg(unix)]
+        {
+            use std::process::Command;
+            let output = Command::new("kill").args(["-0", &pid.to_string()]).output();
+            return output.map(|o| o.status.success()).unwrap_or(false);
         }
+        #[cfg(not(unix))]
+        {
+            return true; // Assume running on non-Unix
+        }
+    }
 
     false
 }

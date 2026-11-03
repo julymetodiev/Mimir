@@ -3,12 +3,12 @@
 use mimir_error::GraphError;
 use mimir_files::{ScannedFile, Scanner};
 use mimir_graph::{CodeGraph, TraceOptions as GraphTraceOptions, TraceRelationship};
-use mimir_resolve::{Analyzers, ProjectFile, Refresh, ScipIndex, link, load_or_generate};
 use mimir_parse_core::AdapterRegistry;
 use mimir_protocol::{
     CommandReceiver, EventSender, FindResponse, GraphCommand, GraphEvent, SearchOptions,
     SearchResponse, StatsResponse, SymbolInfo, SyncResult, TraceNode, TraceRelation, TraceResponse,
 };
+use mimir_resolve::{Analyzers, ProjectFile, Refresh, ScipIndex, link, load_or_generate};
 use mimir_types::{ContentHash, FileId, IdGenerator, Language, Symbol, SymbolId, SymbolKind};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -65,7 +65,10 @@ pub struct GraphActor {
 }
 
 /// The next command. Waiting for it is also when idle analyzers stop.
-async fn next_command(commands: &mut CommandReceiver, analyzers: &Mutex<Analyzers>) -> Option<GraphCommand> {
+async fn next_command(
+    commands: &mut CommandReceiver,
+    analyzers: &Mutex<Analyzers>,
+) -> Option<GraphCommand> {
     let mut tick = tokio::time::interval(Duration::from_secs(60));
     loop {
         tokio::select! {
@@ -202,14 +205,18 @@ impl GraphActor {
 
         // If file already exists, remove old version first (for updates)
         if let Some(tracked) = self.files.get(&path).cloned() {
-            debug!("File already exists, removing old version: {:?}", tracked.file_id);
+            debug!(
+                "File already exists, removing old version: {:?}",
+                tracked.file_id
+            );
             let _ = self.handle_remove_file(tracked.file_id, events);
         }
 
         // Store reverse mapping for file path lookup
         let relative_path = path.strip_prefix(&self.root).unwrap_or(&path).to_path_buf();
         let content_hash = ContentHash::compute(content.as_bytes());
-        let (file_id, _) = self.insert_file(path, relative_path, content, content_hash, language, events)?;
+        let (file_id, _) =
+            self.insert_file(path, relative_path, content, content_hash, language, events)?;
 
         self.needs_link = true;
 
@@ -227,16 +234,15 @@ impl GraphActor {
         events: &EventSender,
     ) -> Result<(FileId, usize), GraphError> {
         // Get adapter for this language
-        let adapter = self.registry.get_by_language(language).ok_or_else(|| {
-            GraphError::FileNotFound {
-                path: path.clone(),
-            }
-        })?;
+        let adapter = self
+            .registry
+            .get_by_language(language)
+            .ok_or_else(|| GraphError::FileNotFound { path: path.clone() })?;
 
         // Parse the file
-        let tree = adapter.parse(&content).ok_or_else(|| GraphError::FileNotFound {
-            path: path.clone(),
-        })?;
+        let tree = adapter
+            .parse(&content)
+            .ok_or_else(|| GraphError::FileNotFound { path: path.clone() })?;
 
         // Assign file ID
         let file_id: FileId = self.ids.next();
@@ -313,12 +319,20 @@ impl GraphActor {
                 let mut analyzers = analyzers.lock().unwrap_or_else(|e| e.into_inner());
                 load_or_generate(&root, &cache_dir, &scan, &mut analyzers, Refresh::Edits)
             });
-            self.pending = Some(PendingLink { indexes, files, linked_by_syntax: false });
+            self.pending = Some(PendingLink {
+                indexes,
+                files,
+                linked_by_syntax: false,
+            });
         }
         let Some(pending) = self.pending.as_mut() else {
             return;
         };
-        let wait = if pending.linked_by_syntax { Duration::ZERO } else { self.query_wait };
+        let wait = if pending.linked_by_syntax {
+            Duration::ZERO
+        } else {
+            self.query_wait
+        };
         match tokio::time::timeout(wait, &mut pending.indexes).await {
             Ok(indexes) => {
                 let indexes = indexes.unwrap_or_else(|e| {
@@ -333,7 +347,13 @@ impl GraphActor {
             Err(_) => {
                 let (root, scan) = (self.root.clone(), pending.files.clone());
                 let saved = tokio::task::spawn_blocking(move || {
-                    load_or_generate(&root, &cache_dir, &scan, &mut Analyzers::default(), Refresh::Saved)
+                    load_or_generate(
+                        &root,
+                        &cache_dir,
+                        &scan,
+                        &mut Analyzers::default(),
+                        Refresh::Saved,
+                    )
                 })
                 .await
                 .unwrap_or_default();
@@ -547,7 +567,9 @@ impl GraphActor {
 
         // Search all symbols in the graph
         for symbol in self.graph.symbols().all_symbols() {
-            if pattern.is_match(&symbol.name) || pattern.is_match(&symbol.qualified_name.to_string()) {
+            if pattern.is_match(&symbol.name)
+                || pattern.is_match(&symbol.qualified_name.to_string())
+            {
                 // Apply kind filter if specified
                 if let Some(ref kind_filter) = options.kind_filter {
                     let kind_str = format!("{:?}", symbol.kind).to_lowercase();
@@ -582,11 +604,16 @@ impl GraphActor {
 
         // Scan the directory
         let scanner = Scanner::new(&self.root);
-        let scanned_files = scanner.scan().await.map_err(|e| {
-            GraphError::WatcherError(format!("Scan failed: {}", e))
-        })?;
+        let scanned_files = scanner
+            .scan()
+            .await
+            .map_err(|e| GraphError::WatcherError(format!("Scan failed: {}", e)))?;
 
-        info!("Scanned {} files in {:?}", scanned_files.len(), start.elapsed());
+        info!(
+            "Scanned {} files in {:?}",
+            scanned_files.len(),
+            start.elapsed()
+        );
 
         let mut files_added = 0;
         let mut files_updated = 0;
@@ -606,7 +633,9 @@ impl GraphActor {
                 // Check if content changed
                 if tracked.content_hash != scanned.content_hash {
                     // File was updated - remove old, add new
-                    if let Some(removed_count) = self.remove_file_by_path(&scanned.absolute_path.clone(), events) {
+                    if let Some(removed_count) =
+                        self.remove_file_by_path(&scanned.absolute_path.clone(), events)
+                    {
                         symbols_removed += removed_count;
                     }
 
@@ -617,7 +646,11 @@ impl GraphActor {
                             files_updated += 1;
                         }
                         Err(e) => {
-                            warn!("Failed to update {}: {}", scanned.absolute_path.display(), e);
+                            warn!(
+                                "Failed to update {}: {}",
+                                scanned.absolute_path.display(),
+                                e
+                            );
                         }
                     }
                 }
@@ -640,10 +673,11 @@ impl GraphActor {
         let tracked_paths: Vec<PathBuf> = self.files.keys().cloned().collect();
         for path in tracked_paths {
             if !seen_paths.contains(&path)
-                && let Some(removed_count) = self.remove_file_by_path(&path, events) {
-                    symbols_removed += removed_count;
-                    files_removed += 1;
-                }
+                && let Some(removed_count) = self.remove_file_by_path(&path, events)
+            {
+                symbols_removed += removed_count;
+                files_removed += 1;
+            }
         }
 
         // Calls can point at any file, so edges are resolved once all files are in
@@ -675,7 +709,11 @@ impl GraphActor {
     }
 
     /// Add a file during sync operation.
-    fn sync_add_file(&mut self, scanned: &ScannedFile, events: &EventSender) -> Result<usize, GraphError> {
+    fn sync_add_file(
+        &mut self,
+        scanned: &ScannedFile,
+        events: &EventSender,
+    ) -> Result<usize, GraphError> {
         // Read file content
         let content = std::fs::read_to_string(&scanned.absolute_path).map_err(|_| {
             GraphError::FileNotFound {
@@ -734,8 +772,7 @@ mod tests {
         let (cmd_tx, cmd_rx) = command_channel(16);
         let (event_tx, _event_rx) = event_channel(16);
 
-        let actor =
-            GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
+        let actor = GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
 
         let handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
@@ -749,8 +786,7 @@ mod tests {
         let (cmd_tx, cmd_rx) = command_channel(16);
         let (event_tx, mut event_rx) = event_channel(16);
 
-        let actor =
-            GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
+        let actor = GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
 
         let handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
@@ -782,8 +818,7 @@ mod tests {
         let (cmd_tx, cmd_rx) = command_channel(16);
         let (event_tx, _event_rx) = event_channel(16);
 
-        let actor =
-            GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
+        let actor = GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
 
         let handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
@@ -824,8 +859,7 @@ mod tests {
         let (cmd_tx, cmd_rx) = command_channel(16);
         let (event_tx, _event_rx) = event_channel(16);
 
-        let actor =
-            GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
+        let actor = GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
 
         let handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
@@ -861,8 +895,7 @@ mod tests {
         let (cmd_tx, cmd_rx) = command_channel(16);
         let (event_tx, _event_rx) = event_channel(16);
 
-        let actor =
-            GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
+        let actor = GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
 
         let handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 

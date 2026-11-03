@@ -44,10 +44,7 @@ impl MemoryTaskStore {
 
     /// List tasks by status.
     pub fn list_by_status(&self, status: TaskStatus) -> Vec<&Task> {
-        self.tasks
-            .values()
-            .filter(|t| t.status == status)
-            .collect()
+        self.tasks.values().filter(|t| t.status == status).collect()
     }
 
     /// Delete a task.
@@ -78,9 +75,7 @@ impl MemoryTaskStore {
 
     /// Get latest checkpoint for a task.
     pub fn get_latest_checkpoint(&self, task_id: &TaskId) -> Option<&Checkpoint> {
-        self.checkpoints
-            .get(&task_id.0)
-            .and_then(|cps| cps.last())
+        self.checkpoints.get(&task_id.0).and_then(|cps| cps.last())
     }
 }
 

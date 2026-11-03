@@ -63,7 +63,10 @@ impl ToolCallResult {
         let content = if self.result.success {
             self.result.output.to_string()
         } else {
-            self.result.error.clone().unwrap_or_else(|| "Unknown error".to_string())
+            self.result
+                .error
+                .clone()
+                .unwrap_or_else(|| "Unknown error".to_string())
         };
 
         ContentBlock::ToolResult {
@@ -95,7 +98,9 @@ mod tests {
 
         let block = result.to_content_block();
         match block {
-            ContentBlock::ToolResult { is_error, content, .. } => {
+            ContentBlock::ToolResult {
+                is_error, content, ..
+            } => {
                 assert!(!is_error);
                 assert!(content.contains("file contents"));
             }
@@ -115,7 +120,9 @@ mod tests {
 
         let block = result.to_content_block();
         match block {
-            ContentBlock::ToolResult { is_error, content, .. } => {
+            ContentBlock::ToolResult {
+                is_error, content, ..
+            } => {
                 assert!(is_error);
                 assert!(content.contains("bad input"));
             }

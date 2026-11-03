@@ -7,12 +7,12 @@ use crate::{GraphClient, GraphError, SearchResult, SymbolInfo, TraceResult};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use mimir_protocol::{
-    socket_path, FindOptions, IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult,
-    SearchOptions, TraceOptions,
+    FindOptions, IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult, SearchOptions,
+    TraceOptions, socket_path,
 };
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::sync::Mutex;
@@ -140,7 +140,10 @@ impl DaemonClient {
     }
 
     /// Search for symbols by pattern.
-    pub async fn search(&mut self, options: SearchOptions) -> Result<mimir_protocol::SearchResponse> {
+    pub async fn search(
+        &mut self,
+        options: SearchOptions,
+    ) -> Result<mimir_protocol::SearchResponse> {
         let response = self.send_command(IpcCommand::Search { options }).await?;
 
         match response.result {
@@ -173,20 +176,19 @@ pub fn check_daemon_running(agent_dir: &Path) -> bool {
 
     // Check if PID is still running
     if let Ok(pid_str) = std::fs::read_to_string(&pid_file)
-        && let Ok(pid) = pid_str.trim().parse::<u32>() {
-            #[cfg(unix)]
-            {
-                use std::process::Command;
-                let output = Command::new("kill")
-                    .args(["-0", &pid.to_string()])
-                    .output();
-                return output.map(|o| o.status.success()).unwrap_or(false);
-            }
-            #[cfg(not(unix))]
-            {
-                return true;
-            }
+        && let Ok(pid) = pid_str.trim().parse::<u32>()
+    {
+        #[cfg(unix)]
+        {
+            use std::process::Command;
+            let output = Command::new("kill").args(["-0", &pid.to_string()]).output();
+            return output.map(|o| o.status.success()).unwrap_or(false);
         }
+        #[cfg(not(unix))]
+        {
+            return true;
+        }
+    }
 
     false
 }

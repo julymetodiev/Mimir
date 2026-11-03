@@ -9,7 +9,7 @@ mod registry;
 mod schema;
 mod tools;
 
-pub use daemon_client::{check_daemon_running, DaemonClient, DaemonGraphClient};
+pub use daemon_client::{DaemonClient, DaemonGraphClient, check_daemon_running};
 pub use graph_client::{GraphClient, GraphError, SearchResult, SymbolInfo, TraceResult};
 pub use registry::ToolRegistry;
 pub use schema::{JsonSchema, ToolParameter, ToolSchema};
@@ -173,7 +173,8 @@ impl ToolCall {
     pub fn new(name: impl Into<String>, parameters: impl Serialize) -> Self {
         Self {
             name: name.into(),
-            parameters: serde_json::to_value(parameters).unwrap_or(Value::Object(Default::default())),
+            parameters: serde_json::to_value(parameters)
+                .unwrap_or(Value::Object(Default::default())),
         }
     }
 }

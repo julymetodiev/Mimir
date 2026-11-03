@@ -2,7 +2,7 @@
 //!
 //! Uses old_string/new_string for precise text replacement.
 
-use crate::{Tool, ToolContext, ToolResult, ToolSchema, ToolParameter};
+use crate::{Tool, ToolContext, ToolParameter, ToolResult, ToolSchema};
 use async_trait::async_trait;
 use serde_json::Value;
 use std::fs;
@@ -61,20 +61,20 @@ EXAMPLE - Replace all occurrences:
         ToolSchema::new("edit", self.description())
             .with_param(ToolParameter::required_string(
                 "file_path",
-                "Path to the file to modify (relative to project root)"
+                "Path to the file to modify (relative to project root)",
             ))
             .with_param(ToolParameter::required_string(
                 "old_string",
-                "The exact literal text to replace. Use empty string to create a new file."
+                "The exact literal text to replace. Use empty string to create a new file.",
             ))
             .with_param(ToolParameter::required_string(
                 "new_string",
-                "The exact literal text to replace old_string with"
+                "The exact literal text to replace old_string with",
             ))
             .with_param(ToolParameter::optional_bool(
                 "replace_all",
                 "Replace all occurrences instead of requiring unique match (default: false)",
-                false
+                false,
             ))
     }
 
@@ -94,7 +94,8 @@ EXAMPLE - Replace all occurrences:
             None => return ToolResult::error("Missing 'new_string' parameter"),
         };
 
-        let replace_all = params.get("replace_all")
+        let replace_all = params
+            .get("replace_all")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
@@ -109,7 +110,7 @@ EXAMPLE - Replace all occurrences:
         if old_string.is_empty() {
             if file_exists {
                 return ToolResult::error(
-                    "File already exists. Use a non-empty old_string to edit existing files, or delete the file first."
+                    "File already exists. Use a non-empty old_string to edit existing files, or delete the file first.",
                 );
             }
 
@@ -119,16 +120,20 @@ EXAMPLE - Replace all occurrences:
 
             // Create parent directories if needed
             if let Some(parent) = full_path.parent()
-                && let Err(e) = fs::create_dir_all(parent) {
-                    return ToolResult::error(format!("Failed to create directory: {}", e));
-                }
+                && let Err(e) = fs::create_dir_all(parent)
+            {
+                return ToolResult::error(format!("Failed to create directory: {}", e));
+            }
 
             // Write new file
             match fs::write(&full_path, &new_string) {
-                Ok(_) => return ToolResult::success(format!(
-                    "Created new file: {} ({} bytes)",
-                    file_path, new_string.len()
-                )),
+                Ok(_) => {
+                    return ToolResult::success(format!(
+                        "Created new file: {} ({} bytes)",
+                        file_path,
+                        new_string.len()
+                    ));
+                }
                 Err(e) => return ToolResult::error(format!("Failed to create file: {}", e)),
             }
         }
@@ -178,7 +183,7 @@ EXAMPLE - Replace all occurrences:
         // Check if change would actually modify the file
         if old_string == new_string {
             return ToolResult::error(
-                "No changes to apply. The old_string and new_string are identical."
+                "No changes to apply. The old_string and new_string are identical.",
             );
         }
 
@@ -191,7 +196,7 @@ EXAMPLE - Replace all occurrences:
 
         if current_content == new_content {
             return ToolResult::error(
-                "No changes resulted from the replacement. The file content is unchanged."
+                "No changes resulted from the replacement. The file content is unchanged.",
             );
         }
 

@@ -3,9 +3,9 @@
 //! Uses the Coding Plan endpoint for better tool-calling capabilities.
 
 use crate::{
-    openai_compat::{OpenAIMessage, OpenAIRequest, OpenAIResponse, OpenAITool, OpenAIFunction},
-    ChunkType, Completion, CompletionRequest, CompletionStream, LlmError,
-    LlmProvider, LlmResult, StreamChunk, ToolUseChunk,
+    ChunkType, Completion, CompletionRequest, CompletionStream, LlmError, LlmProvider, LlmResult,
+    StreamChunk, ToolUseChunk,
+    openai_compat::{OpenAIFunction, OpenAIMessage, OpenAIRequest, OpenAIResponse, OpenAITool},
 };
 use async_trait::async_trait;
 use futures::StreamExt;
@@ -100,7 +100,8 @@ impl ZaiProvider {
                         function: OpenAIFunction {
                             name: t.name.clone(),
                             description: Some(t.description.clone()),
-                            parameters: serde_json::to_value(&t.parameters).unwrap_or(Value::Object(Default::default())),
+                            parameters: serde_json::to_value(&t.parameters)
+                                .unwrap_or(Value::Object(Default::default())),
                         },
                     })
                     .collect(),
@@ -146,10 +147,14 @@ impl LlmProvider for ZaiProvider {
 
         // Debug: dump first request to file
         if std::env::var("MIMIR_DEBUG_REQUEST").is_ok()
-            && let Ok(json) = serde_json::to_string_pretty(&api_request) {
-                let _ = std::fs::write("/tmp/mimir_request.json", &json);
-                eprintln!("[DEBUG] Request written to /tmp/mimir_request.json ({} bytes)", json.len());
-            }
+            && let Ok(json) = serde_json::to_string_pretty(&api_request)
+        {
+            let _ = std::fs::write("/tmp/mimir_request.json", &json);
+            eprintln!(
+                "[DEBUG] Request written to /tmp/mimir_request.json ({} bytes)",
+                json.len()
+            );
+        }
 
         let response = self
             .client
@@ -215,8 +220,7 @@ impl LlmProvider for ZaiProvider {
 }
 
 fn parse_sse_chunk(bytes: &[u8]) -> LlmResult<StreamChunk> {
-    let text =
-        std::str::from_utf8(bytes).map_err(|e| LlmError::Stream(e.to_string()))?;
+    let text = std::str::from_utf8(bytes).map_err(|e| LlmError::Stream(e.to_string()))?;
 
     for line in text.lines() {
         if let Some(data) = line.strip_prefix("data: ") {
@@ -230,52 +234,52 @@ fn parse_sse_chunk(bytes: &[u8]) -> LlmResult<StreamChunk> {
 
             if let Ok(event) = serde_json::from_str::<Value>(data)
                 && let Some(choices) = event["choices"].as_array()
-                    && let Some(choice) = choices.first() {
-                        let delta = &choice["delta"];
+                && let Some(choice) = choices.first()
+            {
+                let delta = &choice["delta"];
 
-                        // Text content
-                        if let Some(content) = delta["content"].as_str() {
-                            return Ok(StreamChunk {
-                                chunk_type: ChunkType::ContentBlockDelta,
-                                text: Some(content.to_string()),
-                                tool_use: None,
-                            });
-                        }
+                // Text content
+                if let Some(content) = delta["content"].as_str() {
+                    return Ok(StreamChunk {
+                        chunk_type: ChunkType::ContentBlockDelta,
+                        text: Some(content.to_string()),
+                        tool_use: None,
+                    });
+                }
 
-                        // Tool calls
-                        if let Some(tool_calls) = delta["tool_calls"].as_array()
-                            && let Some(tool_call) = tool_calls.first() {
-                                let id = tool_call["id"].as_str().map(String::from);
-                                let name = tool_call["function"]["name"]
-                                    .as_str()
-                                    .map(String::from);
-                                let args = tool_call["function"]["arguments"]
-                                    .as_str()
-                                    .map(String::from);
+                // Tool calls
+                if let Some(tool_calls) = delta["tool_calls"].as_array()
+                    && let Some(tool_call) = tool_calls.first()
+                {
+                    let id = tool_call["id"].as_str().map(String::from);
+                    let name = tool_call["function"]["name"].as_str().map(String::from);
+                    let args = tool_call["function"]["arguments"]
+                        .as_str()
+                        .map(String::from);
 
-                                if id.is_some() || name.is_some() {
-                                    return Ok(StreamChunk {
-                                        chunk_type: ChunkType::ToolUseStart,
-                                        text: None,
-                                        tool_use: Some(ToolUseChunk {
-                                            id,
-                                            name,
-                                            input_delta: args,
-                                        }),
-                                    });
-                                } else if args.is_some() {
-                                    return Ok(StreamChunk {
-                                        chunk_type: ChunkType::ToolUseInput,
-                                        text: None,
-                                        tool_use: Some(ToolUseChunk {
-                                            id: None,
-                                            name: None,
-                                            input_delta: args,
-                                        }),
-                                    });
-                                }
-                            }
+                    if id.is_some() || name.is_some() {
+                        return Ok(StreamChunk {
+                            chunk_type: ChunkType::ToolUseStart,
+                            text: None,
+                            tool_use: Some(ToolUseChunk {
+                                id,
+                                name,
+                                input_delta: args,
+                            }),
+                        });
+                    } else if args.is_some() {
+                        return Ok(StreamChunk {
+                            chunk_type: ChunkType::ToolUseInput,
+                            text: None,
+                            tool_use: Some(ToolUseChunk {
+                                id: None,
+                                name: None,
+                                input_delta: args,
+                            }),
+                        });
                     }
+                }
+            }
         }
     }
 

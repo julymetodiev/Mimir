@@ -54,7 +54,9 @@ pub(crate) fn implements_generic_trait(symbol: &Symbol) -> bool {
 pub(crate) fn type_name(path: &str) -> &str {
     let base = path.split('<').next().unwrap_or(path).trim_end();
     let base = base.rsplit("::").next().unwrap_or(base);
-    base.trim_start_matches(['&', ' ']).trim_start_matches("mut ").trim()
+    base.trim_start_matches(['&', ' '])
+        .trim_start_matches("mut ")
+        .trim()
 }
 
 /// The callable symbols of a project, indexed by file, name and owner.
@@ -77,13 +79,29 @@ impl SymbolTable {
         };
         for file in files {
             for symbol in graph.symbols_in_file(file.file_id) {
-                table.all_by_file.entry(file.file_id).or_default().push(symbol.clone());
-                table.named.entry(symbol.name.clone()).or_default().push(symbol.clone());
+                table
+                    .all_by_file
+                    .entry(file.file_id)
+                    .or_default()
+                    .push(symbol.clone());
+                table
+                    .named
+                    .entry(symbol.name.clone())
+                    .or_default()
+                    .push(symbol.clone());
                 if !is_callable(&symbol) {
                     continue;
                 }
-                table.by_file.entry(file.file_id).or_default().push(symbol.clone());
-                table.by_name.entry(symbol.name.clone()).or_default().push(symbol.clone());
+                table
+                    .by_file
+                    .entry(file.file_id)
+                    .or_default()
+                    .push(symbol.clone());
+                table
+                    .by_name
+                    .entry(symbol.name.clone())
+                    .or_default()
+                    .push(symbol.clone());
                 if let Some(owner) = owner_of(&symbol) {
                     table
                         .by_owner
@@ -106,7 +124,12 @@ impl SymbolTable {
     }
 
     /// The innermost function or method with this name holding a line.
-    pub(crate) fn definition_at(&self, file: FileId, line: u32, name: &str) -> Option<&Arc<Symbol>> {
+    pub(crate) fn definition_at(
+        &self,
+        file: FileId,
+        line: u32,
+        name: &str,
+    ) -> Option<&Arc<Symbol>> {
         self.by_file
             .get(&file)?
             .iter()
@@ -115,8 +138,18 @@ impl SymbolTable {
     }
 
     /// The `n`th function or method with this name in a file, in the order they are written.
-    pub(crate) fn nth_definition(&self, file: FileId, name: &str, n: usize) -> Option<&Arc<Symbol>> {
-        let mut named: Vec<_> = self.by_file.get(&file)?.iter().filter(|s| s.name == name).collect();
+    pub(crate) fn nth_definition(
+        &self,
+        file: FileId,
+        name: &str,
+        n: usize,
+    ) -> Option<&Arc<Symbol>> {
+        let mut named: Vec<_> = self
+            .by_file
+            .get(&file)?
+            .iter()
+            .filter(|s| s.name == name)
+            .collect();
         named.sort_by_key(|s| s.span.start);
         named.get(n).copied()
     }
@@ -124,7 +157,10 @@ impl SymbolTable {
     /// The constant or static with this name declared on a line.
     pub(crate) fn constant_at(&self, file: FileId, line: u32, name: &str) -> Option<&Arc<Symbol>> {
         self.all_by_file.get(&file)?.iter().find(|s| {
-            s.kind == SymbolKind::Constant && s.name == name && s.range.start_line <= line && line <= s.range.end_line
+            s.kind == SymbolKind::Constant
+                && s.name == name
+                && s.range.start_line <= line
+                && line <= s.range.end_line
         })
     }
 
@@ -142,7 +178,11 @@ impl SymbolTable {
 
     /// The only constant or static with this name: in this file first, then in the project.
     pub(crate) fn only_constant(&self, file: FileId, name: &str) -> Option<&Arc<Symbol>> {
-        let all: Vec<_> = self.named(name).iter().filter(|s| s.kind == SymbolKind::Constant).collect();
+        let all: Vec<_> = self
+            .named(name)
+            .iter()
+            .filter(|s| s.kind == SymbolKind::Constant)
+            .collect();
         let local: Vec<_> = all.iter().filter(|s| s.file_id == file).collect();
         match (local.as_slice(), all.as_slice()) {
             ([one], _) => Some(**one),
@@ -165,12 +205,17 @@ impl SymbolTable {
         self.all_by_file
             .get(&file)?
             .iter()
-            .filter(|s| s.kind == SymbolKind::Impl && s.range.start_line <= line && line <= s.range.end_line)
+            .filter(|s| {
+                s.kind == SymbolKind::Impl && s.range.start_line <= line && line <= s.range.end_line
+            })
             .min_by_key(|s| s.span.end - s.span.start)
     }
 
     /// The methods in a file that implement a trait.
-    pub(crate) fn trait_impls_in(&self, file: FileId) -> impl Iterator<Item = (&Arc<Symbol>, &str)> {
+    pub(crate) fn trait_impls_in(
+        &self,
+        file: FileId,
+    ) -> impl Iterator<Item = (&Arc<Symbol>, &str)> {
         self.by_file
             .get(&file)
             .into_iter()

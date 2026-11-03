@@ -50,7 +50,11 @@ impl ContentBlock {
     }
 
     /// Create a tool result content block.
-    pub fn tool_result(tool_use_id: impl Into<String>, content: impl Into<String>, is_error: bool) -> Self {
+    pub fn tool_result(
+        tool_use_id: impl Into<String>,
+        content: impl Into<String>,
+        is_error: bool,
+    ) -> Self {
         Self::ToolResult {
             tool_use_id: tool_use_id.into(),
             content: content.into(),
@@ -102,7 +106,11 @@ impl Message {
     }
 
     /// Create an assistant message with tool use.
-    pub fn assistant_tool_use(id: impl Into<String>, name: impl Into<String>, input: Value) -> Self {
+    pub fn assistant_tool_use(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        input: Value,
+    ) -> Self {
         Self {
             role: Role::Assistant,
             content: vec![ContentBlock::tool_use(id, name, input)],
@@ -110,7 +118,11 @@ impl Message {
     }
 
     /// Create a user message with tool result.
-    pub fn tool_result(tool_use_id: impl Into<String>, content: impl Into<String>, is_error: bool) -> Self {
+    pub fn tool_result(
+        tool_use_id: impl Into<String>,
+        content: impl Into<String>,
+        is_error: bool,
+    ) -> Self {
         Self {
             role: Role::User,
             content: vec![ContentBlock::tool_result(tool_use_id, content, is_error)],
@@ -222,7 +234,11 @@ mod tests {
 
     #[test]
     fn test_message_tool_use() {
-        let msg = Message::assistant_tool_use("id-1", "read_file", serde_json::json!({"path": "test.rs"}));
+        let msg = Message::assistant_tool_use(
+            "id-1",
+            "read_file",
+            serde_json::json!({"path": "test.rs"}),
+        );
         assert!(msg.has_tool_use());
         assert_eq!(msg.tool_uses().len(), 1);
     }

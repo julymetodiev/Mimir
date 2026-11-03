@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use mimir_graph::{CodeGraph, TraceOptions, TraceRelationship};
 use mimir_parse_core::LanguageAdapter;
 use mimir_parse_rust::RustAdapter;
-use mimir_resolve::{Analyzers, ProjectFile, Refresh, ScipIndex, link, load_or_generate};
 use mimir_relations::EdgeKind;
+use mimir_resolve::{Analyzers, ProjectFile, Refresh, ScipIndex, link, load_or_generate};
 use mimir_types::{FileId, IdGenerator, Symbol, SymbolId, SymbolKind};
 
 type Edge = (String, String);
@@ -88,14 +88,22 @@ const VALUES_NEED_TYPES: &[(&str, &str)] = &[
     ("beta::HANDLERS", "alpha::helper"),
 ];
 
-const SOURCES: [&str; 4] = ["alpha/src/lib.rs", "beta/src/lib.rs", "alpha/tests/one.rs", "alpha/tests/two.rs"];
+const SOURCES: [&str; 4] = [
+    "alpha/src/lib.rs",
+    "beta/src/lib.rs",
+    "alpha/tests/one.rs",
+    "alpha/tests/two.rs",
+];
 
 fn workspace() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/resolve-workspace")
 }
 
 fn expected(calls: &[(&str, &str)]) -> BTreeSet<Edge> {
-    calls.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect()
+    calls
+        .iter()
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+        .collect()
 }
 
 fn index() -> (CodeGraph, Vec<ProjectFile>) {
@@ -138,7 +146,14 @@ fn index_at(workspace: &Path) -> (CodeGraph, Vec<ProjectFile>) {
 /// `crate::owner::name` of a symbol.
 fn label(symbol: &Symbol, files: &[ProjectFile]) -> String {
     let file = files.iter().find(|f| f.file_id == symbol.file_id).unwrap();
-    let krate = file.path.components().next().unwrap().as_os_str().to_string_lossy().into_owned();
+    let krate = file
+        .path
+        .components()
+        .next()
+        .unwrap()
+        .as_os_str()
+        .to_string_lossy()
+        .into_owned();
     let segments = symbol.qualified_name.segments();
     match segments.len().checked_sub(2).map(|i| segments[i].as_str()) {
         Some(parent) => {
@@ -193,23 +208,45 @@ fn syntax_rules_never_guess() {
     assert!(wrong.is_empty(), "edges that are not calls: {wrong:#?}");
     let reachable: BTreeSet<_> = all.difference(&needs_types).cloned().collect();
     let missing: Vec<_> = reachable.difference(&linked).collect();
-    assert!(missing.is_empty(), "calls syntax should reach: {missing:#?}");
-    assert_eq!(implementation_edges(&graph, &files), expected(IMPLEMENTS_BY_SYNTAX));
-    let by_syntax: BTreeSet<_> = expected(VALUES).difference(&expected(VALUES_NEED_TYPES)).cloned().collect();
-    assert_eq!(edges_of_kind(&graph, &files, EdgeKind::UsesAsValue), by_syntax);
+    assert!(
+        missing.is_empty(),
+        "calls syntax should reach: {missing:#?}"
+    );
+    assert_eq!(
+        implementation_edges(&graph, &files),
+        expected(IMPLEMENTS_BY_SYNTAX)
+    );
+    let by_syntax: BTreeSet<_> = expected(VALUES)
+        .difference(&expected(VALUES_NEED_TYPES))
+        .cloned()
+        .collect();
+    assert_eq!(
+        edges_of_kind(&graph, &files, EdgeKind::UsesAsValue),
+        by_syntax
+    );
     assert_eq!(report.semantic_files, 0);
     assert_eq!(report.syntax_files, SOURCES.len());
 }
 
 #[test]
 fn semantic_index_finds_every_call() {
-    if std::process::Command::new("rust-analyzer").arg("--version").output().is_err() {
+    if std::process::Command::new("rust-analyzer")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
         eprintln!("skipped: rust-analyzer is not installed");
         return;
     }
     let (graph, files) = index();
     let cache = std::env::temp_dir().join(format!("mimir-resolve-fixture-{}", std::process::id()));
-    let indexes = load_or_generate(&workspace(), &cache, &files, &mut Analyzers::default(), Refresh::Edits);
+    let indexes = load_or_generate(
+        &workspace(),
+        &cache,
+        &files,
+        &mut Analyzers::default(),
+        Refresh::Edits,
+    );
     let _ = std::fs::remove_dir_all(&cache);
     assert_eq!(indexes.len(), 1, "the fixture is one Cargo workspace");
 
@@ -220,10 +257,17 @@ fn semantic_index_finds_every_call() {
         let caller = find(&graph, &files, caller);
         let callees = graph.get_callees(caller);
         assert_eq!(callees.len(), 1);
-        assert_eq!(callees[0].file_id, graph.get_symbol(caller).unwrap().file_id, "the helper of its own file");
+        assert_eq!(
+            callees[0].file_id,
+            graph.get_symbol(caller).unwrap().file_id,
+            "the helper of its own file"
+        );
     }
     assert_eq!(implementation_edges(&graph, &files), expected(IMPLEMENTS));
-    assert_eq!(edges_of_kind(&graph, &files, EdgeKind::UsesAsValue), expected(VALUES));
+    assert_eq!(
+        edges_of_kind(&graph, &files, EdgeKind::UsesAsValue),
+        expected(VALUES)
+    );
 
     let names = |nodes: &[mimir_graph::TraceNode], relationship| {
         let mut names: Vec<_> = nodes
@@ -237,7 +281,12 @@ fn semantic_index_finds_every_call() {
 
     // The implementation is reached by whoever calls the trait's method.
     let memory_load = find(&graph, &files, "alpha::Memory::load");
-    let trace = graph.trace(memory_load, TraceOptions::new().callers_only().with_max_depth(1)).unwrap();
+    let trace = graph
+        .trace(
+            memory_load,
+            TraceOptions::new().callers_only().with_max_depth(1),
+        )
+        .unwrap();
     assert_eq!(
         names(&trace.callers, TraceRelationship::CallerViaTrait),
         ["alpha::Store::load_twice", "beta::dyn_method_as_value"]
@@ -246,40 +295,74 @@ fn semantic_index_finds_every_call() {
 
     // Under a call through the trait, each implementation shows, and what it calls.
     let through_trait = find(&graph, &files, "beta::through_trait");
-    let trace = graph.trace(through_trait, TraceOptions::new().callees_only().with_max_depth(4)).unwrap();
+    let trace = graph
+        .trace(
+            through_trait,
+            TraceOptions::new().callees_only().with_max_depth(4),
+        )
+        .unwrap();
     assert_eq!(
         names(&trace.callees, TraceRelationship::Implementation),
         ["alpha::Disk::load", "alpha::Memory::load"]
     );
-    assert!(names(&trace.callees, TraceRelationship::Callee).contains(&"alpha::Disk::new".to_string()));
+    assert!(
+        names(&trace.callees, TraceRelationship::Callee).contains(&"alpha::Disk::new".to_string())
+    );
 
     // A function held as a value shows on both sides, marked as such.
     let get = find(&graph, &files, "alpha::Disk::get");
-    let trace = graph.trace(get, TraceOptions::new().callers_only().with_max_depth(1)).unwrap();
-    assert_eq!(names(&trace.callers, TraceRelationship::CallerByValue), ["beta::method_as_value"]);
+    let trace = graph
+        .trace(get, TraceOptions::new().callers_only().with_max_depth(1))
+        .unwrap();
+    assert_eq!(
+        names(&trace.callers, TraceRelationship::CallerByValue),
+        ["beta::method_as_value"]
+    );
     let holder = find(&graph, &files, "beta::method_as_value");
-    let trace = graph.trace(holder, TraceOptions::new().callees_only().with_max_depth(1)).unwrap();
-    assert_eq!(names(&trace.callees, TraceRelationship::CalleeByValue), ["alpha::Disk::get"]);
+    let trace = graph
+        .trace(holder, TraceOptions::new().callees_only().with_max_depth(1))
+        .unwrap();
+    assert_eq!(
+        names(&trace.callees, TraceRelationship::CalleeByValue),
+        ["alpha::Disk::get"]
+    );
 
     // A function in a table is reached through whoever uses the table.
     let helper = find(&graph, &files, "beta::helper");
-    let trace = graph.trace(helper, TraceOptions::new().callers_only().with_max_depth(3)).unwrap();
+    let trace = graph
+        .trace(helper, TraceOptions::new().callers_only().with_max_depth(3))
+        .unwrap();
     let reached = names(&trace.callers, TraceRelationship::CallerByValue);
-    for holder in ["beta::HANDLERS", "beta::run_handlers", "beta::NESTED", "beta::run_nested"] {
-        assert!(reached.contains(&holder.to_string()), "{holder} not in {reached:?}");
+    for holder in [
+        "beta::HANDLERS",
+        "beta::run_handlers",
+        "beta::NESTED",
+        "beta::run_nested",
+    ] {
+        assert!(
+            reached.contains(&holder.to_string()),
+            "{holder} not in {reached:?}"
+        );
     }
 }
 
 /// An edit answered by a running analyzer gives what a new index gives.
 #[test]
 fn edited_files_match_a_new_index() {
-    if std::process::Command::new("rust-analyzer").arg("--version").output().is_err() {
+    if std::process::Command::new("rust-analyzer")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
         eprintln!("skipped: rust-analyzer is not installed");
         return;
     }
     let scratch = std::env::temp_dir().join(format!("mimir-resolve-edit-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&scratch);
-    for path in ["Cargo.toml", "alpha/Cargo.toml", "beta/Cargo.toml"].into_iter().chain(SOURCES) {
+    for path in ["Cargo.toml", "alpha/Cargo.toml", "beta/Cargo.toml"]
+        .into_iter()
+        .chain(SOURCES)
+    {
         std::fs::create_dir_all(scratch.join(path).parent().unwrap()).unwrap();
         std::fs::copy(workspace().join(path), scratch.join(path)).unwrap();
     }
@@ -289,7 +372,8 @@ fn edited_files_match_a_new_index() {
         std::fs::write(scratch.join(path), text.replacen(from, to, 1)).unwrap();
     };
     let edges = |graph: &CodeGraph, files: &[ProjectFile]| {
-        [EdgeKind::Calls, EdgeKind::UsesAsValue, EdgeKind::Implements].map(|kind| edges_of_kind(graph, files, kind))
+        [EdgeKind::Calls, EdgeKind::UsesAsValue, EdgeKind::Implements]
+            .map(|kind| edges_of_kind(graph, files, kind))
     };
 
     let cache = scratch.join("cache");
@@ -298,14 +382,36 @@ fn edited_files_match_a_new_index() {
     load_or_generate(&scratch, &cache, &files, &mut analyzers, Refresh::Edits);
 
     // Lines move in both files, a function is added, and a call and a value change.
-    edit("alpha/src/lib.rs", "pub struct Disk;", "pub fn added() -> u32 {\n    helper()\n}\n\npub struct Disk;");
-    edit("beta/src/lib.rs", "pub fn direct() -> u32 {\n    helper()", "pub fn direct() -> u32 {\n    alpha::added()");
-    edit("beta/src/lib.rs", "disks.iter().map(Disk::get)", "disks.iter().map(Disk::load_value)");
-    edit("alpha/src/lib.rs", "    fn read(&self) -> u32 {", "    pub fn load_value(&self) -> u32 {\n        self.get()\n    }\n    fn read(&self) -> u32 {");
+    edit(
+        "alpha/src/lib.rs",
+        "pub struct Disk;",
+        "pub fn added() -> u32 {\n    helper()\n}\n\npub struct Disk;",
+    );
+    edit(
+        "beta/src/lib.rs",
+        "pub fn direct() -> u32 {\n    helper()",
+        "pub fn direct() -> u32 {\n    alpha::added()",
+    );
+    edit(
+        "beta/src/lib.rs",
+        "disks.iter().map(Disk::get)",
+        "disks.iter().map(Disk::load_value)",
+    );
+    edit(
+        "alpha/src/lib.rs",
+        "    fn read(&self) -> u32 {",
+        "    pub fn load_value(&self) -> u32 {\n        self.get()\n    }\n    fn read(&self) -> u32 {",
+    );
 
     // Before any analyzer answers, syntax rules stand in for the edited files, and only those.
     let (graph, files) = index_at(&scratch);
-    let indexes = load_or_generate(&scratch, &cache, &files, &mut Analyzers::default(), Refresh::Saved);
+    let indexes = load_or_generate(
+        &scratch,
+        &cache,
+        &files,
+        &mut Analyzers::default(),
+        Refresh::Saved,
+    );
     let report = link(&graph, &files, &indexes);
     assert_eq!((report.live_files, report.syntax_files), (0, 2));
     let saved = edges(&graph, &files);
@@ -329,7 +435,13 @@ fn edited_files_match_a_new_index() {
     assert_eq!(live[2], full[2], "implementations");
     // Only a value among a macro's tokens has to wait for the next index.
     let missing: Vec<_> = full[1].difference(&live[1]).collect();
-    assert_eq!(missing, [&("beta::value_in_macro".to_string(), "beta::helper".to_string())]);
+    assert_eq!(
+        missing,
+        [&(
+            "beta::value_in_macro".to_string(),
+            "beta::helper".to_string()
+        )]
+    );
     assert!(live[1].difference(&full[1]).next().is_none());
 }
 
@@ -337,7 +449,9 @@ fn find(graph: &CodeGraph, files: &[ProjectFile], wanted: &str) -> SymbolId {
     files
         .iter()
         .flat_map(|f| graph.symbols_in_file(f.file_id))
-        .find(|s| label(s, files) == wanted && matches!(s.kind, SymbolKind::Function | SymbolKind::Method))
+        .find(|s| {
+            label(s, files) == wanted && matches!(s.kind, SymbolKind::Function | SymbolKind::Method)
+        })
         .unwrap_or_else(|| panic!("no symbol {wanted}"))
         .id
 }

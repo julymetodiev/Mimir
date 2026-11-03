@@ -4,8 +4,8 @@ use anyhow::{Context, Result};
 use mimir_protocol::SearchOptions;
 use regex::Regex;
 
-use crate::app::{find_project_root, Config};
-use crate::daemon::{check_daemon_running, DaemonClient};
+use crate::app::{Config, find_project_root};
+use crate::daemon::{DaemonClient, check_daemon_running};
 
 /// Execute the search command.
 pub async fn execute(
@@ -52,7 +52,11 @@ pub async fn execute(
             return Ok(());
         }
 
-        println!("Found {} symbols matching '{}':\n", results.symbols.len(), pattern);
+        println!(
+            "Found {} symbols matching '{}':\n",
+            results.symbols.len(),
+            pattern
+        );
 
         for (i, sym) in results.symbols.iter().enumerate() {
             let kind_str = format!("{:?}", sym.kind).to_lowercase();

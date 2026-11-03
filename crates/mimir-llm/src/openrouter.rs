@@ -233,50 +233,52 @@ fn parse_sse_chunk(bytes: &[u8]) -> LlmResult<StreamChunk> {
 
             if let Ok(event) = serde_json::from_str::<Value>(data)
                 && let Some(choices) = event["choices"].as_array()
-                    && let Some(choice) = choices.first() {
-                        let delta = &choice["delta"];
+                && let Some(choice) = choices.first()
+            {
+                let delta = &choice["delta"];
 
-                        // Text content
-                        if let Some(content) = delta["content"].as_str() {
-                            return Ok(StreamChunk {
-                                chunk_type: ChunkType::ContentBlockDelta,
-                                text: Some(content.to_string()),
-                                tool_use: None,
-                            });
-                        }
+                // Text content
+                if let Some(content) = delta["content"].as_str() {
+                    return Ok(StreamChunk {
+                        chunk_type: ChunkType::ContentBlockDelta,
+                        text: Some(content.to_string()),
+                        tool_use: None,
+                    });
+                }
 
-                        // Tool calls
-                        if let Some(tool_calls) = delta["tool_calls"].as_array()
-                            && let Some(tool_call) = tool_calls.first() {
-                                let id = tool_call["id"].as_str().map(String::from);
-                                let name = tool_call["function"]["name"].as_str().map(String::from);
-                                let args = tool_call["function"]["arguments"]
-                                    .as_str()
-                                    .map(String::from);
+                // Tool calls
+                if let Some(tool_calls) = delta["tool_calls"].as_array()
+                    && let Some(tool_call) = tool_calls.first()
+                {
+                    let id = tool_call["id"].as_str().map(String::from);
+                    let name = tool_call["function"]["name"].as_str().map(String::from);
+                    let args = tool_call["function"]["arguments"]
+                        .as_str()
+                        .map(String::from);
 
-                                if id.is_some() || name.is_some() {
-                                    return Ok(StreamChunk {
-                                        chunk_type: ChunkType::ToolUseStart,
-                                        text: None,
-                                        tool_use: Some(ToolUseChunk {
-                                            id,
-                                            name,
-                                            input_delta: args,
-                                        }),
-                                    });
-                                } else if args.is_some() {
-                                    return Ok(StreamChunk {
-                                        chunk_type: ChunkType::ToolUseInput,
-                                        text: None,
-                                        tool_use: Some(ToolUseChunk {
-                                            id: None,
-                                            name: None,
-                                            input_delta: args,
-                                        }),
-                                    });
-                                }
-                            }
+                    if id.is_some() || name.is_some() {
+                        return Ok(StreamChunk {
+                            chunk_type: ChunkType::ToolUseStart,
+                            text: None,
+                            tool_use: Some(ToolUseChunk {
+                                id,
+                                name,
+                                input_delta: args,
+                            }),
+                        });
+                    } else if args.is_some() {
+                        return Ok(StreamChunk {
+                            chunk_type: ChunkType::ToolUseInput,
+                            text: None,
+                            tool_use: Some(ToolUseChunk {
+                                id: None,
+                                name: None,
+                                input_delta: args,
+                            }),
+                        });
                     }
+                }
+            }
         }
     }
 

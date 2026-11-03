@@ -55,10 +55,7 @@ pub enum IpcCommand {
     },
 
     /// Find and trace a symbol by name.
-    TraceByName {
-        name: String,
-        options: TraceOptions,
-    },
+    TraceByName { name: String, options: TraceOptions },
 
     /// Get graph statistics.
     Stats,

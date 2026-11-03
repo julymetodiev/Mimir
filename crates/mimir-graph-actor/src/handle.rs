@@ -222,14 +222,9 @@ mod tests {
         let (event_tx, _event_rx) = event_channel(16);
         let event_tx_clone = event_tx.clone();
 
-        let actor = GraphActor::with_registry(
-            PathBuf::from("/tmp/test"),
-            create_test_registry(),
-        );
+        let actor = GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
 
-        let actor_handle = tokio::spawn(async move {
-            actor.run(cmd_rx, event_tx).await
-        });
+        let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
         let handle = GraphHandle::new(cmd_tx, event_tx_clone);
 
@@ -260,14 +255,9 @@ mod tests {
         let (event_tx, _event_rx) = event_channel(16);
         let event_tx_clone = event_tx.clone();
 
-        let actor = GraphActor::with_registry(
-            PathBuf::from("/tmp/test"),
-            create_test_registry(),
-        );
+        let actor = GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
 
-        let actor_handle = tokio::spawn(async move {
-            actor.run(cmd_rx, event_tx).await
-        });
+        let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
         let handle = GraphHandle::new(cmd_tx, event_tx_clone);
 
@@ -298,14 +288,9 @@ mod tests {
         let (event_tx, _event_rx) = event_channel(16);
         let event_tx_clone = event_tx.clone();
 
-        let actor = GraphActor::with_registry(
-            PathBuf::from("/tmp/test"),
-            create_test_registry(),
-        );
+        let actor = GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
 
-        let actor_handle = tokio::spawn(async move {
-            actor.run(cmd_rx, event_tx).await
-        });
+        let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
         let handle1 = GraphHandle::new(cmd_tx, event_tx_clone);
         let handle2 = handle1.clone();

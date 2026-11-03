@@ -5,13 +5,13 @@
 //! - Checkpoint system for saving/resuming agent state
 //! - Persistent task storage
 
-mod task;
 mod checkpoint;
 mod store;
+mod task;
 
-pub use task::*;
 pub use checkpoint::*;
 pub use store::*;
+pub use task::*;
 
 use thiserror::Error;
 

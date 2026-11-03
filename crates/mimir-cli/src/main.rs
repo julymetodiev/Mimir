@@ -48,7 +48,18 @@ async fn main() -> anyhow::Result<()> {
             code,
             callers,
             callees,
-        } => commands::trace::execute(file.as_deref(), &symbol, depth, json, code, callers, callees).await?,
+        } => {
+            commands::trace::execute(
+                file.as_deref(),
+                &symbol,
+                depth,
+                json,
+                code,
+                callers,
+                callees,
+            )
+            .await?
+        }
         commands::Commands::Edit {
             file,
             symbol,
@@ -70,7 +81,8 @@ async fn main() -> anyhow::Result<()> {
                 content,
                 preview,
                 backup,
-            }).await?
+            })
+            .await?
         }
         commands::Commands::EditBatch {
             json,
@@ -114,8 +126,15 @@ async fn main() -> anyhow::Result<()> {
             verbose,
             checkpoint,
         } => {
-            commands::agent::run_agent(&goal, &provider, model.as_deref(), max_iterations, verbose, checkpoint)
-                .await?
+            commands::agent::run_agent(
+                &goal,
+                &provider,
+                model.as_deref(),
+                max_iterations,
+                verbose,
+                checkpoint,
+            )
+            .await?
         }
         commands::Commands::Tasks { status } => {
             let task_dir = app::find_project_root()

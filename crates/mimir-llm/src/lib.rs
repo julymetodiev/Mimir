@@ -3,18 +3,18 @@
 //! This crate provides a unified interface for interacting with different LLM providers
 //! (Anthropic, OpenAI, etc.) with support for tool use and streaming.
 
-mod message;
-mod provider;
 mod anthropic;
-mod zai;
+mod message;
 mod openai_compat;
 mod openrouter;
+mod provider;
+mod zai;
 
-pub use message::*;
-pub use provider::*;
 pub use anthropic::AnthropicProvider;
-pub use zai::ZaiProvider;
+pub use message::*;
 pub use openrouter::OpenRouterProvider;
+pub use provider::*;
+pub use zai::ZaiProvider;
 
 use thiserror::Error;
 

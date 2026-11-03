@@ -88,7 +88,8 @@ impl Tool for ReadTool {
                                 context,
                             )
                         } else {
-                            let lines: Vec<LineInfo> = code.lines()
+                            let lines: Vec<LineInfo> = code
+                                .lines()
                                 .enumerate()
                                 .map(|(i, line)| LineInfo {
                                     number: info.start_line + i as u32,
@@ -116,7 +117,9 @@ impl Tool for ReadTool {
                     }
                 }
             } else {
-                return ToolResult::error("Symbol-based read requires daemon. Start with 'mimir daemon start'");
+                return ToolResult::error(
+                    "Symbol-based read requires daemon. Start with 'mimir daemon start'",
+                );
             }
         } else if let Some(file_path) = file {
             // Read by file
@@ -149,8 +152,12 @@ impl ReadTool {
         let all_lines: Vec<&str> = content.lines().collect();
         let total_lines = all_lines.len();
 
-        let start = start_line.map(|n| (n as usize).saturating_sub(1)).unwrap_or(0);
-        let end = end_line.map(|n| (n as usize).min(total_lines)).unwrap_or(total_lines);
+        let start = start_line
+            .map(|n| (n as usize).saturating_sub(1))
+            .unwrap_or(0);
+        let end = end_line
+            .map(|n| (n as usize).min(total_lines))
+            .unwrap_or(total_lines);
 
         if start >= total_lines {
             return ToolResult::error(format!(
@@ -206,7 +213,9 @@ impl ReadTool {
         let all_lines: Vec<&str> = content.lines().collect();
         let total_lines = all_lines.len();
 
-        let actual_start = (start_line as usize).saturating_sub(1).saturating_sub(context_before);
+        let actual_start = (start_line as usize)
+            .saturating_sub(1)
+            .saturating_sub(context_before);
         let actual_end = ((end_line as usize) + context_after).min(total_lines);
 
         let lines: Vec<LineInfo> = all_lines[actual_start..actual_end]
