@@ -3,6 +3,7 @@
 
 use mimir_engine::GraphHandle;
 use mimir_protocol::{IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult, VERSION};
+use mimir_resolve::SemanticSource;
 use std::fs::{self, File, TryLockError};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -63,7 +64,11 @@ impl LastUsed {
 
 /// Serve `root` until told to stop or idle for `idle`. If another daemon holds the project's lock,
 /// return at once: that one serves it.
-pub async fn run(root: PathBuf, idle: Duration) -> Result<(), DaemonError> {
+pub async fn run(
+    root: PathBuf,
+    idle: Duration,
+    semantics: Arc<dyn SemanticSource>,
+) -> Result<(), DaemonError> {
     let agent_dir = root.join(".mimir");
     fs::create_dir_all(agent_dir.join("graph")).map_err(io_error("create", &agent_dir))?;
 
@@ -84,7 +89,7 @@ pub async fn run(root: PathBuf, idle: Duration) -> Result<(), DaemonError> {
     }
 
     // The first scan is queued before anyone connects, so every query waits for it in the actor.
-    let engine = mimir_engine::start(root.clone()).await;
+    let engine = mimir_engine::start(root.clone(), semantics).await;
     let listener = UnixListener::bind(&socket).map_err(io_error("bind", &socket))?;
     info!("Serving {} on {}", root.display(), socket.display());
 

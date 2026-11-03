@@ -7,11 +7,11 @@ use mimir_protocol::{
     FindResponse, LinkSummary, SearchOptions, SearchResponse, StatsResponse, SymbolInfo,
     SymbolSource, SyncResult, TraceNode, TraceRelation, TraceResponse,
 };
-use mimir_resolve::{Analyzers, ProjectFile, Refresh, ScipIndex, link, load_or_generate};
+use mimir_resolve::{ProjectFile, Refresh, ScipIndex, SemanticSource, link};
 use mimir_types::{ContentHash, FileId, IdGenerator, Language, Symbol, SymbolId, SymbolKind};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::oneshot;
 use tracing::{debug, info, warn};
@@ -64,8 +64,8 @@ pub struct GraphActor {
     sources: HashMap<FileId, ProjectFile>,
     /// A file changed since edges were last resolved.
     needs_link: bool,
-    /// Running analyzers, which answer for edited files.
-    analyzers: Arc<Mutex<Analyzers>>,
+    /// What knows more than syntax about the files.
+    semantics: Arc<dyn SemanticSource>,
     pending: Option<PendingLink>,
     query_wait: Duration,
 }
@@ -80,24 +80,20 @@ fn answer<T>(reply: oneshot::Sender<T>, value: T) {
 /// The next command. Waiting for it is also when idle analyzers stop.
 async fn next_command(
     commands: &mut CommandReceiver,
-    analyzers: &Mutex<Analyzers>,
+    semantics: &dyn SemanticSource,
 ) -> Option<GraphCommand> {
     let mut tick = tokio::time::interval(Duration::from_secs(60));
     loop {
         tokio::select! {
             command = commands.recv() => return command,
-            _ = tick.tick() => {
-                if let Ok(mut analyzers) = analyzers.try_lock() {
-                    analyzers.stop_if_idle(ANALYZER_IDLE);
-                }
-            }
+            _ = tick.tick() => semantics.stop_if_idle(ANALYZER_IDLE),
         }
     }
 }
 
 impl GraphActor {
     /// Create a new graph actor.
-    pub fn new(root: PathBuf) -> Self {
+    pub fn new(root: PathBuf, semantics: Arc<dyn SemanticSource>) -> Self {
         Self {
             graph: CodeGraph::new(),
             registry: Arc::new(AdapterRegistry::new()),
@@ -107,14 +103,18 @@ impl GraphActor {
             file_paths: HashMap::new(),
             sources: HashMap::new(),
             needs_link: false,
-            analyzers: Arc::default(),
+            semantics,
             pending: None,
             query_wait: QUERY_WAIT,
         }
     }
 
     /// Create with a custom adapter registry.
-    pub fn with_registry(root: PathBuf, registry: Arc<AdapterRegistry>) -> Self {
+    pub fn with_registry(
+        root: PathBuf,
+        registry: Arc<AdapterRegistry>,
+        semantics: Arc<dyn SemanticSource>,
+    ) -> Self {
         Self {
             graph: CodeGraph::new(),
             registry,
@@ -124,7 +124,7 @@ impl GraphActor {
             file_paths: HashMap::new(),
             sources: HashMap::new(),
             needs_link: false,
-            analyzers: Arc::default(),
+            semantics,
             pending: None,
             query_wait: QUERY_WAIT,
         }
@@ -144,7 +144,7 @@ impl GraphActor {
     ) -> Result<(), GraphError> {
         info!("Graph actor starting for root: {}", self.root.display());
 
-        while let Some(cmd) = next_command(&mut commands, &self.analyzers).await {
+        while let Some(cmd) = next_command(&mut commands, self.semantics.as_ref()).await {
             match cmd {
                 GraphCommand::AddFile {
                     path,
@@ -360,11 +360,10 @@ impl GraphActor {
             self.needs_link = false;
             let files: Vec<ProjectFile> = self.sources.values().cloned().collect();
             let (root, cache_dir, scan) = (self.root.clone(), cache_dir.clone(), files.clone());
-            let analyzers = self.analyzers.clone();
-            // Replacing an unfinished one leaves it to end alone; this one waits for the analyzers.
+            let semantics = self.semantics.clone();
+            // Replacing an unfinished one leaves it to end alone; this one waits for it.
             let indexes = tokio::task::spawn_blocking(move || {
-                let mut analyzers = analyzers.lock().unwrap_or_else(|e| e.into_inner());
-                load_or_generate(&root, &cache_dir, &scan, &mut analyzers, Refresh::Edits)
+                semantics.load(&root, &cache_dir, &scan, Refresh::Edits)
             });
             self.pending = Some(PendingLink {
                 indexes,
@@ -393,14 +392,9 @@ impl GraphActor {
             Err(_) if pending.linked_by_syntax => {}
             Err(_) => {
                 let (root, scan) = (self.root.clone(), pending.files.clone());
+                let semantics = self.semantics.clone();
                 let saved = tokio::task::spawn_blocking(move || {
-                    load_or_generate(
-                        &root,
-                        &cache_dir,
-                        &scan,
-                        &mut Analyzers::default(),
-                        Refresh::Saved,
-                    )
+                    semantics.load(&root, &cache_dir, &scan, Refresh::Saved)
                 })
                 .await
                 .unwrap_or_default();
@@ -425,14 +419,12 @@ impl GraphActor {
         self.needs_link = false;
         let files: Vec<ProjectFile> = self.sources.values().cloned().collect();
         let (root, cache_dir, scan) = (self.root.clone(), self.graph_dir(), files.clone());
-        let analyzers = self.analyzers.clone();
+        let semantics = self.semantics.clone();
         let refresh = if full { Refresh::Full } else { Refresh::Edits };
-        let indexes = tokio::task::spawn_blocking(move || {
-            let mut analyzers = analyzers.lock().unwrap_or_else(|e| e.into_inner());
-            load_or_generate(&root, &cache_dir, &scan, &mut analyzers, refresh)
-        })
-        .await
-        .map_err(|e| GraphError::WatcherError(format!("Semantic indexing failed: {e}")))?;
+        let indexes =
+            tokio::task::spawn_blocking(move || semantics.load(&root, &cache_dir, &scan, refresh))
+                .await
+                .map_err(|e| GraphError::WatcherError(format!("Semantic indexing failed: {e}")))?;
         let report = link(&self.graph, &files, &indexes);
 
         let graph_file = save::save(&self.graph, &self.file_paths, &self.graph_dir())
@@ -951,7 +943,11 @@ mod tests {
         let (cmd_tx, cmd_rx) = command_channel(16);
         let (event_tx, _event_rx) = event_channel(16);
 
-        let actor = GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
+        let actor = GraphActor::with_registry(
+            PathBuf::from("/tmp/test"),
+            create_test_registry(),
+            Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
+        );
 
         let handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
@@ -965,7 +961,11 @@ mod tests {
         let (cmd_tx, cmd_rx) = command_channel(16);
         let (event_tx, mut event_rx) = event_channel(16);
 
-        let actor = GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
+        let actor = GraphActor::with_registry(
+            PathBuf::from("/tmp/test"),
+            create_test_registry(),
+            Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
+        );
 
         let handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
@@ -997,7 +997,11 @@ mod tests {
         let (cmd_tx, cmd_rx) = command_channel(16);
         let (event_tx, _event_rx) = event_channel(16);
 
-        let actor = GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
+        let actor = GraphActor::with_registry(
+            PathBuf::from("/tmp/test"),
+            create_test_registry(),
+            Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
+        );
 
         let handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
@@ -1038,7 +1042,11 @@ mod tests {
         let (cmd_tx, cmd_rx) = command_channel(16);
         let (event_tx, _event_rx) = event_channel(16);
 
-        let actor = GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
+        let actor = GraphActor::with_registry(
+            PathBuf::from("/tmp/test"),
+            create_test_registry(),
+            Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
+        );
 
         let handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
@@ -1074,7 +1082,11 @@ mod tests {
         let (cmd_tx, cmd_rx) = command_channel(16);
         let (event_tx, _event_rx) = event_channel(16);
 
-        let actor = GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
+        let actor = GraphActor::with_registry(
+            PathBuf::from("/tmp/test"),
+            create_test_registry(),
+            Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
+        );
 
         let handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 

@@ -2,6 +2,7 @@
 
 use mimir_parse_core::AdapterRegistry;
 use mimir_parse_rust::RustAdapter;
+use mimir_resolve::SemanticSource;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{error, warn};
@@ -33,13 +34,13 @@ impl Engine {
 }
 
 /// Start the engine for `root` and queue the first scan, which any later command waits for.
-pub async fn start(root: PathBuf) -> Engine {
+pub async fn start(root: PathBuf, semantics: Arc<dyn SemanticSource>) -> Engine {
     let registry = AdapterRegistry::new();
     registry.register(Arc::new(RustAdapter::new()));
 
     let (commands, receiver) = command_channel(256);
     let (events, _) = event_channel(256);
-    let actor = GraphActor::with_registry(root.clone(), Arc::new(registry));
+    let actor = GraphActor::with_registry(root.clone(), Arc::new(registry), semantics);
     let actor_events = events.clone();
     tokio::spawn(async move {
         if let Err(e) = actor.run(receiver, actor_events).await {

@@ -68,7 +68,11 @@ impl MyStruct {
     let (event_tx, _event_rx) = event_channel(64);
     let event_tx_clone = event_tx.clone();
 
-    let actor = GraphActor::with_registry(temp_dir.path().to_path_buf(), create_test_registry());
+    let actor = GraphActor::with_registry(
+        temp_dir.path().to_path_buf(),
+        create_test_registry(),
+        Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
+    );
 
     // Start actor
     let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
@@ -125,7 +129,11 @@ async fn test_incremental_sync() {
     let (event_tx, _event_rx) = event_channel(64);
     let event_tx_clone = event_tx.clone();
 
-    let actor = GraphActor::with_registry(temp_dir.path().to_path_buf(), create_test_registry());
+    let actor = GraphActor::with_registry(
+        temp_dir.path().to_path_buf(),
+        create_test_registry(),
+        Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
+    );
 
     let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
@@ -175,7 +183,11 @@ async fn test_add_file_directly() {
     let (event_tx, mut event_rx) = event_channel(64);
     let event_tx_clone = event_tx.clone();
 
-    let actor = GraphActor::with_registry(PathBuf::from("/tmp"), create_test_registry());
+    let actor = GraphActor::with_registry(
+        PathBuf::from("/tmp"),
+        create_test_registry(),
+        Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
+    );
 
     let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
@@ -221,7 +233,11 @@ async fn test_trace_symbols() {
     let (event_tx, _event_rx) = event_channel(64);
     let event_tx_clone = event_tx.clone();
 
-    let actor = GraphActor::with_registry(PathBuf::from("/tmp"), create_test_registry());
+    let actor = GraphActor::with_registry(
+        PathBuf::from("/tmp"),
+        create_test_registry(),
+        Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
+    );
 
     let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
@@ -310,8 +326,12 @@ async fn test_query_answers_before_the_index_is_done() {
     }
     let (cmd_tx, cmd_rx) = command_channel(32);
     let (event_tx, _event_rx) = event_channel(32);
-    let actor = GraphActor::with_registry(project.clone(), create_test_registry())
-        .with_query_wait(std::time::Duration::ZERO);
+    let actor = GraphActor::with_registry(
+        project.clone(),
+        create_test_registry(),
+        Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
+    )
+    .with_query_wait(std::time::Duration::ZERO);
     tokio::spawn(actor.run(cmd_rx, event_tx.clone()));
     let handle = GraphHandle::new(cmd_tx, event_tx);
     handle.sync().await.unwrap();
@@ -358,7 +378,11 @@ async fn test_edit_keeps_callers_in_other_files() {
     }
     let (cmd_tx, cmd_rx) = command_channel(32);
     let (event_tx, _event_rx) = event_channel(32);
-    let actor = GraphActor::with_registry(project.clone(), create_test_registry());
+    let actor = GraphActor::with_registry(
+        project.clone(),
+        create_test_registry(),
+        Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
+    );
     tokio::spawn(actor.run(cmd_rx, event_tx.clone()));
     let handle = GraphHandle::new(cmd_tx, event_tx);
     handle.sync().await.unwrap();

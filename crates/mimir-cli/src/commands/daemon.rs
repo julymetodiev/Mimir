@@ -2,14 +2,23 @@
 
 use anyhow::Result;
 use mimir_client::Client;
+use mimir_resolve::{NoSemanticSource, SemanticSource};
+use mimir_resolve_ra::RustAnalyzer;
+use std::sync::Arc;
 use std::time::Duration;
 
 /// How long a daemon stays without a request. Its analyzer, which holds gigabytes, stops sooner.
 const DAEMON_IDLE: Duration = Duration::from_secs(30 * 60);
 
-/// Serve this project in this process. This is what a client starts.
+/// Serve this project in this process. This is what a client starts. `MIMIR_NO_SCIP` leaves it to
+/// syntax rules alone.
 pub async fn run() -> Result<()> {
-    mimir_daemon::run(std::env::current_dir()?, DAEMON_IDLE).await?;
+    let semantics: Arc<dyn SemanticSource> = if std::env::var_os("MIMIR_NO_SCIP").is_some() {
+        Arc::new(NoSemanticSource)
+    } else {
+        Arc::new(RustAnalyzer::default())
+    };
+    mimir_daemon::run(std::env::current_dir()?, DAEMON_IDLE, semantics).await?;
     Ok(())
 }
 

@@ -332,7 +332,11 @@ mod tests {
         let (event_tx, _event_rx) = event_channel(16);
         let event_tx_clone = event_tx.clone();
 
-        let actor = GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
+        let actor = GraphActor::with_registry(
+            PathBuf::from("/tmp/test"),
+            create_test_registry(),
+            Arc::new(mimir_resolve::NoSemanticSource),
+        );
 
         let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
@@ -365,7 +369,11 @@ mod tests {
         let (event_tx, _event_rx) = event_channel(16);
         let event_tx_clone = event_tx.clone();
 
-        let actor = GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
+        let actor = GraphActor::with_registry(
+            PathBuf::from("/tmp/test"),
+            create_test_registry(),
+            Arc::new(mimir_resolve::NoSemanticSource),
+        );
 
         let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
@@ -398,7 +406,11 @@ mod tests {
         let (event_tx, _event_rx) = event_channel(16);
         let event_tx_clone = event_tx.clone();
 
-        let actor = GraphActor::with_registry(PathBuf::from("/tmp/test"), create_test_registry());
+        let actor = GraphActor::with_registry(
+            PathBuf::from("/tmp/test"),
+            create_test_registry(),
+            Arc::new(mimir_resolve::NoSemanticSource),
+        );
 
         let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 

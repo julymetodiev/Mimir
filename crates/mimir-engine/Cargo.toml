@@ -28,5 +28,6 @@ notify-debouncer-mini.workspace = true
 regex.workspace = true
 
 [dev-dependencies]
+mimir-resolve-ra.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tempfile.workspace = true

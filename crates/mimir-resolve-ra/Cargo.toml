@@ -1,0 +1,21 @@
+[package]
+name = "mimir-resolve-ra"
+description = "rust-analyzer as Mimir's semantic source: its SCIP index and a running language server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+mimir-types.workspace = true
+mimir-parse-core.workspace = true
+mimir-resolve.workspace = true
+tracing.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+mimir-graph.workspace = true
+mimir-parse-rust.workspace = true
+tempfile.workspace = true

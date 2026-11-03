@@ -16,10 +16,9 @@ use std::time::{Duration, Instant};
 use mimir_parse_core::ExtractedReference;
 use mimir_types::{ContentHash, ReferenceKind};
 use serde_json::{Value, json};
-use tracing::info;
+use tracing::{debug, info};
 
-use crate::ProjectFile;
-use crate::lookup::type_name;
+use mimir_resolve::{LiveDocument, ProjectFile, Target, type_name};
 
 const LOAD_TIMEOUT: Duration = Duration::from_secs(600);
 /// The first question about a crate waits for that crate's analysis.
@@ -31,24 +30,6 @@ const ATTEMPTS: usize = 6;
 /// Going to the definition of these lands on what they use (`fmt`, `from_str`, `from`), not on
 /// them. Those are not the calls written here, and an index does not report them.
 const FORWARDING_METHODS: [&str; 4] = ["into", "try_into", "parse", "to_string"];
-
-/// What a position in an edited file refers to. `line` is 1-based.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Target {
-    /// Path relative to the project.
-    pub path: PathBuf,
-    pub line: u32,
-    pub name: String,
-}
-
-/// The answers for one edited file.
-#[derive(Debug, Clone, Default)]
-pub struct LiveDocument {
-    /// By a reference's start: 1-based line, 0-based column.
-    pub sites: HashMap<(u32, u32), Target>,
-    /// The trait of each `impl Tr for T`, by the line of the `impl`.
-    pub traits: HashMap<u32, Target>,
-}
 
 /// The running analyzers of a project, one per Cargo root.
 #[derive(Default)]
@@ -69,7 +50,7 @@ impl Analyzers {
 
     /// Ask about every reference in `stale`, and the trait of every impl, from the analyzer
     /// of the Cargo root at `root`, an absolute path. `files` are all the project's files.
-    pub(crate) fn resolve(
+    pub fn resolve(
         &mut self,
         project: &Path,
         root: &Path,
@@ -435,10 +416,26 @@ impl Analyzer {
     }
 }
 
+/// End a process. One that has already ended is what was wanted.
+pub fn stop(child: &mut Child) {
+    if let Err(e) = child.kill() {
+        debug!("rust-analyzer already ended: {e}");
+    }
+    if let Err(e) = child.wait() {
+        debug!("rust-analyzer could not be waited for: {e}");
+    }
+}
+
 impl Drop for Analyzer {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        stop(&mut self.child);
+    }
+}
+
+/// Answer something the analyzer asked. Failing means it is gone, which the next request reports.
+fn answer_server(stdin: &Mutex<ChildStdin>, message: &Value) {
+    if let Err(e) = write_message(stdin, message) {
+        debug!("Cannot answer the analyzer: {e}");
     }
 }
 
@@ -464,20 +461,24 @@ fn read_messages(
             (Some("workspace/configuration"), Some(id)) => {
                 let items = message["params"]["items"].as_array().map_or(0, Vec::len);
                 let result: Vec<Value> = (0..items).map(|_| config()).collect();
-                let _ = write_message(
+                answer_server(
                     stdin,
                     &json!({"jsonrpc": "2.0", "id": id, "result": result}),
                 );
             }
             (Some(_), Some(id)) => {
-                let _ = write_message(stdin, &json!({"jsonrpc": "2.0", "id": id, "result": null}));
+                answer_server(stdin, &json!({"jsonrpc": "2.0", "id": id, "result": null}));
             }
             (Some("experimental/serverStatus"), None) => {
-                let _ = status.send(message["params"].clone());
+                if status.send(message["params"].clone()).is_err() {
+                    debug!("Nobody is waiting for the analyzer's status any more");
+                }
             }
             (Some(_), None) => {}
             (None, _) => {
-                let _ = answers.send(message);
+                if answers.send(message).is_err() {
+                    debug!("Nobody is waiting for the analyzer's answers any more");
+                }
             }
         }
     }
@@ -497,7 +498,9 @@ fn read_message(reader: &mut impl BufRead) -> Option<Value> {
         if let Some((name, value)) = line.split_once(':')
             && name.eq_ignore_ascii_case("content-length")
         {
-            length = value.trim().parse::<usize>().ok();
+            if let Ok(found) = value.trim().parse::<usize>() {
+                length = Some(found);
+            }
         }
     }
     let mut body = vec![0; length?];

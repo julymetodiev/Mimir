@@ -38,14 +38,14 @@ allowed() {
     mimir-parse-rust) echo "mimir-types mimir-parse-core" ;;
     mimir-graph) echo "mimir-types" ;;
     mimir-resolve) echo "mimir-types mimir-graph mimir-parse-core" ;;
-    mimir-resolve-ra) echo "mimir-types mimir-graph mimir-resolve" ;;
+    mimir-resolve-ra) echo "mimir-types mimir-parse-core mimir-resolve" ;;
     mimir-edit) echo "mimir-types" ;;
     mimir-protocol) echo "mimir-types" ;;
-    mimir-engine) echo "mimir-types mimir-graph mimir-parse-core mimir-parse-rust mimir-resolve mimir-resolve-ra mimir-edit mimir-protocol" ;;
-    mimir-daemon) echo "mimir-types mimir-protocol mimir-engine" ;;
+    mimir-engine) echo "mimir-types mimir-graph mimir-parse-core mimir-parse-rust mimir-resolve mimir-edit mimir-protocol" ;;
+    mimir-daemon) echo "mimir-protocol mimir-engine mimir-resolve" ;;
     mimir-client) echo "mimir-types mimir-protocol" ;;
     mimir-mcp) echo "mimir-types mimir-protocol mimir-client" ;;
-    mimir-cli) echo "mimir-types mimir-protocol mimir-client mimir-daemon mimir-mcp" ;;
+    mimir-cli) echo "mimir-types mimir-protocol mimir-client mimir-daemon mimir-mcp mimir-resolve mimir-resolve-ra" ;;
     *) echo "NOT-IN-SPEC" ;;
   esac
 }
@@ -79,7 +79,7 @@ now() {
     wrong_deps) wrong_deps ;;
     unused_deps) unused_deps ;;
     # Rule 3: transports reach the world only through the client or the engine
-    transport_reach) src $TRANSPORT | grep -v -E '^crates/mimir-(client|daemon)/' | count 'std::fs|tokio::fs|Command::new|mimir_(graph|resolve|engine|parse_core|parse_rust|edit)\b' ;;
+    transport_reach) src $TRANSPORT | grep -v -E '^crates/mimir-(client|daemon)/|^crates/mimir-cli/src/commands/daemon\.rs$' | count 'std::fs|tokio::fs|Command::new|mimir_(graph|resolve|engine|parse_core|parse_rust|edit)\b' ;;
     # Rule 5
     allow_attrs) src crates | count '#!?\[allow\(' ;;
     unwrap_expect) src crates | count '\.unwrap\(\)|\.expect\(' ;;
@@ -119,7 +119,7 @@ if [ "${1:-}" = "--new" ]; then
       /^\+/ { if (n < cut) print f ": " substr($0, 2); n++ }'
   }
   hits=$( { for f in $( { git diff --name-only "$base" -- 'crates/*.rs'; git ls-files --others --exclude-standard -- 'crates/*.rs'; } | sort -u | grep -v -E "$TEST_FILES" || true); do
-              [ -f "$f" ] && added "$f"
+              if [ -f "$f" ]; then added "$f"; fi
             done
           } | { grep -E "$re|anyhow" || true; } | { grep -v -E '^crates/mimir-cli/.*anyhow' || true; } | { grep -v -E ': *use super::\*;' || true; } | { grep -v -E ': *//' || true; })
   if [ -n "$approved" ] && [ -n "$hits" ]; then

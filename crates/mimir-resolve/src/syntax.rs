@@ -11,11 +11,12 @@ use mimir_graph::EdgeKind;
 use mimir_parse_core::extracted::CallForm;
 use mimir_types::{Confidence, FileId, ReferenceKind, Symbol};
 
+use crate::ProjectFile;
+use crate::edges::{ConstantUse, EdgeSet};
 use crate::lookup::{SymbolTable, implements_generic_trait, owner_of, trait_of, type_name};
-use crate::{ConstantUse, EdgeSet, ProjectFile};
 
 /// Add call and function value edges for every file not in `covered`.
-pub(crate) fn resolve_calls(
+pub fn resolve_calls(
     table: &SymbolTable,
     files: &[ProjectFile],
     covered: &HashSet<FileId>,
@@ -97,7 +98,7 @@ fn resolve_call(
 
 /// Add edges for functions in `Struct { name }`, in files of a semantic index: its occurrence
 /// there is the field, so the index says nothing of the function.
-pub(crate) fn resolve_shorthand_values(
+pub fn resolve_shorthand_values(
     table: &SymbolTable,
     files: &[ProjectFile],
     covered: &HashSet<FileId>,
@@ -139,7 +140,7 @@ fn free_function(table: &SymbolTable, file: FileId, name: &str) -> Option<Arc<Sy
 }
 
 /// Collect uses of constants in files not in `covered`, by a name with one declaration.
-pub(crate) fn resolve_constant_uses(
+pub fn resolve_constant_uses(
     table: &SymbolTable,
     files: &[ProjectFile],
     covered: &HashSet<FileId>,
@@ -168,7 +169,7 @@ pub(crate) fn resolve_constant_uses(
 
 /// Link methods of `impl Tr for T` to the method of `Tr`, for files not in `covered`.
 /// Two traits with one name leave the method unlinked.
-pub(crate) fn resolve_implementations(
+pub fn resolve_implementations(
     table: &SymbolTable,
     files: &[ProjectFile],
     covered: &HashSet<FileId>,
@@ -196,7 +197,7 @@ pub(crate) fn resolve_implementations(
 
 /// Add import edges for `use crate::`, `self::` and `super::` paths that name one symbol.
 /// Any other path may lead outside the project, where a same-named symbol would be wrong.
-pub(crate) fn resolve_imports(table: &SymbolTable, files: &[ProjectFile], edges: &mut EdgeSet) {
+pub fn resolve_imports(table: &SymbolTable, files: &[ProjectFile], edges: &mut EdgeSet) {
     for file in files {
         for reference in file
             .references

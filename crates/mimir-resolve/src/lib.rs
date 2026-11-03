@@ -1,26 +1,28 @@
 //! Resolution: from references found in source to edges in the code graph.
 //!
-//! Every path that builds a graph (CLI sync, single-file trace, the daemon's actor)
-//! goes through [`link`]. A file covered by a semantic index gets its call edges from
-//! that index; any other file gets them from [`syntax`], which leaves a call out
-//! rather than guess its target.
+//! A file a [`SemanticSource`] knows about gets its call edges from that source; any other file
+//! from syntax rules, which leave a call out rather than guess its target.
 
-pub mod live;
+mod edges;
 mod lookup;
-pub mod scip;
-pub mod syntax;
+mod port;
+mod semantic;
+mod syntax;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use mimir_graph::CodeGraph;
-use mimir_graph::{EdgeData, EdgeKind};
+use mimir_graph::{CodeGraph, EdgeKind};
 use mimir_parse_core::ExtractedReference;
-use mimir_types::{Confidence, FileId, Span, SymbolId, SymbolKind};
+use mimir_types::{FileId, SymbolId, SymbolKind};
 
-pub use live::Analyzers;
-pub use scip::{Refresh, ScipIndex, load_or_generate};
+pub use lookup::type_name;
+pub use port::{
+    LiveDocument, NoSemanticSource, Occurrence, Refresh, ScipIndex, SemanticSource, Target,
+};
+
+use edges::{ConstantUse, EdgeSet};
 
 /// A source file and what was extracted from it.
 #[derive(Debug, Clone)]
@@ -62,7 +64,7 @@ pub fn link(graph: &CodeGraph, files: &[ProjectFile], indexes: &[ScipIndex]) -> 
     let mut edges = EdgeSet::default();
 
     let mut constant_uses = Vec::new();
-    let covered = scip::resolve(&table, files, indexes, &mut edges, &mut constant_uses);
+    let covered = semantic::resolve(&table, files, indexes, &mut edges, &mut constant_uses);
     let semantic_calls = edges.count(EdgeKind::Calls);
     syntax::resolve_shorthand_values(&table, files, &covered, &mut edges);
     syntax::resolve_calls(&table, files, &covered, &mut edges);
@@ -94,14 +96,6 @@ pub fn link(graph: &CodeGraph, files: &[ProjectFile], indexes: &[ScipIndex]) -> 
     }
 }
 
-/// A symbol using a constant or static.
-pub(crate) struct ConstantUse {
-    pub(crate) from: SymbolId,
-    pub(crate) constant: SymbolId,
-    pub(crate) span: Span,
-    pub(crate) confidence: Confidence,
-}
-
 /// Add an edge for each use of a constant that holds a function, directly or through another
 /// constant. Other constants are left out: `MAX_SIZE` under every function would hide the rest.
 fn add_uses_of_function_holders(graph: &CodeGraph, edges: &mut EdgeSet, uses: &[ConstantUse]) {
@@ -111,7 +105,6 @@ fn add_uses_of_function_holders(graph: &CodeGraph, edges: &mut EdgeSet, uses: &[
             .is_some_and(|s| s.kind == SymbolKind::Constant)
     };
     let mut holders: HashSet<SymbolId> = edges
-        .edges
         .iter()
         .filter(|(from, _, data)| data.kind == EdgeKind::UsesAsValue && is_constant(*from))
         .map(|(from, _, _)| *from)
@@ -134,47 +127,4 @@ fn add_uses_of_function_holders(graph: &CodeGraph, edges: &mut EdgeSet, uses: &[
             return;
         }
     }
-}
-
-/// Edges with no repeats: one per (from, to, kind), at the first site found.
-#[derive(Default)]
-pub(crate) struct EdgeSet {
-    seen: HashSet<(SymbolId, SymbolId, EdgeKind)>,
-    edges: Vec<(SymbolId, SymbolId, EdgeData)>,
-}
-
-impl EdgeSet {
-    pub(crate) fn add(
-        &mut self,
-        from: SymbolId,
-        to: SymbolId,
-        kind: EdgeKind,
-        span: Span,
-        confidence: Confidence,
-    ) {
-        if self.seen.insert((from, to, kind)) {
-            self.edges
-                .push((from, to, EdgeData::new(kind, span, confidence)));
-        }
-    }
-
-    fn len(&self) -> usize {
-        self.edges.len()
-    }
-
-    fn count(&self, kind: EdgeKind) -> usize {
-        self.edges
-            .iter()
-            .filter(|(_, _, data)| data.kind == kind)
-            .count()
-    }
-
-    fn into_vec(self) -> Vec<(SymbolId, SymbolId, EdgeData)> {
-        self.edges
-    }
-}
-
-/// File ids by project-relative path.
-pub(crate) fn files_by_path(files: &[ProjectFile]) -> HashMap<&std::path::Path, &ProjectFile> {
-    files.iter().map(|f| (f.path.as_path(), f)).collect()
 }

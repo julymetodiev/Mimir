@@ -1,5 +1,6 @@
 //! A daemon nobody asks anything stops by itself, and frees the project's socket.
 
+use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
 
@@ -9,7 +10,11 @@ async fn test_stops_when_idle() {
     let root = project.path().canonicalize().unwrap();
     let socket = mimir_protocol::socket_path(&root).unwrap();
 
-    let served = mimir_daemon::run(root, Duration::from_millis(200));
+    let served = mimir_daemon::run(
+        root,
+        Duration::from_millis(200),
+        Arc::new(mimir_resolve::NoSemanticSource),
+    );
     tokio::time::timeout(Duration::from_secs(20), served)
         .await
         .expect("the daemon did not stop")

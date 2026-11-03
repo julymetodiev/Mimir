@@ -32,7 +32,7 @@ Each is a number `scripts/bench` can check, on a project of 20 000 symbols.
 | T2 | A query after an edit: first answer under 1 s, marked partial until complete |
 | T3 | From no daemon to a first answer, with the graph saved: under 5 s |
 | T4 | Daemon idle, without the analyzer: under 400 MB |
-| T5 | Call edges: nothing lost against the SCIP index; every entry of the hand-written list in `crates/mimir-resolve/tests/fixture.rs` holds |
+| T5 | Call edges: nothing lost against the SCIP index; every entry of the hand-written list in `crates/mimir-resolve-ra/tests/fixture.rs` holds |
 | T6 | After edits, the graph equals the graph from a new index: 0 differences |
 
 ## 3. Layers

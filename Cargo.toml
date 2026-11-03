@@ -8,6 +8,7 @@ members = [
     "crates/mimir-parse-rust",
     "crates/mimir-graph",
     "crates/mimir-resolve",
+    "crates/mimir-resolve-ra",
     # M3: Actor crates
     "crates/mimir-edit",
     "crates/mimir-protocol",
@@ -38,6 +39,7 @@ mimir-parse-rust = { path = "crates/mimir-parse-rust" }
 # Internal crates - Layer 3
 mimir-graph = { path = "crates/mimir-graph" }
 mimir-resolve = { path = "crates/mimir-resolve" }
+mimir-resolve-ra = { path = "crates/mimir-resolve-ra" }
 mimir-edit = { path = "crates/mimir-edit" }
 mimir-protocol = { path = "crates/mimir-protocol" }
 mimir-engine = { path = "crates/mimir-engine" }
