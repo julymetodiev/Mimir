@@ -249,3 +249,23 @@ fn test_trace_of_a_constant_shows_who_reads_it() {
         .stdout(contains("MAX").not());
     stop(dir);
 }
+
+#[test]
+fn test_files_and_cat_work_from_a_subdirectory() {
+    let project = project();
+    let dir = project.path();
+    mimir(dir)
+        .args(["files", "*.toml"])
+        .assert()
+        .success()
+        .stdout(contains("Cargo.toml"))
+        .stdout(contains("src/lib.rs").not());
+    let inner = dir.join("src");
+    mimir(&inner)
+        .args(["cat", "lib.rs", "--first", "2", "--last", "2"])
+        .assert()
+        .success()
+        .stdout(contains("2│     1"))
+        .stdout(contains("Showing 1 of 7 lines"));
+    stop(dir);
+}

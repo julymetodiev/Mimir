@@ -112,6 +112,8 @@ fn test_tools_work_end_to_end() {
         "edit_symbols",
         "insert_after",
         "grep",
+        "files",
+        "read_file",
         "edit_lines",
         "sync",
         "status",
@@ -161,6 +163,26 @@ fn test_tools_work_end_to_end() {
     assert!(found["total"].as_u64().unwrap() >= 1);
     assert_eq!(found["matches"][0]["at"], "src/lib.rs:6", "{found}");
     assert_eq!(found["matches"][0]["symbol"], "added", "{found}");
+
+    let (files, failed) = server.call("files", json!({"glob": "src/*"}));
+    assert!(!failed, "{files}");
+    let files: Value = serde_json::from_str(&files).unwrap();
+    assert_eq!(files["files"], json!(["src/lib.rs"]));
+    assert_eq!(files["total"], 1);
+
+    let (text, failed) = server.call(
+        "read_file",
+        json!({"file": "src/lib.rs", "first": 2, "last": 2}),
+    );
+    assert!(!failed, "{text}");
+    let text: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(text["text"], "2\t    2");
+
+    let (outside, failed) = server.call("read_file", json!({"file": "/etc/hosts"}));
+    assert!(
+        failed && outside.contains("outside the project"),
+        "{outside}"
+    );
 
     let (missing, failed) = server.call("trace", json!({"symbol": "no_such_symbol"}));
     assert!(failed && missing.contains("no_such_symbol"), "{missing}");

@@ -2,8 +2,8 @@
 //! a language per symbol are for programs, which get them through the CLI's `--json`.
 
 use mimir_protocol::{
-    GrepMatch, GrepResponse, SearchResponse, SymbolInfo, SymbolSource, TraceNode, TraceRelation,
-    TraceResponse,
+    FileText, FilesResponse, GrepMatch, GrepResponse, SearchResponse, SymbolInfo, SymbolSource,
+    TraceNode, TraceRelation, TraceResponse,
 };
 use serde::Serialize;
 
@@ -205,6 +205,48 @@ impl From<GrepResponse> for Grep {
         Self {
             matches: found.matches.into_iter().map(Line::from).collect(),
             total: found.total,
+        }
+    }
+}
+
+/// Files of the project.
+#[derive(Serialize)]
+pub struct Files {
+    files: Vec<std::path::PathBuf>,
+    /// All that match, of which `files` may be the first few.
+    total: usize,
+}
+
+impl From<FilesResponse> for Files {
+    fn from(found: FilesResponse) -> Self {
+        Self {
+            files: found.files,
+            total: found.total,
+        }
+    }
+}
+
+/// Lines of a file, each with its number, as `edit_lines` needs them.
+#[derive(Serialize)]
+pub struct Text {
+    file: std::path::PathBuf,
+    total_lines: u32,
+    text: String,
+}
+
+impl From<FileText> for Text {
+    fn from(file: FileText) -> Self {
+        let text = file
+            .lines
+            .iter()
+            .enumerate()
+            .map(|(offset, line)| format!("{}\t{line}", file.first_line as usize + offset))
+            .collect::<Vec<_>>()
+            .join("\n");
+        Self {
+            file: file.path,
+            total_lines: file.total_lines,
+            text,
         }
     }
 }

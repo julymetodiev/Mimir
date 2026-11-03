@@ -15,7 +15,8 @@ use crate::command::{
     Edit, EditReport, FindOptions, GrepOptions, SearchOptions, SyncResult, TraceOptions,
 };
 use crate::response::{
-    FindResponse, GrepResponse, SearchResponse, StatsResponse, SymbolSource, TraceResponse,
+    FileText, FilesResponse, FindResponse, GrepResponse, SearchResponse, StatsResponse,
+    SymbolSource, TraceResponse,
 };
 
 /// Request ID for correlating responses.
@@ -82,6 +83,19 @@ pub enum IpcCommand {
 
     /// Search the text of the project's files.
     Grep { options: GrepOptions },
+
+    /// The project's files, only those matching a glob if given.
+    Files {
+        glob: Option<String>,
+        limit: Option<u32>,
+    },
+
+    /// Lines of a file of the project.
+    ReadFile {
+        path: PathBuf,
+        first: Option<u32>,
+        last: Option<u32>,
+    },
 
     /// Request daemon shutdown.
     Shutdown,
@@ -153,6 +167,12 @@ pub enum IpcData {
 
     /// Lines of text that matched.
     GrepResult(GrepResponse),
+
+    /// Files of the project.
+    FilesResult(FilesResponse),
+
+    /// Lines of a file.
+    FileText(FileText),
 
     /// Shutdown acknowledged.
     ShutdownAck,

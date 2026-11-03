@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::actor::GraphActor;
 use crate::error::GraphError;
-use crate::{edit, source};
+use crate::{edit, project_files, source};
 use mimir_edit::{EditError, EditOp, Editor};
 use mimir_protocol::{Edit, EditReport, EditTarget, FileEdit};
 use mimir_types::Language;
@@ -79,16 +79,7 @@ impl GraphActor {
     fn edit_op(&self, edit: &Edit) -> Result<EditOp, GraphError> {
         match &edit.target {
             EditTarget::File(path) => {
-                let absolute = self.root.join(path);
-                let inside = absolute
-                    .canonicalize()
-                    .map_err(|_| GraphError::FileNotFound {
-                        path: absolute.clone(),
-                    })?;
-                if !inside.starts_with(&self.root) {
-                    return Err(GraphError::OutsideProject(absolute));
-                }
-                edit::on_file(&inside, &edit.change)
+                edit::on_file(&project_files::inside(&self.root, path)?, &edit.change)
             }
             EditTarget::Symbol { name, file } => {
                 let found = self.named(name, file.as_deref())?;

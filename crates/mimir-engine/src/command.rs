@@ -2,8 +2,9 @@
 
 use crate::error::GraphError;
 use mimir_protocol::{
-    Edit, EditReport, FindOptions, FindResponse, GrepOptions, GrepResponse, SearchOptions,
-    SearchResponse, StatsResponse, SymbolSource, SyncResult, TraceOptions, TraceResponse,
+    Edit, EditReport, FileText, FilesResponse, FindOptions, FindResponse, GrepOptions,
+    GrepResponse, SearchOptions, SearchResponse, StatsResponse, SymbolSource, SyncResult,
+    TraceOptions, TraceResponse,
 };
 use mimir_types::{FileId, Language, SymbolId};
 use std::path::PathBuf;
@@ -97,6 +98,21 @@ pub enum GraphCommand {
     Grep {
         options: GrepOptions,
         reply: oneshot::Sender<Result<GrepResponse, GraphError>>,
+    },
+
+    /// The project's files, only those matching a glob if given.
+    Files {
+        glob: Option<String>,
+        limit: Option<u32>,
+        reply: oneshot::Sender<Result<FilesResponse, GraphError>>,
+    },
+
+    /// Lines of a file of the project.
+    ReadFile {
+        path: PathBuf,
+        first: Option<u32>,
+        last: Option<u32>,
+        reply: oneshot::Sender<Result<FileText, GraphError>>,
     },
 
     /// Shutdown the actor.

@@ -1,6 +1,6 @@
 ---
 name: mimir-code
-description: Use Mimir instead of grep and for code navigation (MCP tools named grep, trace, search, read, edit_symbols, insert_after, edit_lines, sync, status) - for searching text in any file of the project, before changing, renaming or removing a Rust function, when asking who calls something or what it calls, when tracing a bug through calls, when finding a symbol by name, or when replacing a function, struct or impl or adding code next to one.
+description: Use Mimir instead of Grep, Glob and Read in a project (MCP tools named grep, files, read_file, trace, search, read, edit_symbols, insert_after, edit_lines, sync, status) - for searching text in any file, finding files by name, reading a file, before changing, renaming or removing a Rust function, when asking who calls something or what it calls, when tracing a bug through calls, when finding a symbol by name, or when replacing a function, struct or impl or adding code next to one.
 ---
 
 # Mimir
@@ -13,6 +13,8 @@ of `x`'s type. Plain text search cannot tell same-named methods apart, so use `t
 | You want | Tool |
 |---|---|
 | Text anywhere in the project, in any language; each match says which symbol it is in | `grep` |
+| Files by name or glob, skipping what git ignores | `files` |
+| A whole file or a range of its lines, numbered for `edit_lines` | `read_file` |
 | Who calls this, what it calls, before changing it | `trace` |
 | A symbol whose name you partly know (`total` counts all matches, not only those returned) | `search` |
 | A symbol's source, without knowing its file | `read` |
@@ -20,7 +22,7 @@ of `x`'s type. Plain text search cannot tell same-named methods apart, so use `t
 | Add a function, method, variant or field after an existing symbol | `insert_after` |
 | Replace lines in a file | `edit_lines` |
 
-Finding files by name, and reading a whole file: use your usual tools.
+Outside the project, use your usual tools: Mimir reads only the project's files.
 
 ## Reading a trace
 

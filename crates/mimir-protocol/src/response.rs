@@ -95,6 +95,28 @@ pub struct GrepResponse {
     pub total: usize,
 }
 
+/// Files of a project.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FilesResponse {
+    /// The first of them by path, relative to the project.
+    pub files: Vec<PathBuf>,
+    /// All that match, of which `files` may be the first few.
+    pub total: usize,
+}
+
+/// Lines of a file.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileText {
+    /// The file, relative to the project.
+    pub path: PathBuf,
+    /// The number of the first of `lines`, from 1.
+    pub first_line: u32,
+    /// How many lines the file has, of which `lines` may be a part.
+    pub total_lines: u32,
+    /// The lines.
+    pub lines: Vec<String>,
+}
+
 /// A node in a trace result.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraceNode {

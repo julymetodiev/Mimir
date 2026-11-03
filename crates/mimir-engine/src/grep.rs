@@ -1,14 +1,13 @@
 //! Searching the text of a project's files. It reads them as they are on disk, including those in
 //! languages Mimir does not parse, and skips what git ignores.
 
-use ignore::WalkBuilder;
-use ignore::overrides::OverrideBuilder;
 use mimir_protocol::{GrepMatch, GrepOptions};
 use regex::RegexBuilder;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::error::GraphError;
+use crate::project_files;
 
 /// A file over this is data, not code.
 const MAX_FILE_BYTES: u64 = 2 * 1024 * 1024;
@@ -30,24 +29,8 @@ pub fn search(root: &Path, options: &GrepOptions) -> Result<Vec<GrepMatch>, Grap
             source,
         })?;
 
-    let mut walker = WalkBuilder::new(root);
-    walker
-        .hidden(false)
-        .require_git(false)
-        .sort_by_file_path(Path::cmp)
-        .filter_entry(|entry| !matches!(entry.file_name().to_str(), Some(".git" | ".mimir")));
-    if let Some(glob) = &options.path {
-        let invalid = |source| GraphError::InvalidGlob {
-            glob: glob.clone(),
-            source,
-        };
-        let mut only = OverrideBuilder::new(root);
-        only.add(glob).map_err(invalid)?;
-        walker.overrides(only.build().map_err(invalid)?);
-    }
-
     let mut found = Vec::new();
-    for entry in walker.build().flatten() {
+    for entry in project_files::walk(root, options.path.as_deref())?.flatten() {
         let path = entry.path();
         let small = entry
             .metadata()

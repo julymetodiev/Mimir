@@ -2,8 +2,9 @@
 
 use crate::error::GraphError;
 use mimir_protocol::{
-    Edit, EditReport, FindOptions, FindResponse, GrepOptions, GrepResponse, SearchOptions,
-    SearchResponse, StatsResponse, SymbolSource, SyncResult, TraceOptions, TraceResponse,
+    Edit, EditReport, FileText, FilesResponse, FindOptions, FindResponse, GrepOptions,
+    GrepResponse, SearchOptions, SearchResponse, StatsResponse, SymbolSource, SyncResult,
+    TraceOptions, TraceResponse,
 };
 use mimir_types::{FileId, Language, SymbolId};
 use std::path::PathBuf;
@@ -257,6 +258,40 @@ impl GraphHandle {
         let (reply, answer) = oneshot::channel();
         self.commands
             .send(GraphCommand::Grep { options, reply })
+            .await
+            .map_err(|_| GraphError::EngineStopped)?;
+        answer.await.map_err(|_| GraphError::EngineStopped)?
+    }
+
+    /// The project's files, only those matching a glob if given.
+    pub async fn files(
+        &self,
+        glob: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<FilesResponse, GraphError> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(GraphCommand::Files { glob, limit, reply })
+            .await
+            .map_err(|_| GraphError::EngineStopped)?;
+        answer.await.map_err(|_| GraphError::EngineStopped)?
+    }
+
+    /// Lines of a file of the project.
+    pub async fn read_file(
+        &self,
+        path: PathBuf,
+        first: Option<u32>,
+        last: Option<u32>,
+    ) -> Result<FileText, GraphError> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(GraphCommand::ReadFile {
+                path,
+                first,
+                last,
+                reply,
+            })
             .await
             .map_err(|_| GraphError::EngineStopped)?;
         answer.await.map_err(|_| GraphError::EngineStopped)?

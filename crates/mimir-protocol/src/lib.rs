@@ -11,8 +11,8 @@ pub use command::{
 };
 
 pub use response::{
-    FindResponse, GrepMatch, GrepResponse, SearchResponse, StatsResponse, SymbolInfo, SymbolSource,
-    TraceNode, TraceRelation, TraceResponse,
+    FileText, FilesResponse, FindResponse, GrepMatch, GrepResponse, SearchResponse, StatsResponse,
+    SymbolInfo, SymbolSource, TraceNode, TraceRelation, TraceResponse,
 };
 
 pub use ipc::{

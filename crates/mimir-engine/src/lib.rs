@@ -9,6 +9,7 @@ mod edit;
 mod error;
 mod grep;
 mod handle;
+mod project_files;
 mod save;
 mod scanner;
 mod source;

@@ -47,6 +47,12 @@ pub enum GraphError {
         source: ignore::Error,
     },
 
+    #[error("{path} is too large to read: {size} bytes")]
+    FileTooLarge { path: PathBuf, size: u64 },
+
+    #[error("{path} is not text")]
+    NotText { path: PathBuf },
+
     #[error("Text search failed: {0}")]
     Grep(#[source] tokio::task::JoinError),
 

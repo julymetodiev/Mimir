@@ -134,6 +134,15 @@ async fn main() -> anyhow::Result<()> {
             };
             commands::grep::execute(options, json).await?
         }
+        commands::Commands::Files { glob, limit, json } => {
+            commands::files::list(glob, limit, json).await?
+        }
+        commands::Commands::Cat {
+            file,
+            first,
+            last,
+            json,
+        } => commands::files::cat(&file, first, last, json).await?,
         commands::Commands::Read {
             symbol,
             file,

@@ -229,6 +229,13 @@ async fn answer(request: IpcRequest, handle: &GraphHandle, identity: &str) -> Ip
         IpcCommand::Sync { full } => handle.sync_complete(full).await.map(IpcData::SyncResult),
         IpcCommand::Search { options } => handle.search(options).await.map(IpcData::SearchResult),
         IpcCommand::Grep { options } => handle.grep(options).await.map(IpcData::GrepResult),
+        IpcCommand::Files { glob, limit } => {
+            handle.files(glob, limit).await.map(IpcData::FilesResult)
+        }
+        IpcCommand::ReadFile { path, first, last } => handle
+            .read_file(path, first, last)
+            .await
+            .map(IpcData::FileText),
         IpcCommand::Shutdown => Ok(IpcData::ShutdownAck),
     };
     IpcResponse::new(

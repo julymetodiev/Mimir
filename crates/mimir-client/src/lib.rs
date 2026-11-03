@@ -2,9 +2,9 @@
 //! starts the daemon when it is not running; a daemon that went away is started again.
 
 use mimir_protocol::{
-    Edit, EditReport, FindOptions, FindResponse, GrepOptions, GrepResponse, IpcCommand, IpcData,
-    IpcRequest, IpcResponse, IpcResult, SearchOptions, SearchResponse, StatsResponse, SymbolSource,
-    SyncResult, TraceOptions, TraceResponse,
+    Edit, EditReport, FileText, FilesResponse, FindOptions, FindResponse, GrepOptions,
+    GrepResponse, IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult, SearchOptions,
+    SearchResponse, StatsResponse, SymbolSource, SyncResult, TraceOptions, TraceResponse,
 };
 use mimir_types::SymbolId;
 use std::fs::{self, File};
@@ -239,6 +239,34 @@ impl Client {
     pub async fn grep(&mut self, options: GrepOptions) -> Result<GrepResponse, ClientError> {
         match self.call(IpcCommand::Grep { options }).await? {
             IpcData::GrepResult(found) => Ok(found),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// The project's files, only those matching a glob if given.
+    pub async fn files(
+        &mut self,
+        glob: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<FilesResponse, ClientError> {
+        match self.call(IpcCommand::Files { glob, limit }).await? {
+            IpcData::FilesResult(found) => Ok(found),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Lines of a file of the project.
+    pub async fn read_file(
+        &mut self,
+        path: PathBuf,
+        first: Option<u32>,
+        last: Option<u32>,
+    ) -> Result<FileText, ClientError> {
+        match self
+            .call(IpcCommand::ReadFile { path, first, last })
+            .await?
+        {
+            IpcData::FileText(text) => Ok(text),
             _ => Err(ClientError::UnexpectedResponse),
         }
     }

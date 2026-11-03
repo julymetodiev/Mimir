@@ -31,8 +31,8 @@ trace before changing a function, to see who calls it and what it calls: it find
 misses and does not confuse same-named methods. An entry marked possible (via trait, \
 implementation, as value) may run at runtime or not. A result with provisional true is still \
 being resolved: ask again shortly. Use grep instead of searching text with other tools: each match says which symbol it is in. \
-Use read and search to find code by symbol, edit_symbols to replace whole symbols and \
-insert_after to add code.";
+Use files to find files and read_file to read them. Use read and search to find code by symbol, \
+edit_symbols to replace whole symbols and insert_after to add code.";
 
 /// Serve MCP on stdin and stdout until the client disconnects.
 pub async fn serve(from: PathBuf) -> Result<(), McpError> {
@@ -98,6 +98,24 @@ struct GrepArguments {
     context: u32,
     /// The most matches to return. The default is 50.
     limit: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct FilesArguments {
+    /// Only files matching this glob, such as `*.md` or `crates/**/*.rs`.
+    glob: Option<String>,
+    /// The most files to return. The default is 500.
+    limit: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ReadFileArguments {
+    /// The file, by absolute path or relative to the project.
+    file: PathBuf,
+    /// The first line to return, from 1.
+    first: Option<u32>,
+    /// The last line to return. Without it, up to 2000 lines.
+    last: Option<u32>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -253,6 +271,36 @@ impl MimirServer {
         };
         self.with_client(async |client| Ok(view::Grep::from(client.grep(options).await?)))
             .await
+    }
+
+    #[tool(
+        description = "Find files of the project by a glob, skipping what git ignores. Use this instead of other file searches."
+    )]
+    async fn files(
+        &self,
+        Parameters(arguments): Parameters<FilesArguments>,
+    ) -> Result<String, String> {
+        self.with_client(async |client| {
+            let found = client.files(arguments.glob, arguments.limit).await?;
+            Ok(view::Files::from(found))
+        })
+        .await
+    }
+
+    #[tool(
+        description = "Read a file of the project, or a range of its lines, with line numbers for edit_lines. For one symbol, read is shorter."
+    )]
+    async fn read_file(
+        &self,
+        Parameters(arguments): Parameters<ReadFileArguments>,
+    ) -> Result<String, String> {
+        self.with_client(async |client| {
+            let text = client
+                .read_file(arguments.file, arguments.first, arguments.last)
+                .await?;
+            Ok(view::Text::from(text))
+        })
+        .await
     }
 
     #[tool(description = "The source of a symbol by name, with its file and lines.")]

@@ -2,6 +2,7 @@
 
 pub mod daemon;
 pub mod edit;
+pub mod files;
 pub mod grep;
 pub mod init;
 pub mod read;
@@ -189,6 +190,38 @@ pub enum Commands {
         /// The most matches to return.
         #[arg(short, long)]
         limit: Option<u32>,
+
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// List the project's files, skipping what git ignores.
+    Files {
+        /// Only files matching this glob, such as `*.md` or `crates/**/*.rs`.
+        glob: Option<String>,
+
+        /// The most files to return.
+        #[arg(short, long)]
+        limit: Option<u32>,
+
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show a file of the project, with line numbers.
+    Cat {
+        /// The file.
+        file: PathBuf,
+
+        /// The first line to show, from 1.
+        #[arg(long)]
+        first: Option<u32>,
+
+        /// The last line to show.
+        #[arg(long)]
+        last: Option<u32>,
 
         /// Output as JSON.
         #[arg(long)]

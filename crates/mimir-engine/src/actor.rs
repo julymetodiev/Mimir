@@ -14,6 +14,7 @@ mod tests;
 use crate::channel::CommandReceiver;
 use crate::command::GraphCommand;
 use crate::error::GraphError;
+use crate::project_files;
 use mimir_graph::CodeGraph;
 use mimir_parse_core::AdapterRegistry;
 use mimir_protocol::SymbolInfo;
@@ -27,6 +28,9 @@ use tokio::sync::oneshot;
 use tracing::{debug, info};
 
 use crate::actor::link::PendingLink;
+
+/// How many files a listing returns unless asked otherwise.
+const DEFAULT_FILES_LIMIT: u32 = 500;
 
 /// How long a running analyzer, which holds gigabytes, is kept for the next edit.
 const ANALYZER_IDLE: Duration = Duration::from_secs(600);
@@ -219,6 +223,23 @@ impl GraphActor {
                 GraphCommand::Grep { options, reply } => {
                     let response = self.handle_grep(options).await;
                     answer(reply, response);
+                }
+
+                GraphCommand::Files { glob, limit, reply } => {
+                    let limit = limit.unwrap_or(DEFAULT_FILES_LIMIT) as usize;
+                    answer(
+                        reply,
+                        project_files::list(&self.root, glob.as_deref(), limit),
+                    );
+                }
+
+                GraphCommand::ReadFile {
+                    path,
+                    first,
+                    last,
+                    reply,
+                } => {
+                    answer(reply, project_files::read(&self.root, &path, first, last));
                 }
 
                 GraphCommand::Shutdown => {
