@@ -22,7 +22,7 @@ Rust only for now, on macOS and Linux.
 <p align="center">
   <a href="https://mimir.369.is/"><img src="docs/images/graph.jpg" alt="Mimir's own code as a graph: symbols grouped by crate and file, joined by calls and uses"></a>
   <br>
-  <em>Mimir's own code. <a href="https://mimir.369.is/">Open it in your browser</a>: zoom, search, choose a symbol.</em>
+  <em>Mimir's own code: <a href="https://mimir.369.is/">Live</a></em>
 </p>
 
 <p align="center">
