@@ -43,6 +43,7 @@
 //! # }
 //! ```
 
+mod atomic;
 mod editor;
 mod error;
 mod op;

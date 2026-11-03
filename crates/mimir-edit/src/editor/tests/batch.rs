@@ -139,3 +139,34 @@ async fn test_batch_with_inserts_and_deletes() {
     // Delete 0-2 (AA): BBXXCC
     assert_eq!(content, "BBXXCC");
 }
+
+#[tokio::test]
+async fn test_a_file_that_does_not_apply_stops_the_whole_batch() {
+    let dir = tempdir().unwrap();
+    // Files are handled in no set order, so the one that fails may come first or last.
+    let good: Vec<_> = several_files(dir.path()).await;
+    let stale = create_test_file(dir.path(), "stale.txt", "old").await;
+    let mut ops: Vec<_> = good
+        .iter()
+        .map(|path| EditOp::replace(path, Span::new(0, 3), "new"))
+        .collect();
+    ops.push(
+        EditOp::replace(&stale, Span::new(0, 3), "new")
+            .with_expected_hash(ContentHash::compute(b"something else")),
+    );
+
+    let result = Editor::new().apply_batch(&ops).await;
+
+    assert!(matches!(result, Err(EditError::HashMismatch { .. })));
+    for path in &good {
+        assert_eq!(fs::read_to_string(path).await.unwrap(), "old");
+    }
+}
+
+async fn several_files(dir: &Path) -> Vec<std::path::PathBuf> {
+    let mut paths = Vec::new();
+    for index in 0..8 {
+        paths.push(create_test_file(dir, &format!("good{index}.txt"), "old").await);
+    }
+    paths
+}

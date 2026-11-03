@@ -1,11 +1,11 @@
 //! Editor for applying file operations.
 
+use crate::atomic;
 use crate::op::{Diff, EditOp, EditResult as OpResult};
 use crate::{EditError, EditResult};
 use mimir_types::ContentHash;
 use std::path::{Path, PathBuf};
 use tokio::fs;
-use tokio::io::AsyncWriteExt;
 
 /// Editor for applying file operations with conflict detection.
 #[derive(Debug, Default)]
@@ -78,6 +78,8 @@ impl Editor {
         }
 
         let mut results = Vec::new();
+        let mut new_files = Vec::new();
+        let mut old_files = Vec::new();
 
         for (path, file_ops) in by_file {
             // Check for overlapping spans
@@ -100,11 +102,6 @@ impl Editor {
                 }
             }
 
-            // Create backup if enabled
-            if self.create_backups {
-                self.create_backup(&path, &content).await?;
-            }
-
             // Sort operations by start position (descending) to apply from end to start
             let mut sorted_ops: Vec<_> = file_ops.into_iter().collect();
             sorted_ops.sort_by(|a, b| {
@@ -125,18 +122,27 @@ impl Editor {
             let old_bytes = content.len() as i64;
             let new_bytes = current_content.len() as i64;
 
-            // Write once
-            fs::write(&path, &current_content).await?;
-
             results.push(OpResult {
-                file_path: path,
+                file_path: path.clone(),
                 old_hash,
                 new_hash,
                 bytes_changed: new_bytes - old_bytes,
                 lines_changed: new_lines - old_lines,
                 lines_modified: old_lines.max(new_lines) as usize,
             });
+            old_files.push((path.clone(), content));
+            new_files.push((path, current_content));
         }
+
+        // Nothing is written until every file of the batch is known to apply.
+        if self.create_backups {
+            for (path, content) in &old_files {
+                self.create_backup(path, content).await?;
+            }
+        }
+        tokio::task::spawn_blocking(move || atomic::replace_all(&new_files))
+            .await
+            .map_err(std::io::Error::other)??;
 
         Ok(results)
     }
@@ -154,18 +160,31 @@ impl Editor {
         }
         let old = if overwrite {
             match fs::read_to_string(path).await {
-                Ok(old) => old,
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+                Ok(old) => Some(old),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
                 Err(e) => return Err(e.into()),
             }
         } else {
-            String::new()
+            None
         };
-        if overwrite {
-            fs::write(path, content).await?;
-        } else {
-            self.create_file(path, content).await?;
-        }
+        let replaces = old.is_some();
+        let old = old.unwrap_or_default();
+        let (target, text) = (path.to_path_buf(), content.to_string());
+        tokio::task::spawn_blocking(move || {
+            if replaces {
+                atomic::replace_all(&[(target, text)])
+            } else {
+                atomic::create(&target, &text)
+            }
+        })
+        .await
+        .map_err(std::io::Error::other)?
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::AlreadyExists => EditError::FileExists {
+                path: path.to_path_buf(),
+            },
+            _ => EditError::Io(e),
+        })?;
         Ok(OpResult {
             file_path: path.to_path_buf(),
             old_hash: ContentHash::compute(old.as_bytes()),
@@ -174,31 +193,6 @@ impl Editor {
             lines_changed: content.lines().count() as i64 - old.lines().count() as i64,
             lines_modified: old.lines().count().max(content.lines().count()),
         })
-    }
-
-    /// Write a file that must not exist yet. Asking for that in one step, not by looking first,
-    /// means nothing that appears in between is lost.
-    async fn create_file(&self, path: &Path, content: &str) -> EditResult<()> {
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(path)
-            .await
-            .map_err(|e| match e.kind() {
-                std::io::ErrorKind::AlreadyExists => EditError::FileExists {
-                    path: path.to_path_buf(),
-                },
-                _ => EditError::Io(e),
-            })?;
-        let written = async {
-            file.write_all(content.as_bytes()).await?;
-            file.flush().await
-        };
-        if let Err(e) = written.await {
-            fs::remove_file(path).await?;
-            return Err(e.into());
-        }
-        Ok(())
     }
 
     /// Read file content, returning an error if not found.
