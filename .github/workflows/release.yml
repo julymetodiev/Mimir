@@ -83,8 +83,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+      # Only the archives: the page's artifact was for the builds.
       - uses: actions/download-artifact@v8
         with:
+          pattern: mimir-*
           path: artifacts
           merge-multiple: true
       - name: Checksums

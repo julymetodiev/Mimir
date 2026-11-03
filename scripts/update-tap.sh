@@ -28,7 +28,6 @@ formula() {
 class Mimir < Formula
   desc "Call graph of your project for coding agents, with a live view in the browser"
   homepage "$repository"
-  version "$version"
   license "MIT"
 
   on_macos do
