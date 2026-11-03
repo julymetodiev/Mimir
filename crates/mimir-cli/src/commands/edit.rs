@@ -19,6 +19,8 @@ pub enum EditMode {
     Lines,
     /// Replace entire symbol (requires --symbol).
     Symbol,
+    /// Add new code after a symbol (requires --symbol).
+    After,
 }
 
 impl std::str::FromStr for EditMode {
@@ -31,8 +33,9 @@ impl std::str::FromStr for EditMode {
             "delete" => Ok(Self::Delete),
             "lines" => Ok(Self::Lines),
             "symbol" => Ok(Self::Symbol),
+            "after" => Ok(Self::After),
             _ => Err(format!(
-                "Unknown edit mode: {s}. Use: replace, insert, delete, lines, symbol"
+                "Unknown edit mode: {s}. Use: replace, insert, delete, lines, symbol, after"
             )),
         }
     }
@@ -71,6 +74,9 @@ pub async fn execute(request: EditRequest<'_>) -> Result<()> {
     };
     let change = match request.mode {
         EditMode::Symbol => EditChange::WholeSymbol {
+            content: content()?,
+        },
+        EditMode::After => EditChange::AfterSymbol {
             content: content()?,
         },
         EditMode::Lines => EditChange::Lines {

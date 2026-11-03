@@ -96,7 +96,7 @@ struct ReadArguments {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct SymbolEdit {
-    /// The symbol's name.
+    /// The symbol's name. A qualified name such as `Kind::Variant` also works.
     symbol: String,
     /// The file it is in. Needed when several symbols share the name: the edit fails otherwise.
     file: Option<PathBuf>,
@@ -108,6 +108,19 @@ struct SymbolEdit {
 struct EditSymbolsArguments {
     /// The symbols to replace, applied together.
     edits: Vec<SymbolEdit>,
+    /// Only show what would change.
+    #[serde(default)]
+    preview: bool,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct InsertAfterArguments {
+    /// The symbol the new code goes after. A qualified name such as `Kind::Variant` also works.
+    symbol: String,
+    /// The file it is in. Needed when several symbols share the name: the edit fails otherwise.
+    file: Option<PathBuf>,
+    /// The new code, indented as it should be.
+    content: String,
     /// Only show what would change.
     #[serde(default)]
     preview: bool,
@@ -243,6 +256,26 @@ impl MimirServer {
             })
             .collect();
         self.with_client(async |client| client.edit(edits, arguments.preview, false).await)
+            .await
+    }
+
+    #[tool(
+        description = "Add new code right after a symbol: a new function after another, a method in an impl, a variant in an enum, a field in a struct."
+    )]
+    async fn insert_after(
+        &self,
+        Parameters(arguments): Parameters<InsertAfterArguments>,
+    ) -> Result<String, String> {
+        let edit = Edit {
+            target: EditTarget::Symbol {
+                name: arguments.symbol,
+                file: arguments.file,
+            },
+            change: EditChange::AfterSymbol {
+                content: arguments.content,
+            },
+        };
+        self.with_client(async |client| client.edit(vec![edit], arguments.preview, false).await)
             .await
     }
 

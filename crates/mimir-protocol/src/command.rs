@@ -56,6 +56,8 @@ pub enum EditTarget {
 pub enum EditChange {
     /// Replace a whole symbol.
     WholeSymbol { content: String },
+    /// Add new code right after a symbol.
+    AfterSymbol { content: String },
     /// Replace lines, 1-indexed and inclusive; on a symbol they count from its first line.
     Lines {
         start: u32,

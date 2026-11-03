@@ -24,7 +24,7 @@ mimir sync                               # up to date, wait until nothing is pro
 
 In Claude Code, with the plugin in [integrations/claude-code](integrations/claude-code/README.md),
 the same operations are tools the model can use: `trace`, `search`, `read`, `edit_symbols`,
-`edit_lines`, `sync`, `status`. For any other MCP client, run `mimir mcp`.
+`insert_after`, `edit_lines`, `sync`, `status`. For any other MCP client, run `mimir mcp`.
 
 ## What an answer means
 

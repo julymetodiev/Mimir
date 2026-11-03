@@ -411,3 +411,84 @@ fn test_an_edit_of_a_shared_name_asks_which_and_a_file_answers() {
         .stdout(contains("src/lib.rs"));
     stop(dir);
 }
+
+#[test]
+fn test_new_code_goes_after_a_symbol_at_every_level() {
+    let project = project();
+    let dir = project.path();
+    fs::write(
+        dir.join("src/lib.rs"),
+        "pub enum Kind {\n    One,\n    Two,\n}\n\npub struct S {\n    pub a: u32,\n}\n\nimpl S {\n    pub fn m(&self) {} // note\n}\n\npub fn f() {}\n",
+    )
+    .unwrap();
+    let after = |symbol: &str, content: &str| {
+        mimir(dir)
+            .args([
+                "edit",
+                "--mode",
+                "after",
+                "--symbol",
+                symbol,
+                "--content",
+                content,
+            ])
+            .assert()
+    };
+
+    after("Kind::One", "    Between,").success();
+    after("a", "    pub b: u32,").success();
+    after("m", "    pub fn n(&self) {}\n").success();
+    after("f", "pub fn g() {}").success();
+
+    assert_eq!(
+        fs::read_to_string(dir.join("src/lib.rs")).unwrap(),
+        "pub enum Kind {\n    One,\n    Between,\n    Two,\n}\n\npub struct S {\n    pub a: u32,\n    pub b: u32,\n}\n\nimpl S {\n    pub fn m(&self) {} // note\n\n    pub fn n(&self) {}\n}\n\npub fn f() {}\n\npub fn g() {}\n"
+    );
+    mimir(dir)
+        .args(["read", "-s", "g"])
+        .assert()
+        .success()
+        .stdout(contains("pub fn g() {}"));
+    stop(dir);
+}
+
+#[test]
+fn test_a_qualified_name_chooses_among_variants_in_one_file() {
+    let project = project();
+    let dir = project.path();
+    fs::write(
+        dir.join("src/lib.rs"),
+        "pub enum A {\n    Read,\n}\n\npub enum B {\n    Read,\n}\n",
+    )
+    .unwrap();
+    mimir(dir)
+        .args([
+            "edit",
+            "--mode",
+            "symbol",
+            "--symbol",
+            "Read",
+            "--content",
+            "    X,",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("could mean"));
+    mimir(dir)
+        .args([
+            "edit",
+            "--mode",
+            "symbol",
+            "--symbol",
+            "B::Read",
+            "--content",
+            "    X,",
+        ])
+        .assert()
+        .success();
+    assert_eq!(
+        fs::read_to_string(dir.join("src/lib.rs")).unwrap(),
+        "pub enum A {\n    Read,\n}\n\npub enum B {\n    X,\n}\n"
+    );
+    stop(dir);
+}

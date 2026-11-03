@@ -1,6 +1,6 @@
 ---
 name: mimir-code
-description: Use Mimir's call graph (MCP tools named trace, search, read, edit_symbols, edit_lines, sync, status) when working in Rust code - before changing, renaming or removing a function, when asking who calls something or what it calls, when tracing a bug through calls, when finding a symbol by name, or when replacing a whole function, struct or impl. Prefer it over grep for these. Not for searching text, comments or non-code files, which it does not index.
+description: Use Mimir's call graph (MCP tools named trace, search, read, edit_symbols, insert_after, edit_lines, sync, status) when working in Rust code - before changing, renaming or removing a function, when asking who calls something or what it calls, when tracing a bug through calls, when finding a symbol by name, or when replacing a whole function, struct or impl. Prefer it over grep for these. Not for searching text, comments or non-code files, which it does not index.
 ---
 
 # Mimir
@@ -16,6 +16,7 @@ of `x`'s type. Grep cannot tell same-named methods apart and misses calls inside
 | A symbol whose name you partly know (`total` counts all matches, not only those returned) | `search` |
 | A symbol's source, without knowing its file | `read` |
 | Replace whole functions, structs or impls | `edit_symbols` |
+| Add a function, method, variant or field after an existing symbol | `insert_after` |
 | Replace lines in a file | `edit_lines` |
 
 Text, comments and non-Rust files: use your usual tools.
@@ -37,7 +38,8 @@ Text, comments and non-Rust files: use your usual tools.
 ## Editing
 
 `edit_symbols` replaces a symbol's lines. Doc comments and attributes above it are not part of it.
-When several symbols share a name, such as `new`, it fails and lists them: pass `file`.
+When several symbols share a name, such as `new`, it fails and lists them: pass `file`, or a
+qualified name such as `Kind::Variant`. `insert_after` adds code below a symbol the same way.
 Use `preview: true` when unsure. A file changed since it was read is re-read first, so the right
 lines are replaced, and if the edit still does not apply it fails rather than guess.
 

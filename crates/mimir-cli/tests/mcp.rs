@@ -110,6 +110,7 @@ fn test_tools_work_end_to_end() {
         "search",
         "read",
         "edit_symbols",
+        "insert_after",
         "edit_lines",
         "sync",
         "status",
@@ -141,6 +142,14 @@ fn test_tools_work_end_to_end() {
             .unwrap()
             .contains("    2\n")
     );
+
+    let (added, failed) = server.call(
+        "insert_after",
+        json!({"symbol": "helper", "content": "pub fn added() -> u32 {\n    helper()\n}\n"}),
+    );
+    assert!(!failed, "{added}");
+    let (trace, failed) = server.call("trace", json!({"symbol": "added"}));
+    assert!(!failed && trace.contains("helper"), "{trace}");
 
     let (missing, failed) = server.call("trace", json!({"symbol": "no_such_symbol"}));
     assert!(failed && missing.contains("no_such_symbol"), "{missing}");

@@ -105,7 +105,11 @@ impl GraphActor {
                     .get(&path)
                     .map(|tracked| tracked.content_hash)
                     .ok_or_else(|| GraphError::FileNotFound { path: path.clone() })?;
-                edit::on_symbol(&path, symbol, hash, &edit.change)
+                let text = self
+                    .sources
+                    .get(&symbol.file_id)
+                    .map_or("", |file| &*file.source);
+                edit::on_symbol(&path, symbol, hash, text, &edit.change)
             }
         }
     }

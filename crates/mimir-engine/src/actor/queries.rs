@@ -146,7 +146,15 @@ impl GraphActor {
 
     /// The symbols with this name, only those in `file` if given.
     pub fn named(&self, name: &str, file: Option<&Path>) -> Result<Vec<Arc<Symbol>>, GraphError> {
-        let mut found = self.graph.find_symbol(name);
+        // A qualified name, as in `GraphCommand::Read`, says which symbol by itself.
+        let qualified = name
+            .contains("::")
+            .then(|| self.graph.find_by_qualified_name(name))
+            .flatten();
+        let mut found = match qualified {
+            Some(symbol) => vec![symbol],
+            None => self.graph.find_symbol(name),
+        };
         if let Some(file) = file {
             let absolute = self.root.join(file);
             let relative = absolute.strip_prefix(&self.root).unwrap_or(&absolute);

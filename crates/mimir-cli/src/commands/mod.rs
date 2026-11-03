@@ -94,8 +94,8 @@ pub enum Commands {
         #[arg(long)]
         symbol: Option<String>,
 
-        /// Edit mode: replace, insert, delete, lines, symbol.
-        /// Use 'symbol' mode to replace entire symbol with new content.
+        /// Edit mode: replace, insert, delete, lines, symbol, after.
+        /// 'symbol' replaces a whole symbol; 'after' adds new code right after one.
         #[arg(short, long, default_value = "replace")]
         mode: String,
 

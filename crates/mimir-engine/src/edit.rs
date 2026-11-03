@@ -2,7 +2,7 @@
 
 use mimir_edit::EditOp;
 use mimir_protocol::EditChange;
-use mimir_types::{ContentHash, Span, Symbol};
+use mimir_types::{ContentHash, Span, Symbol, SymbolKind};
 use std::path::Path;
 
 use crate::error::GraphError;
@@ -13,6 +13,7 @@ pub fn on_symbol(
     path: &Path,
     symbol: &Symbol,
     hash: ContentHash,
+    text: &str,
     change: &EditChange,
 ) -> Result<EditOp, GraphError> {
     let op = match change {
@@ -21,6 +22,11 @@ pub fn on_symbol(
             symbol.range.start_line,
             symbol.range.end_line,
             content,
+        ),
+        EditChange::AfterSymbol { content } => EditOp::insert(
+            path,
+            end_of_line(text, symbol.span.end),
+            after(symbol, content),
         ),
         EditChange::Lines {
             start,
@@ -35,10 +41,27 @@ pub fn on_symbol(
     Ok(op.with_expected_hash(hash))
 }
 
+/// Where the line holding a byte position ends, before its newline.
+fn end_of_line(text: &str, at: u32) -> u32 {
+    let rest = text.get(at as usize..).unwrap_or("");
+    at + rest.find('\n').unwrap_or(rest.len()) as u32
+}
+
+/// New code as it goes after a symbol: a line apart from an item, right below a field or a variant.
+fn after(symbol: &Symbol, content: &str) -> String {
+    let gap = match symbol.kind {
+        SymbolKind::Field | SymbolKind::EnumVariant => "\n",
+        _ => "\n\n",
+    };
+    format!("{gap}{}", content.trim_end_matches('\n'))
+}
+
 /// The operation for a change to a file.
 pub fn on_file(path: &Path, change: &EditChange) -> Result<EditOp, GraphError> {
     Ok(match change {
-        EditChange::WholeSymbol { .. } => return Err(GraphError::NotASymbol),
+        EditChange::WholeSymbol { .. } | EditChange::AfterSymbol { .. } => {
+            return Err(GraphError::NotASymbol);
+        }
         EditChange::Lines {
             start,
             end,
@@ -52,4 +75,17 @@ pub fn on_file(path: &Path, change: &EditChange) -> Result<EditOp, GraphError> {
         EditChange::Insert { at, content } => EditOp::insert(path, *at, content),
         EditChange::Delete { start, end } => EditOp::delete(path, Span::new(*start, *end)),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_end_of_line_passes_what_follows_on_the_line() {
+        let text = "fn a() {} // note\nfn b() {}";
+        assert_eq!(end_of_line(text, 9), 17);
+        assert_eq!(end_of_line(text, 26), 27);
+        assert_eq!(end_of_line(text, 99), 99);
+    }
 }

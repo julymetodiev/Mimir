@@ -52,7 +52,7 @@ pub enum GraphError {
     #[error("{0} is outside the project")]
     OutsideProject(PathBuf),
 
-    #[error("Replacing a whole symbol needs a symbol to edit")]
+    #[error("This edit needs a symbol, not a file")]
     NotASymbol,
 
     #[error(transparent)]
