@@ -1,0 +1,2 @@
+# `pub(crate)` items that cannot be anything else (architecture rule 7), one per line with why:
+# <file> <item> <reason>

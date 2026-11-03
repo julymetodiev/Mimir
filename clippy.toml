@@ -1,2 +1,2 @@
 # Mimir clippy configuration
-msrv = "1.90"
+msrv = "1.95"

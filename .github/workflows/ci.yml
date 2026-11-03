@@ -20,6 +20,10 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Architecture
+        run: scripts/check-architecture.sh
+      - name: File size
+        run: scripts/check-file-size.sh
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Clippy
