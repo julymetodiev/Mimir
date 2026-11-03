@@ -50,12 +50,12 @@ Or build it, with Rust 1.95 or newer:
 cargo install --git https://github.com/julymetodiev/Mimir mimir-cli
 ```
 
-For exact answers, Mimir needs `rust-analyzer` for Rust, [`tsrs`](https://github.com/oxc-project/tsrs) for TypeScript and JavaScript, and [`ty`](https://github.com/astral-sh/ty) for Python. In a Python project, install its packages in a `.venv` at the top: without them less is answered.
+For exact answers, Mimir needs `rust-analyzer` for Rust, [`tsrs`](https://github.com/oxc-project/tsrs) for TypeScript and JavaScript, and [`pyrefly`](https://github.com/facebook/pyrefly) for Python. In a Python project, install its packages in a `.venv` at the top: without them less is answered.
 
 ```bash
 rustup component add rust-analyzer rust-src
 npm install -g tsrs
-pipx install ty
+pipx install pyrefly
 ```
 
 ## Use it
@@ -175,7 +175,7 @@ the source of every symbol, so use it only on code that may be public.
 - `[reads it]`: on a constant or static, a symbol that reads it.
 - `Partial:` analysis is still running, so calls may be missing. Ask again shortly.
 
-Without `rust-analyzer`, `tsrs` or `ty`, or with `MIMIR_NO_SCIP=1`, only syntax rules apply, and `mimir
+Without `rust-analyzer`, `tsrs` or `pyrefly`, or with `MIMIR_NO_SCIP=1`, only syntax rules apply, and `mimir
 sync` says how many files that covers. In Rust they find about half the calls. In the others they link only
 functions of the same file or of an import in the project, and no methods.
 
@@ -198,10 +198,10 @@ minutes too:
 | | hono | nest | three.js | flask | requests | django |
 |---|---|---|---|---|---|---|
 | Symbols | 12 497 | 27 854 | 27 387 | 2 046 | 1 114 | 67 865 |
-| A first `mimir sync` | 11 s | 48 s | 45 s | 2.1 s | 0.9 s | 46 s |
+| A first `mimir sync` | 11 s | 48 s | 45 s | 2.1 s | 1.5 s | 65 s |
 | A new daemon with nothing changed | 1.0 s | 2.9 s | 4.2 s | 0.1 s | 0.1 s | 12 s |
-| Daemon after asking | 121 MB | 187 MB | 373 MB | 32 MB | 28 MB | 598 MB |
-| The server while in use | 963 MB | 1.6 GB | 603 MB | 179 MB | 152 MB | 1.1 GB |
+| Daemon after asking | 121 MB | 187 MB | 373 MB | 31 MB | 27 MB | 539 MB |
+| The server while in use | 963 MB | 1.6 GB | 603 MB | 233 MB | 178 MB | 614 MB |
 
 An edit of a file most of a project imports asks about those files again: about 30 s on nest and django,
 with answers marked partial until then.
@@ -230,9 +230,9 @@ lines in 3 files. These are measurements of one project, not a guarantee for you
 
 In TypeScript and JavaScript, against `scip-typescript`, the targets inside a project agree at 70 998 of 72 557 places on hono, 57 401 of 58 894 on nest and 91 559 of 108 715 on three.js. Nearly all the rest are places only `tsrs` answers, or the start of a file against its first line; `scripts/bench/scip_compare.py` names each kind. After edits of comments in 2 to 3 files the graph had 0 differences from a clean start, on hono and nest. Agreement is not proof: these two tools can be wrong together.
 
-In Python, against `scip-python`, the targets inside a project agree at 99.4% of the places on flask, 99.3% on requests and 96.2% on django, which is 459 650 of 477 676. On django most of the rest are the start of a file against its first line, or the index naming another class, as `models.CharField` at `DateTimeField` where it was read. `ty` has no answer at 3 509 places where the index has one. Agreement is not proof: `scip-python` is built on `pyright`, another checker, and can be wrong.
+In Python, against `scip-python`, the targets of places that name a function agree at 739 of 778 on flask and 414 of 434 on requests; on django that comparison did not finish. Most other differences read are local variables assigned twice, which give no edge. `pyrefly` gave the same targets at all 299 205 calls and attributes on django with files asked in reverse order, and after edits of 3 files on django the graph had 0 differences from a clean start. Agreement is not proof.
 
-Known limits in Python: what has no type has no target, about a fifth of the calls in django's own code, and Mimir leaves those out and does not guess. A call the source does not spell gives no edge, as `a + b` running `__add__`. A class that fits a `Protocol` without naming it is not shown as implementing it. A package installed without a change to a lock file leaves saved answers stale. After edits of 3 files on django the graph had 1 difference from a clean start, in 116 546 edges, because an answer of `ty` can depend on what it was asked before. Environments other than a `.venv` at the top of a project are not measured. `ty` is a young beta.
+Known limits in Python: **`pyrefly` runs a project's `.venv/bin/python`** (see [SECURITY.md](SECURITY.md)). What has no type has no target, about a fifth of the calls in django's own code, and Mimir leaves those out and does not guess. A call through a variable, as `alias()` after `alias = plain`, or `cls()`, gives no edge. A call the source does not spell gives none either, as `a + b` running `__add__`. A class that fits a `Protocol` without naming it is not shown as implementing it. A package installed without a change to a lock file leaves saved answers stale. Environments other than a `.venv` at the top of a project are not measured.
 
 Known limits in TypeScript and JavaScript: what has no type has no target, so plain JavaScript gets about two thirds of its calls (62% on express, 66% on three.js, against 91% and 94% on TypeScript projects). Mimir leaves the rest out and does not guess. `list[0].area()` on a union of types shows one member. pnpm and yarn workspaces are not measured, and `.vue` and `.svelte` files are left out. `tsrs` is a young beta.
 

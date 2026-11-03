@@ -8,7 +8,7 @@ All notable changes to Mimir are recorded here. The format follows
 
 ### Added
 
-- **Python**, resolved by a running `ty`, with its answers saved beside the graph.
+- **Python**, resolved by a running `pyrefly`, with its answers saved beside the graph.
 
 ### Changed
 

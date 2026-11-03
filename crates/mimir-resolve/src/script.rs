@@ -172,6 +172,7 @@ impl Answers<'_> {
                 .or_else(|| table.definition_after(id, target.line, &target.name))
                 .filter(|s| is_callable(s))
             {
+                let callable = self.setter_for_write(reference, callable, defined_in);
                 let wanted = match reference.kind {
                     ReferenceKind::FieldUse => !matches!(
                         accessor(callable, defined_in),
@@ -232,6 +233,27 @@ impl Answers<'_> {
             };
             self.edge(&holder, callable, kind, reference);
         }
+    }
+
+    /// A server may answer with the getter for `a.x = 1` too, and what runs is the setter beside it.
+    fn setter_for_write<'s>(
+        &'s self,
+        reference: &ExtractedReference,
+        found: &'s Arc<Symbol>,
+        defined_in: &ProjectFile,
+    ) -> &'s Arc<Symbol> {
+        if reference.kind != ReferenceKind::FieldWrite
+            || accessor(found, defined_in) != Some(Accessor::Get)
+        {
+            return found;
+        }
+        owner_of(found)
+            .and_then(|owner| {
+                self.table.methods_of(owner, &found.name).iter().find(|s| {
+                    s.file_id == found.file_id && accessor(s, defined_in) == Some(Accessor::Set)
+                })
+            })
+            .unwrap_or(found)
     }
 
     fn edge(&mut self, from: &Symbol, to: &Symbol, kind: EdgeKind, reference: &ExtractedReference) {

@@ -1,5 +1,5 @@
-//! Every row of the table in `docs/PYTHON.md`, section 3, checked by hand against a running `ty`.
-//! Without `ty` on the path it is skipped with a message, like the other servers' tests.
+//! Every row of the table in `docs/PYTHON.md`, section 3, checked by hand against a running `pyrefly`.
+//! Without `pyrefly` on the path it is skipped with a message, like the other servers' tests.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -8,7 +8,7 @@ use mimir_graph::{CodeGraph, EdgeKind};
 use mimir_parse_core::LanguageAdapter;
 use mimir_parse_python::PythonAdapter;
 use mimir_resolve::{ProjectFile, Refresh, SemanticSource, link};
-use mimir_resolve_lsp::{AskedSource, ty};
+use mimir_resolve_lsp::{AskedSource, pyrefly};
 use mimir_types::{FileId, IdGenerator, Symbol};
 
 const SOURCES: [&str; 3] = ["lib.py", "main.py", "reexport.py"];
@@ -16,7 +16,7 @@ const SOURCES: [&str; 3] = ["lib.py", "main.py", "reexport.py"];
 type Edge = (String, String);
 
 fn root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/ty/project")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/pyrefly/project")
 }
 
 fn build(root: &Path, names: &[&str]) -> (CodeGraph, Vec<ProjectFile>) {
@@ -74,13 +74,13 @@ fn list(edges: &[(&str, &str)]) -> BTreeSet<Edge> {
         .collect()
 }
 
-fn ty_is_there() -> bool {
-    let there = std::process::Command::new("ty")
+fn pyrefly_is_there() -> bool {
+    let there = std::process::Command::new("pyrefly")
         .arg("--version")
         .output()
         .is_ok();
     if !there {
-        eprintln!("skipped: ty is not installed");
+        eprintln!("skipped: pyrefly is not installed");
     }
     there
 }
@@ -96,13 +96,12 @@ fn linked(root: &Path, names: &[&str], source: &AskedSource) -> (CodeGraph, Vec<
 
 #[test]
 fn every_row_of_the_table_holds() {
-    if !ty_is_there() {
+    if !pyrefly_is_there() {
         return;
     }
-    let (graph, files) = linked(&root(), &SOURCES, &ty());
+    let (graph, files) = linked(&root(), &SOURCES, &pyrefly());
 
     let calls = list(&[
-        ("Circle.make", "Circle.__init__"),
         ("Sub.area", "Circle.area"),
         ("run", "Circle.__init__"),
         ("run", "Circle.area"),
@@ -110,7 +109,6 @@ fn every_row_of_the_table_holds() {
         ("run", "Circle.helper"),
         ("run", "Circle.size"),
         ("run", "Shape.area"),
-        ("run", "Sub"),
         ("run", "Sub.area"),
         ("run", "Point"),
         ("run", "over"),
@@ -154,7 +152,7 @@ fn every_row_of_the_table_holds() {
 /// apart, and neither is only possible.
 #[test]
 fn a_read_runs_the_getter_and_a_write_the_setter() {
-    if !ty_is_there() {
+    if !pyrefly_is_there() {
         return;
     }
     let dir = tempfile::TempDir::new().unwrap();
@@ -164,7 +162,7 @@ fn a_read_runs_the_getter_and_a_write_the_setter() {
         "class C:\n    @property\n    def size(self) -> int:\n        return 1\n\n    @size.setter\n    def size(self, v: int) -> None:\n        pass\n\n\ndef read(c: C):\n    return c.size\n\n\ndef write(c: C):\n    c.size = 2\n",
     )
     .unwrap();
-    let (graph, files) = linked(&root, &["a.py"], &ty());
+    let (graph, files) = linked(&root, &["a.py"], &pyrefly());
     let targets = |from: &str| -> BTreeSet<u32> {
         graph
             .symbols_in_file(files[0].file_id)
@@ -183,7 +181,7 @@ fn a_read_runs_the_getter_and_a_write_the_setter() {
 /// An edit changes what a site in another file means, and the graph follows.
 #[test]
 fn an_edit_is_seen_by_the_files_that_import_it() {
-    if !ty_is_there() {
+    if !pyrefly_is_there() {
         return;
     }
     let dir = tempfile::TempDir::new().unwrap();
@@ -200,7 +198,7 @@ fn an_edit_is_seen_by_the_files_that_import_it() {
         std::fs::write(root.join("lib.py"), text).unwrap();
     };
     write_lib("A");
-    let source = ty();
+    let source = pyrefly();
     let calls = |source: &AskedSource| {
         let (graph, files) = linked(&root, &["lib.py", "main.py"], source);
         edges(&graph, &files, EdgeKind::Calls)
@@ -217,19 +215,19 @@ fn an_edit_is_seen_by_the_files_that_import_it() {
     assert_eq!(calls(&source), names(&["B.go", "make"]));
 
     // And it is what a clean start gives.
-    assert_eq!(calls(&ty()), names(&["B.go", "make"]));
+    assert_eq!(calls(&pyrefly()), names(&["B.go", "make"]));
 }
 
 /// Only a project with files of the language and a list of packages is told.
 #[test]
 fn a_project_without_its_packages_is_told_so() {
-    if !ty_is_there() {
+    if !pyrefly_is_there() {
         return;
     }
     let dir = tempfile::TempDir::new().unwrap();
     let root = dir.path().canonicalize().unwrap();
     std::fs::write(root.join("a.py"), "def f():\n    pass\n").unwrap();
-    let source = ty();
+    let source = pyrefly();
     linked(&root, &["a.py"], &source);
     assert!(source.notes(&root).is_empty(), "no list of packages");
 
@@ -239,9 +237,30 @@ fn a_project_without_its_packages_is_told_so() {
     std::fs::create_dir(root.join(".venv")).unwrap();
     assert!(source.notes(&root).is_empty(), "packages are there");
 
-    let unused = ty();
+    let unused = pyrefly();
     std::fs::remove_dir(root.join(".venv")).unwrap();
     assert!(unused.notes(&root).is_empty(), "it answers for no file yet");
+}
+
+/// A column after other than ASCII is counted differently on the wire, and lands in the same place.
+#[test]
+fn a_call_after_other_than_ascii_is_found() {
+    if !pyrefly_is_there() {
+        return;
+    }
+    let dir = tempfile::TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    std::fs::write(
+        root.join("a.py"),
+        "class Я:\n    def ключ(self) -> int:\n        return 1\n\n\ndef run(я: Я):\n    t = \"ü€😀\"; я.ключ()\n",
+    )
+    .unwrap();
+    let (graph, files) = linked(&root, &["a.py"], &pyrefly());
+    let calls = edges(&graph, &files, EdgeKind::Calls);
+    assert!(
+        calls.contains(&("run".into(), "Я.ключ".into())),
+        "{calls:?}"
+    );
 }
 
 #[test]

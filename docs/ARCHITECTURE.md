@@ -47,7 +47,7 @@ Dependencies point inwards. IO lives at the edge.
   client        mimir-client                           connect, start the daemon, one call per command
   wire          mimir-protocol                         requests and responses, typed
   application   mimir-engine                           the one writer: sync, watch, query, edit
-  adapters      mimir-resolve-ra, mimir-resolve-lsp,   rust-analyzer, tsrs, ty, a language server, files on disk
+  adapters      mimir-resolve-ra, mimir-resolve-lsp,   rust-analyzer, tsrs, pyrefly, a language server, files on disk
                 mimir-lsp,
                 mimir-edit
   ports + rules mimir-resolve                          linking rules and the port for a semantic source
@@ -66,7 +66,7 @@ Dependencies point inwards. IO lives at the edge.
 | `mimir-graph` | domain | symbols, edges and queries over them |
 | `mimir-resolve` | rules + port | turning references into edges; syntax rules; the port `SemanticSource` |
 | `mimir-resolve-ra` | adapter | the SCIP index and the running `rust-analyzer` |
-| `mimir-resolve-lsp` | adapter | a language server as a semantic source: asking about each site, saving the answers; one module for each server, as `tsrs` and `ty` |
+| `mimir-resolve-lsp` | adapter | a language server as a semantic source: asking about each site, saving the answers; one module for each server, as `tsrs` and `pyrefly` |
 | `mimir-lsp` | adapter | a running language server: starting it, its messages, file URIs |
 | `mimir-edit` | adapter | applying edits to files, with conflict detection |
 | `mimir-engine` | application | the actor; scanning, watching, editing, reading source, saving the graph for measurements |
@@ -177,5 +177,5 @@ reads and never writes: rule 4 stands, and the page has no way to ask for an edi
 
 Built for JavaScript, TypeScript and Python, and the targets of section 2 are measured for Rust only. Each is
 parsed through tree-sitter and resolved by a running language server, behind the same port as Rust: `tsrs`, in
-[TYPESCRIPT.md](TYPESCRIPT.md), and `ty`, in [PYTHON.md](PYTHON.md). Go comes next, and has no specification
+[TYPESCRIPT.md](TYPESCRIPT.md), and `pyrefly`, in [PYTHON.md](PYTHON.md). Go comes next, and has no specification
 yet. A language server is installed apart, and is never linked.

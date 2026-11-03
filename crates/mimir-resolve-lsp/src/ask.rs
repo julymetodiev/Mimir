@@ -88,6 +88,7 @@ pub fn answers(
         })
         .collect();
     let asking = Asking {
+        utf16: server.capabilities()["positionEncoding"] != "utf-8",
         project,
         by_path: &by_path,
         import_lines: &import_lines,
@@ -119,6 +120,8 @@ fn is_asked(reference: &ExtractedReference) -> bool {
 }
 
 struct Asking<'a> {
+    /// A column is counted in UTF-16 units on the wire, and in bytes here. `pyrefly` offers no other.
+    utf16: bool,
     project: &'a Path,
     by_path: &'a HashMap<&'a Path, &'a ProjectFile>,
     import_lines: &'a HashMap<&'a Path, HashSet<u32>>,
@@ -139,15 +142,22 @@ impl Asking<'_> {
             .iter()
             .filter(|r| is_asked(r) && seen.insert((r.range.start_line, r.range.start_col)))
             .collect();
-        let zero_based = |r: &ExtractedReference| (r.range.start_line - 1, r.range.start_col);
-        let sites: Vec<(u32, u32)> = asked.iter().map(|r| zero_based(r)).collect();
+        let lines: Vec<&str> = file.source.split('\n').collect();
+        let on_wire = |line: u32, column: u32| self.on_wire(&lines, line - 1, column);
+        let sites: Vec<(u32, u32)> = asked
+            .iter()
+            .map(|r| on_wire(r.range.start_line, r.range.start_col))
+            .collect();
         let mut found = server.many("textDocument/definition", path, &sites)?;
 
         // On `Circle | Square` a definition is one member's alone, and each may run.
         let with_receiver: Vec<(usize, (u32, u32))> = asked
             .iter()
             .enumerate()
-            .filter_map(|(i, r)| r.receiver_at.map(|(line, column)| (i, (line - 1, column))))
+            .filter_map(|(i, r)| {
+                r.receiver_at
+                    .map(|(line, column)| (i, on_wire(line, column)))
+            })
             .collect();
         let receivers: Vec<(u32, u32)> = with_receiver.iter().map(|(_, at)| *at).collect();
         let types = server.many("textDocument/typeDefinition", path, &receivers)?;
@@ -225,6 +235,15 @@ impl Asking<'_> {
         Ok(())
     }
 
+    /// A 0-based line and a column in bytes, as the server counts them.
+    fn on_wire(&self, lines: &[&str], line: u32, column: u32) -> (u32, u32) {
+        let column = match lines.get(line as usize) {
+            Some(text) if self.utf16 => byte_to_utf16(text, column as usize),
+            _ => column,
+        };
+        (line, column)
+    }
+
     fn is_inside(&self, found: &Location) -> bool {
         found
             .path
@@ -235,12 +254,17 @@ impl Asking<'_> {
     fn target(&self, found: &Location) -> Option<Target> {
         let path = found.path.strip_prefix(self.project).ok()?;
         let file = self.by_path.get(path)?;
-        let name = file
-            .source
-            .split('\n')
-            .nth(found.line as usize)?
-            .get(found.column as usize..found.end_column as usize)?;
-        // `ty` marks a field with its object: `self.x`, where the symbol is `x`.
+        let line = file.source.split('\n').nth(found.line as usize)?;
+        let (start, end) = if self.utf16 {
+            (
+                utf16_to_byte(line, found.column),
+                utf16_to_byte(line, found.end_column),
+            )
+        } else {
+            (found.column as usize, found.end_column as usize)
+        };
+        let name = line.get(start..end)?;
+        // A server may mark a field with its object: `self.x`, where the symbol is `x`.
         let name = name.rsplit('.').next().unwrap_or(name);
         let mut shared = self.shared.borrow_mut();
         Some(Target {
@@ -248,5 +272,38 @@ impl Asking<'_> {
             line: found.line + 1,
             name: shared.name(name),
         })
+    }
+}
+
+fn byte_to_utf16(line: &str, byte: usize) -> u32 {
+    let before = line.get(..byte).unwrap_or(line);
+    before.encode_utf16().count() as u32
+}
+
+fn utf16_to_byte(line: &str, column: u32) -> usize {
+    let mut units = 0;
+    for (byte, character) in line.char_indices() {
+        if units >= column as usize {
+            return byte;
+        }
+        units += character.len_utf16();
+    }
+    line.len()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_column_is_the_same_place_in_both_counts() {
+        let line = "a = \"ü€😀\"; b()";
+        let byte = line.find("b()").unwrap();
+        // ü is 2 bytes and 1 unit, € 3 and 1, 😀 4 and 2.
+        assert_eq!(byte_to_utf16(line, byte), byte as u32 - 5);
+        assert_eq!(utf16_to_byte(line, byte as u32 - 5), byte);
+        assert_eq!(byte_to_utf16("abc", 2), 2);
+        assert_eq!(utf16_to_byte("abc", 2), 2);
+        assert_eq!(utf16_to_byte("abc", 9), 3);
     }
 }

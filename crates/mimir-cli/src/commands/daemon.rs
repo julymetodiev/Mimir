@@ -7,7 +7,7 @@ use mimir_parse_python::PythonAdapter;
 use mimir_parse_rust::RustAdapter;
 use mimir_parse_ts::ScriptAdapter;
 use mimir_resolve::{NoSemanticSource, SemanticSource, SemanticSources};
-use mimir_resolve_lsp::{tsrs, ty};
+use mimir_resolve_lsp::{pyrefly, tsrs};
 use mimir_resolve_ra::RustAnalyzer;
 use std::sync::Arc;
 use std::time::Duration;
@@ -24,7 +24,7 @@ pub async fn run() -> Result<()> {
         Arc::new(SemanticSources::new(vec![
             Arc::new(RustAnalyzer::default()),
             Arc::new(tsrs()),
-            Arc::new(ty()),
+            Arc::new(pyrefly()),
         ]))
     };
     let languages: Vec<Arc<dyn LanguageAdapter>> = vec![

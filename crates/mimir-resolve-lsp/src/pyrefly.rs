@@ -1,4 +1,5 @@
-//! What is `ty`'s own, for Python (`docs/PYTHON.md`, section 4).
+//! What is `pyrefly`'s own, for Python (`docs/PYTHON.md`, section 4). It runs a project's
+//! `.venv/bin/python` to find its packages, and `pyrefly lsp` has no option against that.
 
 use std::path::Path;
 
@@ -8,19 +9,19 @@ use crate::{AskedLanguage, AskedSource};
 
 /// The version this was measured with, which `scripts/check-deps.py` compares with the newest.
 /// Another one still runs, and the daemon's log says so.
-const TESTED_VERSION: &str = "0.0.96";
+const TESTED_VERSION: &str = "1.4.0";
 
-/// `ty` as a semantic source.
-pub fn ty() -> AskedSource {
+/// `pyrefly` as a semantic source.
+pub fn pyrefly() -> AskedSource {
     AskedSource::new(AskedLanguage {
-        program: "ty",
-        args: &["server"],
+        program: "pyrefly",
+        args: &["lsp"],
         tested_version: TESTED_VERSION,
         family: Language::Python,
         languages: "Python",
         project_files: &[
             "pyproject.toml",
-            "ty.toml",
+            "pyrefly.toml",
             "setup.py",
             "setup.cfg",
             "requirements.txt",
@@ -31,13 +32,13 @@ pub fn ty() -> AskedSource {
             "Pipfile.lock",
             ".python-version",
         ],
-        answers_file: "ty-answers.txt",
+        answers_file: "pyrefly-answers.txt",
         language_id,
         missing_packages,
     })
 }
 
-/// `.venv` is where `ty` looks by itself. `VIRTUAL_ENV` may say otherwise, and so the note does too.
+/// `.venv` is where it is looked for first. `VIRTUAL_ENV` may say otherwise, and so the note does too.
 fn missing_packages(project: &Path) -> Option<&'static str> {
     let lists_packages = ["pyproject.toml", "requirements.txt", "setup.py"]
         .iter()

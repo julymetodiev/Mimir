@@ -3,12 +3,12 @@
 //! server has a module that says only what is its own.
 
 mod ask;
+mod pyrefly;
 mod saved;
 mod tsrs;
-mod ty;
 
+pub use pyrefly::pyrefly;
 pub use tsrs::tsrs;
-pub use ty::ty;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -309,8 +309,7 @@ mod tests {
     #[test]
     fn a_version_is_told_from_one_that_starts_with_it() {
         assert!(says_version("tsrs 0.20.1-abc\n", "tsrs", "0.20.1"));
-        assert!(says_version("ty 0.0.96 (53a7844b8)\n", "ty", "0.0.96"));
-        assert!(says_version("ty 0.0.96\n", "ty", "0.0.96"));
+        assert!(says_version("pyrefly 1.4.0\n", "pyrefly", "1.4.0"));
         assert!(!says_version("tsrs 0.20.10\n", "tsrs", "0.20.1"));
         assert!(!says_version("tsrs 0.20.1.1\n", "tsrs", "0.20.1"));
         assert!(!says_version("other 0.20.1\n", "tsrs", "0.20.1"));

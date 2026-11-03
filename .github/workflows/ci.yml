@@ -51,10 +51,10 @@ jobs:
         with:
           components: rust-analyzer, rust-src
       - uses: Swatinem/rust-cache@v2
-      - name: tsrs and ty, or their tests are skipped
+      - name: tsrs and pyrefly, or their tests are skipped
         run: |
           npm install -g tsrs
-          pipx install ty
+          pipx install pyrefly
       - name: Tests
         run: cargo test --workspace --all-features --no-fail-fast
 

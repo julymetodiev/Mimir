@@ -39,17 +39,17 @@ def behind(version, newest):
 stale = [(name, version, latest(name)) for name, version in sorted(declared().items())]
 stale = [entry for entry in stale if behind(entry[1], entry[2])]
 
-# `tsrs` and `ty` run as programs, and the version each was measured with is in the code.
+# `tsrs` and `pyrefly` run as programs, and the version each was measured with is in the code.
 tested = re.search(r'TESTED_VERSION: &str = "(.+?)"', pathlib.Path("crates/mimir-resolve-lsp/src/tsrs.rs").read_text()).group(1)
 with urllib.request.urlopen("https://registry.npmjs.org/tsrs/latest", timeout=20) as response:
     newest_tsrs = json.load(response)["version"].split("-")[0]
 if tested != newest_tsrs:
     stale.append(("tsrs", tested, newest_tsrs))
-tested = re.search(r'TESTED_VERSION: &str = "(.+?)"', pathlib.Path("crates/mimir-resolve-lsp/src/ty.rs").read_text()).group(1)
-with urllib.request.urlopen("https://pypi.org/pypi/ty/json", timeout=20) as response:
-    newest_ty = json.load(response)["info"]["version"]
-if tested != newest_ty:
-    stale.append(("ty", tested, newest_ty))
+tested = re.search(r'TESTED_VERSION: &str = "(.+?)"', pathlib.Path("crates/mimir-resolve-lsp/src/pyrefly.rs").read_text()).group(1)
+with urllib.request.urlopen("https://pypi.org/pypi/pyrefly/json", timeout=20) as response:
+    newest_pyrefly = json.load(response)["info"]["version"]
+if tested != newest_pyrefly:
+    stale.append(("pyrefly", tested, newest_pyrefly))
 for name, version, newest in stale:
     print(f"error: {name} is at {version}, the latest is {newest}")
 if not stale:

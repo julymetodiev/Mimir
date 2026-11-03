@@ -28,5 +28,5 @@ name = "tsrs"
 path = "tests/tsrs/main.rs"
 
 [[test]]
-name = "ty"
-path = "tests/ty/main.rs"
+name = "pyrefly"
+path = "tests/pyrefly/main.rs"

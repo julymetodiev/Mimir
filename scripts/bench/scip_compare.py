@@ -216,7 +216,7 @@ def class_of(symbol, name, want_lines, got_line, got_name):
         return "constructor"
     if name in ("exports", "module"):
         return "CommonJS exports"
-    # `models.TextChoices("Medal", "GOLD")` builds an enum: tsrs and ty answer with what runs.
+    # `models.TextChoices("Medal", "GOLD")` builds an enum: a server may answer with what runs.
     if got_name == "__call__":
         return "metaclass call"
     # `from .a import __all__ as a_all`.
