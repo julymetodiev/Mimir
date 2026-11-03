@@ -17,6 +17,13 @@ pub enum GraphError {
     #[error("File not found in index: {path}")]
     FileNotFound { path: PathBuf },
 
+    #[error("Failed to read {path}: {source}")]
+    Read {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
     #[error("No language adapter for {language}")]
     NoAdapter { language: Language },
 
@@ -47,7 +54,4 @@ pub enum GraphError {
 
     #[error(transparent)]
     Edit(#[from] mimir_edit::EditError),
-
-    #[error("Watcher error: {0}")]
-    Watcher(String),
 }

@@ -36,16 +36,16 @@
 //! async fn main() {
 //!     // Create channels
 //!     let (cmd_tx, cmd_rx) = command_channel(256);
-//!     let (event_tx, event_rx) = event_channel(64);
+//!     let (event_tx, _event_rx) = event_channel(64);
 //!
 //!     // Start actor
-//!     let actor = GraphActor::new(PathBuf::from("."));
+//!     let actor = GraphActor::with_registry(PathBuf::from("."), registry, semantics);
 //!     tokio::spawn(async move {
 //!         actor.run(cmd_rx, event_tx).await
 //!     });
 //!
 //!     // Create handle
-//!     let handle = GraphHandle::new(cmd_tx, event_rx);
+//!     let handle = GraphHandle::new(cmd_tx);
 //!
 //!     // Use handle
 //!     let file_id = handle.add_file(
@@ -75,14 +75,9 @@ mod start;
 mod watcher;
 
 pub use actor::GraphActor;
-pub use channel::{
-    CommandReceiver, CommandSender, DEFAULT_COMMAND_BUFFER, DEFAULT_EVENT_CAPACITY, EventReceiver,
-    EventSender, command_channel, event_channel,
-};
+pub use channel::{CommandSender, command_channel, event_channel};
 pub use command::GraphCommand;
 pub use error::GraphError;
-pub use event::{FileEvent, GraphEvent};
+pub use event::GraphEvent;
 pub use handle::GraphHandle;
-pub use scanner::{ScannedFile, Scanner};
 pub use start::{Engine, start};
-pub use watcher::{FileWatcher, WatcherConfig, WatcherHandle};

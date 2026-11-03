@@ -57,7 +57,7 @@ pub async fn start(root: PathBuf, semantics: Arc<dyn SemanticSource>) -> Engine 
         }
     };
 
-    let handle = GraphHandle::new(commands, events);
+    let handle = GraphHandle::new(commands);
     handle.queue_first_scan().await;
     Engine {
         handle,

@@ -43,12 +43,6 @@ impl Scanner {
         }
     }
 
-    /// Set the maximum file size to scan (in bytes).
-    pub fn with_max_file_size(mut self, size: u64) -> Self {
-        self.max_file_size = size;
-        self
-    }
-
     /// Scan the directory and return all matching files.
     pub async fn scan(&self) -> std::io::Result<Vec<ScannedFile>> {
         let root = self.root.clone();
@@ -126,11 +120,6 @@ impl Scanner {
         }
 
         Ok(files)
-    }
-
-    /// Get the root directory.
-    pub fn root(&self) -> &Path {
-        &self.root
     }
 }
 

@@ -27,12 +27,6 @@ pub fn event_channel(capacity: usize) -> (EventSender, EventReceiver) {
     (tx, rx)
 }
 
-/// Default buffer size for command channels.
-pub const DEFAULT_COMMAND_BUFFER: usize = 256;
-
-/// Default capacity for event channels.
-pub const DEFAULT_EVENT_CAPACITY: usize = 64;
-
 #[cfg(test)]
 mod tests {
     use super::*;

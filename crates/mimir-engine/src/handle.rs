@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use tokio::sync::oneshot;
 use tracing::{info, warn};
 
-use crate::channel::{CommandSender, EventReceiver, EventSender};
+use crate::channel::CommandSender;
 use crate::command::GraphCommand;
 
 /// A handle to communicate with the graph actor.
@@ -19,13 +19,12 @@ use crate::command::GraphCommand;
 #[derive(Clone)]
 pub struct GraphHandle {
     commands: CommandSender,
-    events: EventSender,
 }
 
 impl GraphHandle {
-    /// Create a new handle with the given command and event channels.
-    pub fn new(commands: CommandSender, events: EventSender) -> Self {
-        Self { commands, events }
+    /// Create a new handle that sends commands to the actor.
+    pub fn new(commands: CommandSender) -> Self {
+        Self { commands }
     }
 
     /// Add a file to the graph.
@@ -273,16 +272,6 @@ impl GraphHandle {
             .await
             .map_err(|_| GraphError::EngineStopped)
     }
-
-    /// Subscribe to graph events.
-    pub fn subscribe(&self) -> EventReceiver {
-        self.events.subscribe()
-    }
-
-    /// Get the event sender for creating new subscriptions.
-    pub fn event_sender(&self) -> &EventSender {
-        &self.events
-    }
 }
 
 #[cfg(test)]
@@ -304,7 +293,6 @@ mod tests {
     async fn test_handle_add_and_find() {
         let (cmd_tx, cmd_rx) = command_channel(16);
         let (event_tx, _event_rx) = event_channel(16);
-        let event_tx_clone = event_tx.clone();
 
         let actor = GraphActor::with_registry(
             PathBuf::from("/tmp/test"),
@@ -314,7 +302,7 @@ mod tests {
 
         let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
-        let handle = GraphHandle::new(cmd_tx, event_tx_clone);
+        let handle = GraphHandle::new(cmd_tx);
 
         // Add file
         let file_id = handle
@@ -341,7 +329,6 @@ mod tests {
     async fn test_handle_stats() {
         let (cmd_tx, cmd_rx) = command_channel(16);
         let (event_tx, _event_rx) = event_channel(16);
-        let event_tx_clone = event_tx.clone();
 
         let actor = GraphActor::with_registry(
             PathBuf::from("/tmp/test"),
@@ -351,7 +338,7 @@ mod tests {
 
         let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
-        let handle = GraphHandle::new(cmd_tx, event_tx_clone);
+        let handle = GraphHandle::new(cmd_tx);
 
         // Initial stats - files_count is not tracked in current impl
         let stats = handle.stats().await.unwrap();
@@ -378,7 +365,6 @@ mod tests {
     async fn test_handle_clone() {
         let (cmd_tx, cmd_rx) = command_channel(16);
         let (event_tx, _event_rx) = event_channel(16);
-        let event_tx_clone = event_tx.clone();
 
         let actor = GraphActor::with_registry(
             PathBuf::from("/tmp/test"),
@@ -388,7 +374,7 @@ mod tests {
 
         let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
 
-        let handle1 = GraphHandle::new(cmd_tx, event_tx_clone);
+        let handle1 = GraphHandle::new(cmd_tx);
         let handle2 = handle1.clone();
 
         // Both handles should work

@@ -17,7 +17,7 @@ use crate::channel::CommandSender;
 use crate::command::GraphCommand;
 
 /// Default patterns to ignore when watching.
-pub const DEFAULT_IGNORE_PATTERNS: &[&str] = &[
+const DEFAULT_IGNORE_PATTERNS: &[&str] = &[
     "target",
     "node_modules",
     ".git",
@@ -54,7 +54,7 @@ impl Default for WatcherConfig {
 
 impl WatcherConfig {
     /// Check if a path should be ignored.
-    pub fn should_ignore(&self, path: &Path) -> bool {
+    fn should_ignore(&self, path: &Path) -> bool {
         for component in path.components() {
             if let std::path::Component::Normal(name) = component {
                 let name_str = name.to_string_lossy();
@@ -71,30 +71,17 @@ impl WatcherConfig {
 
 /// Events from the file watcher.
 #[derive(Debug, Clone)]
-pub enum WatchEvent {
+enum WatchEvent {
     /// A file was created or modified.
     Changed(PathBuf),
     /// A file was removed.
     Removed(PathBuf),
-    /// An error occurred.
-    #[allow(dead_code)] // Used for future error reporting
-    Error(String),
 }
 
-/// A handle to control the file watcher.
+/// Keeps the file watcher running. Dropping the last handle ends the watcher's event handler.
 #[derive(Clone)]
 pub struct WatcherHandle {
-    shutdown_tx: mpsc::Sender<()>,
-}
-
-impl WatcherHandle {
-    /// Request shutdown of the watcher.
-    pub async fn shutdown(&self) -> Result<(), GraphError> {
-        self.shutdown_tx
-            .send(())
-            .await
-            .map_err(|_| GraphError::Watcher("watcher already shut down".to_string()))
-    }
+    _shutdown_tx: mpsc::Sender<()>,
 }
 
 /// File watcher that sends updates to the graph actor.
@@ -183,7 +170,9 @@ impl FileWatcher {
 
                             let tx = event_tx_clone.clone();
                             rt.spawn(async move {
-                                let _ = tx.send(watch_event).await;
+                                if tx.send(watch_event).await.is_err() {
+                                    debug!("The watcher's event handler has stopped");
+                                }
                             });
                         }
                     }
@@ -200,16 +189,18 @@ impl FileWatcher {
             }
         });
 
-        // Spawn the event handler task
+        // Spawn the event handler task. It ends when the actor has stopped.
         let commands = self.commands.clone();
         let file_ids = self.file_ids.clone();
-        let _root = self.root.clone();
 
         tokio::spawn(async move {
             loop {
                 tokio::select! {
                     Some(event) = event_rx.recv() => {
-                        Self::handle_event(&commands, &file_ids, event).await;
+                        if let Err(e) = Self::handle_event(&commands, &file_ids, event).await {
+                            warn!("The file watcher stops: {e}");
+                            break;
+                        }
                     }
                     _ = shutdown_rx.recv() => {
                         info!("File watcher shutting down");
@@ -219,19 +210,22 @@ impl FileWatcher {
             }
         });
 
-        Ok(WatcherHandle { shutdown_tx })
+        Ok(WatcherHandle {
+            _shutdown_tx: shutdown_tx,
+        })
     }
 
+    /// Apply one watch event to the graph. It fails only when the actor has stopped.
     async fn handle_event(
         commands: &CommandSender,
         file_ids: &Arc<RwLock<HashMap<PathBuf, mimir_types::FileId>>>,
         event: WatchEvent,
-    ) {
+    ) -> Result<(), GraphError> {
         match event {
             WatchEvent::Changed(path) => {
                 // Only process files (not directories)
                 if path.is_dir() {
-                    return;
+                    return Ok(());
                 }
 
                 // Only process files with known languages
@@ -240,13 +234,13 @@ impl FileWatcher {
                         let lang = Language::from_extension(ext);
                         if lang == Language::Unknown {
                             debug!("Ignoring file with unknown extension: {}", path.display());
-                            return;
+                            return Ok(());
                         }
                         lang
                     }
                     None => {
                         debug!("Ignoring file without extension: {}", path.display());
-                        return;
+                        return Ok(());
                     }
                 };
 
@@ -255,7 +249,7 @@ impl FileWatcher {
                     Ok(c) => c,
                     Err(e) => {
                         warn!("Failed to read {}: {}", path.display(), e);
-                        return;
+                        return Ok(());
                     }
                 };
 
@@ -268,17 +262,18 @@ impl FileWatcher {
                 if let Some(file_id) = existing_id {
                     // Remove old version first
                     let (reply_tx, _reply_rx) = oneshot::channel();
-                    let _ = commands
+                    commands
                         .send(GraphCommand::RemoveFile {
                             file_id,
                             reply: reply_tx,
                         })
-                        .await;
+                        .await
+                        .map_err(|_| GraphError::EngineStopped)?;
                 }
 
                 // Add the file
                 let (reply_tx, reply_rx) = oneshot::channel();
-                if commands
+                commands
                     .send(GraphCommand::AddFile {
                         path: path.clone(),
                         content,
@@ -286,12 +281,15 @@ impl FileWatcher {
                         reply: reply_tx,
                     })
                     .await
-                    .is_ok()
-                    && let Ok(Ok(file_id)) = reply_rx.await
-                {
-                    let mut ids = file_ids.write().await;
-                    ids.insert(path.clone(), file_id);
-                    info!("File changed: {}", path.display());
+                    .map_err(|_| GraphError::EngineStopped)?;
+                match reply_rx.await {
+                    Ok(Ok(file_id)) => {
+                        let mut ids = file_ids.write().await;
+                        ids.insert(path.clone(), file_id);
+                        info!("File changed: {}", path.display());
+                    }
+                    Ok(Err(e)) => warn!("Failed to add {}: {}", path.display(), e),
+                    Err(_) => warn!("The graph actor stopped before adding {}", path.display()),
                 }
             }
 
@@ -303,26 +301,18 @@ impl FileWatcher {
 
                 if let Some(file_id) = file_id {
                     let (reply_tx, _reply_rx) = oneshot::channel();
-                    let _ = commands
+                    commands
                         .send(GraphCommand::RemoveFile {
                             file_id,
                             reply: reply_tx,
                         })
-                        .await;
+                        .await
+                        .map_err(|_| GraphError::EngineStopped)?;
                     info!("File removed: {}", path.display());
                 }
             }
-
-            WatchEvent::Error(msg) => {
-                error!("Watcher error: {}", msg);
-            }
         }
-    }
-
-    /// Register a file that was added through other means (e.g., initial sync).
-    pub async fn register_file(&self, path: PathBuf, file_id: mimir_types::FileId) {
-        let mut ids = self.file_ids.write().await;
-        ids.insert(path, file_id);
+        Ok(())
     }
 }
 

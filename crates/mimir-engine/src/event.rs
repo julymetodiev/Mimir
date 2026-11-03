@@ -66,40 +66,6 @@ impl GraphEvent {
     }
 }
 
-/// File system events from the watcher.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum FileEvent {
-    /// A file was created.
-    Created(PathBuf),
-
-    /// A file was modified.
-    Modified(PathBuf),
-
-    /// A file was deleted.
-    Deleted(PathBuf),
-
-    /// A file was renamed.
-    Renamed { from: PathBuf, to: PathBuf },
-}
-
-impl FileEvent {
-    /// Get the primary path involved in this event.
-    pub fn path(&self) -> &PathBuf {
-        match self {
-            FileEvent::Created(p) | FileEvent::Modified(p) | FileEvent::Deleted(p) => p,
-            FileEvent::Renamed { to, .. } => to,
-        }
-    }
-
-    /// Check if this event indicates the file should be re-indexed.
-    pub fn needs_reindex(&self) -> bool {
-        matches!(
-            self,
-            FileEvent::Created(_) | FileEvent::Modified(_) | FileEvent::Renamed { .. }
-        )
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,24 +96,5 @@ mod tests {
 
         let sync = GraphEvent::SyncStarted;
         assert_eq!(sync.file_id(), None);
-    }
-
-    #[test]
-    fn test_file_event_path() {
-        let created = FileEvent::Created(PathBuf::from("test.rs"));
-        assert_eq!(created.path(), &PathBuf::from("test.rs"));
-
-        let renamed = FileEvent::Renamed {
-            from: PathBuf::from("old.rs"),
-            to: PathBuf::from("new.rs"),
-        };
-        assert_eq!(renamed.path(), &PathBuf::from("new.rs"));
-    }
-
-    #[test]
-    fn test_file_event_needs_reindex() {
-        assert!(FileEvent::Created(PathBuf::from("test.rs")).needs_reindex());
-        assert!(FileEvent::Modified(PathBuf::from("test.rs")).needs_reindex());
-        assert!(!FileEvent::Deleted(PathBuf::from("test.rs")).needs_reindex());
     }
 }
