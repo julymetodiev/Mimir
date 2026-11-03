@@ -44,6 +44,65 @@ pub struct SearchOptions {
     pub limit: Option<u32>,
 }
 
+/// What an edit applies to.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum EditTarget {
+    /// A file, by absolute path or relative to the project.
+    File(PathBuf),
+    /// The symbol a name most likely means.
+    Symbol(String),
+}
+
+/// What an edit changes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum EditChange {
+    /// Replace a whole symbol.
+    WholeSymbol { content: String },
+    /// Replace lines, 1-indexed and inclusive; on a symbol they count from its first line.
+    Lines {
+        start: u32,
+        end: u32,
+        content: String,
+    },
+    /// Replace a byte range.
+    Replace {
+        start: u32,
+        end: u32,
+        content: String,
+    },
+    /// Insert at a byte position.
+    Insert { at: u32, content: String },
+    /// Delete a byte range.
+    Delete { start: u32, end: u32 },
+}
+
+/// One edit.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Edit {
+    pub target: EditTarget,
+    pub change: EditChange,
+}
+
+/// What an edit did, or with a preview would do, to one file.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileEdit {
+    /// The file, relative to the project.
+    pub path: PathBuf,
+    /// Change in bytes.
+    pub bytes_changed: i64,
+    /// Change in lines.
+    pub lines_changed: i64,
+    /// The unified diff, for a preview.
+    pub diff: Option<String>,
+}
+
+/// What a batch of edits did.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EditReport {
+    /// One entry per file, or per edit with a preview.
+    pub files: Vec<FileEdit>,
+}
+
 /// Result of a sync operation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncResult {

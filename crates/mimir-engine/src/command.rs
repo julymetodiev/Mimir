@@ -2,8 +2,8 @@
 
 use crate::error::GraphError;
 use mimir_protocol::{
-    FindOptions, FindResponse, SearchOptions, SearchResponse, StatsResponse, SymbolSource,
-    SyncResult, TraceOptions, TraceResponse,
+    Edit, EditReport, FindOptions, FindResponse, SearchOptions, SearchResponse, StatsResponse,
+    SymbolSource, SyncResult, TraceOptions, TraceResponse,
 };
 use mimir_types::{FileId, Language, SymbolId};
 use std::path::PathBuf;
@@ -60,6 +60,14 @@ pub enum GraphCommand {
         symbol_id: SymbolId,
         lines: Option<u32>,
         reply: oneshot::Sender<Result<SymbolSource, GraphError>>,
+    },
+
+    /// Apply edits together, or with `preview` only show them.
+    Edit {
+        edits: Vec<Edit>,
+        preview: bool,
+        backup: bool,
+        reply: oneshot::Sender<Result<EditReport, GraphError>>,
     },
 
     /// Get graph statistics.

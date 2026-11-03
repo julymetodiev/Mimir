@@ -64,6 +64,7 @@
 mod actor;
 mod channel;
 mod command;
+mod edit;
 mod error;
 mod event;
 mod handle;

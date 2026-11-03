@@ -39,6 +39,15 @@ pub enum GraphError {
     #[error("Saving the graph failed: {0}")]
     Save(#[source] std::io::Error),
 
+    #[error("{0} is outside the project")]
+    OutsideProject(PathBuf),
+
+    #[error("Replacing a whole symbol needs a symbol to edit")]
+    NotASymbol,
+
+    #[error(transparent)]
+    Edit(#[from] mimir_edit::EditError),
+
     #[error("Watcher error: {0}")]
     Watcher(String),
 }

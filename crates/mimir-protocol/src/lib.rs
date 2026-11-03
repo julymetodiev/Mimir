@@ -5,7 +5,10 @@ mod command;
 pub mod ipc;
 mod response;
 
-pub use command::{FindOptions, LinkSummary, SearchOptions, SyncResult, TraceOptions};
+pub use command::{
+    Edit, EditChange, EditReport, EditTarget, FileEdit, FindOptions, LinkSummary, SearchOptions,
+    SyncResult, TraceOptions,
+};
 
 pub use response::{
     FindResponse, SearchResponse, StatsResponse, SymbolInfo, SymbolSource, TraceNode,

@@ -121,21 +121,6 @@ pub enum Commands {
         backup: bool,
     },
 
-    /// Apply batch edits from JSON.
-    EditBatch {
-        /// JSON string containing edit operations.
-        #[arg(short, long)]
-        json: String,
-
-        /// Preview changes without applying.
-        #[arg(short, long)]
-        preview: bool,
-
-        /// Create backup files before editing.
-        #[arg(short, long)]
-        backup: bool,
-    },
-
     /// Apply batch symbol edits from JSON.
     /// JSON format: [{"symbol": "name", "content": "new code"}, ...]
     /// Use --json=- to read from stdin.

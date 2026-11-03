@@ -196,6 +196,14 @@ async fn answer(request: IpcRequest, handle: &GraphHandle) -> IpcResponse {
         IpcCommand::Source { symbol_id, lines } => {
             handle.source(symbol_id, lines).await.map(IpcData::Source)
         }
+        IpcCommand::Edit {
+            edits,
+            preview,
+            backup,
+        } => handle
+            .edit(edits, preview, backup)
+            .await
+            .map(IpcData::Edited),
         IpcCommand::Stats => handle.stats().await.map(IpcData::Stats),
         IpcCommand::Sync { full } => handle.sync_complete(full).await.map(IpcData::SyncResult),
         IpcCommand::Search { options } => handle.search(options).await.map(IpcData::SearchResult),

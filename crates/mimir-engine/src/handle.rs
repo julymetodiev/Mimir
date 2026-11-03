@@ -2,8 +2,8 @@
 
 use crate::error::GraphError;
 use mimir_protocol::{
-    FindOptions, FindResponse, SearchOptions, SearchResponse, StatsResponse, SymbolSource,
-    SyncResult, TraceOptions, TraceResponse,
+    Edit, EditReport, FindOptions, FindResponse, SearchOptions, SearchResponse, StatsResponse,
+    SymbolSource, SyncResult, TraceOptions, TraceResponse,
 };
 use mimir_types::{FileId, Language, SymbolId};
 use std::path::PathBuf;
@@ -190,6 +190,26 @@ impl GraphHandle {
             .send(GraphCommand::Source {
                 symbol_id,
                 lines,
+                reply,
+            })
+            .await
+            .map_err(|_| GraphError::EngineStopped)?;
+        answer.await.map_err(|_| GraphError::EngineStopped)?
+    }
+
+    /// Apply edits together, or with `preview` only show them.
+    pub async fn edit(
+        &self,
+        edits: Vec<Edit>,
+        preview: bool,
+        backup: bool,
+    ) -> Result<EditReport, GraphError> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(GraphCommand::Edit {
+                edits,
+                preview,
+                backup,
                 reply,
             })
             .await

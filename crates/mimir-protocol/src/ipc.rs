@@ -10,7 +10,7 @@ use std::io;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt};
 use std::path::{Path, PathBuf};
 
-use crate::command::{FindOptions, SearchOptions, SyncResult, TraceOptions};
+use crate::command::{Edit, EditReport, FindOptions, SearchOptions, SyncResult, TraceOptions};
 use crate::response::{FindResponse, SearchResponse, StatsResponse, SymbolSource, TraceResponse};
 
 /// Request ID for correlating responses.
@@ -55,6 +55,13 @@ pub enum IpcCommand {
     Source {
         symbol_id: SymbolId,
         lines: Option<u32>,
+    },
+
+    /// Apply edits together, or with `preview` only show them.
+    Edit {
+        edits: Vec<Edit>,
+        preview: bool,
+        backup: bool,
     },
 
     /// Get graph statistics.
@@ -126,6 +133,9 @@ pub enum IpcData {
 
     /// The source of a symbol.
     Source(SymbolSource),
+
+    /// What edits did.
+    Edited(EditReport),
 
     /// Find symbol results.
     FindResult(FindResponse),

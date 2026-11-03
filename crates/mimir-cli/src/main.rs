@@ -92,11 +92,6 @@ async fn main() -> anyhow::Result<()> {
             })
             .await?
         }
-        commands::Commands::EditBatch {
-            json,
-            preview,
-            backup,
-        } => commands::edit::execute_batch(&json, preview, backup).await?,
         commands::Commands::EditSymbols {
             json,
             preview,
@@ -110,7 +105,7 @@ async fn main() -> anyhow::Result<()> {
             } else {
                 json
             };
-            commands::edit::execute_batch_symbols(&json_content, preview, backup).await?
+            commands::edit::execute_symbols(&json_content, preview, backup).await?
         }
         commands::Commands::Search {
             pattern,

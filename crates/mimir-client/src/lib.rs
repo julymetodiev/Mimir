@@ -2,9 +2,9 @@
 //! starts the daemon when it is not running; a daemon that went away is started again.
 
 use mimir_protocol::{
-    FindOptions, FindResponse, IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult,
-    SearchOptions, SearchResponse, StatsResponse, SymbolSource, SyncResult, TraceOptions,
-    TraceResponse, VERSION,
+    Edit, EditReport, FindOptions, FindResponse, IpcCommand, IpcData, IpcRequest, IpcResponse,
+    IpcResult, SearchOptions, SearchResponse, StatsResponse, SymbolSource, SyncResult,
+    TraceOptions, TraceResponse, VERSION,
 };
 use mimir_types::SymbolId;
 use std::fs::{self, File};
@@ -228,6 +228,24 @@ impl Client {
     pub async fn search(&mut self, options: SearchOptions) -> Result<SearchResponse, ClientError> {
         match self.call(IpcCommand::Search { options }).await? {
             IpcData::SearchResult(found) => Ok(found),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Apply edits together, or with `preview` only show them.
+    pub async fn edit(
+        &mut self,
+        edits: Vec<Edit>,
+        preview: bool,
+        backup: bool,
+    ) -> Result<EditReport, ClientError> {
+        let command = IpcCommand::Edit {
+            edits,
+            preview,
+            backup,
+        };
+        match self.call(command).await? {
+            IpcData::Edited(report) => Ok(report),
             _ => Err(ClientError::UnexpectedResponse),
         }
     }

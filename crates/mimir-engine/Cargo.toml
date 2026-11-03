@@ -11,6 +11,7 @@ repository.workspace = true
 [dependencies]
 mimir-types.workspace = true
 mimir-protocol.workspace = true
+mimir-edit.workspace = true
 mimir-graph.workspace = true
 mimir-parse-core.workspace = true
 mimir-parse-rust.workspace = true

@@ -19,7 +19,6 @@ mimir-client = { workspace = true }
 mimir-daemon = { workspace = true }
 mimir-resolve = { workspace = true }
 mimir-resolve-ra = { workspace = true }
-mimir-edit = { workspace = true }
 clap = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

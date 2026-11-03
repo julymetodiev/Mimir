@@ -3,18 +3,21 @@
 use mimir_types::{Symbol, SymbolKind};
 use std::sync::Arc;
 
-/// The symbol a bare name most likely means: a type, then a function; a variant last.
+/// The symbol a bare name most likely means: one with exactly that name, then an impl, a type, a
+/// function; a field and a variant last.
 pub fn most_likely<'a>(found: &'a [Arc<Symbol>], name: &str) -> Option<&'a Arc<Symbol>> {
-    found
-        .iter()
-        .filter(|symbol| symbol.name == name)
-        .max_by_key(|symbol| match symbol.kind {
+    found.iter().max_by_key(|symbol| {
+        let rank = match symbol.kind {
+            SymbolKind::Impl => 100,
             SymbolKind::Struct | SymbolKind::Class => 90,
-            SymbolKind::Function => 80,
+            SymbolKind::Function | SymbolKind::Method => 80,
             SymbolKind::Enum | SymbolKind::Trait | SymbolKind::Interface => 70,
+            SymbolKind::Field => 20,
             SymbolKind::EnumVariant => 10,
             _ => 60,
-        })
+        };
+        (symbol.name == name, rank)
+    })
 }
 
 /// Lines `start..=end` (1-indexed) with context, at most `limit` of the symbol's own when no context

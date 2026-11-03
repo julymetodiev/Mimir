@@ -145,3 +145,114 @@ fn test_an_unknown_symbol_and_a_bad_pattern_are_errors() {
         .stderr(contains("Invalid pattern"));
     stop(dir);
 }
+
+#[test]
+fn test_an_edit_goes_through_the_daemon_and_the_graph_follows() {
+    let project = project();
+    let dir = project.path();
+
+    mimir(dir)
+        .args([
+            "edit",
+            "--symbol",
+            "helper",
+            "--mode",
+            "symbol",
+            "--content",
+            "pub fn helper() -> u32 {\n    2\n}\n\npub fn extra() -> u32 {\n    helper()\n}",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("src/lib.rs"));
+    assert!(
+        fs::read_to_string(dir.join("src/lib.rs"))
+            .unwrap()
+            .contains("    2\n")
+    );
+
+    mimir(dir)
+        .args(["trace", "-s", "helper", "--callers"])
+        .assert()
+        .success()
+        .stdout(contains("← extra"))
+        .stdout(contains("← compute"));
+    stop(dir);
+}
+
+#[test]
+fn test_an_edit_of_a_file_changed_behind_the_graph_lands_in_the_right_place() {
+    let project = project();
+    let dir = project.path();
+    mimir(dir)
+        .args(["read", "-s", "compute"])
+        .assert()
+        .success();
+
+    // The lines of `compute` move before anything could have told the daemon.
+    let moved = format!(
+        "// a new first line\n{}",
+        fs::read_to_string(dir.join("src/lib.rs")).unwrap()
+    );
+    fs::write(dir.join("src/lib.rs"), moved).unwrap();
+    mimir(dir)
+        .args([
+            "edit",
+            "--symbol",
+            "compute",
+            "--mode",
+            "symbol",
+            "--content",
+            "pub fn compute() -> u32 {\n    3\n}",
+        ])
+        .assert()
+        .success();
+
+    let edited = fs::read_to_string(dir.join("src/lib.rs")).unwrap();
+    assert!(edited.starts_with("// a new first line\n"));
+    assert!(edited.contains("pub fn helper() -> u32 {\n    1\n}"));
+    assert!(edited.contains("pub fn compute() -> u32 {\n    3\n}"));
+    stop(dir);
+}
+
+#[test]
+fn test_a_preview_changes_nothing_and_a_file_outside_is_refused() {
+    let project = project();
+    let dir = project.path();
+    let before = fs::read_to_string(dir.join("src/lib.rs")).unwrap();
+
+    mimir(dir)
+        .args([
+            "edit",
+            "--symbol",
+            "helper",
+            "--mode",
+            "symbol",
+            "--content",
+            "fn x() {}",
+            "--preview",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("src/lib.rs"));
+    assert_eq!(fs::read_to_string(dir.join("src/lib.rs")).unwrap(), before);
+
+    let outside = TempDir::new().unwrap();
+    let file = outside.path().join("other.rs");
+    fs::write(&file, "fn y() {}\n").unwrap();
+    mimir(dir)
+        .args([
+            "edit",
+            "--mode",
+            "insert",
+            "--start",
+            "0",
+            "--content",
+            "//",
+        ])
+        .arg("--file")
+        .arg(&file)
+        .assert()
+        .failure()
+        .stderr(contains("outside the project"));
+    stop(dir);
+}
