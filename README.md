@@ -1,163 +1,69 @@
 # Mimir
 
-**Semantic Code Intelligence Engine** - structured understanding of code for AI agents.
+The call graph of your project for coding agents: who calls a function and what it calls, and edits
+by symbol. `x.get()` links to the `get` of `x`'s type, because `rust-analyzer` resolves it. Rust only
+for now.
 
-```
-Traditional:  grep "process_data" → 47 matches → read file1 → read file2 → manual
-Mimir:        trace("process_data") → definition + callers + callees + similar + edit_targets
-```
-
-## What Mimir IS
-
-A semantic code intelligence engine that gives AI agents structured understanding of code instead of raw text files.
-
-## What Mimir is NOT
-
-- Not an IDE
-- Not an LSP server (but can use LSP)
-- Not a Git wrapper
-- Not another "AI coding assistant"
-
-## Features
-
-- **Symbol Graph**: Track functions, structs, traits, and their relationships
-- **Trace Queries**: Find callers/callees across the codebase, with types resolved by `rust-analyzer`
-- **Incremental Sync**: Only re-parse changed files
-- **File Watching**: Automatic detection of file changes
-- **Edit Operations**: Safe code modifications with conflict detection
-- **Content Deduplication**: Blake3 hashing with Zstd compression
-- **AI Agent**: Autonomous task execution with Z.ai GLM-4.6 LLM
-- **Tool System**: Built-in tools (read, edit, shell, trace, search)
-- **Checkpoints**: Resumable tasks with state persistence
-
-## Status
-
-| Milestone | Description | Status |
-|-----------|-------------|--------|
-| M1 | Storage + Init | ✅ Done |
-| M2 | Single-Language Graph | ✅ Done |
-| M3 | Actor + Sync | ✅ Done |
-| M4 | Agent | ✅ Done |
-| M5 | Multi-Language | ⏳ Pending |
-| M6 | Semantic Search | ⏳ Pending |
-
-**237 tests passing** | Rust 1.90 (2024 edition)
-
-## Quick Start
+## Use it
 
 ```bash
-# Initialize Mimir in your project
-mimir init
-
-# Check status
-mimir status
-
-# Start daemon (background process with auto-sync)
-mimir daemon start
-
-# Trace a symbol (uses daemon when available)
-mimir trace -f src/main.rs -s process_data
-
-# Edit with preview
-mimir edit -f src/lib.rs -m replace -s 10 -e 20 -c "new_code" -p
-
-# Run AI agent to complete a task
-ZAI_API_KEY=your-key mimir agent "Refactor the auth module"
-
-# List active tasks
-mimir tasks
-
-# Resume a paused task
-mimir resume <task-id>
-
-# Stop daemon when done
-mimir daemon stop
+cargo install --path crates/mimir-cli
 ```
 
-## Architecture
+In a git repository, nothing else is needed. The first command starts a daemon, which stops after 30
+idle minutes.
 
+```bash
+mimir trace -s process_data              # who calls it, what it calls
+mimir trace -s process_data --callers    # only who calls it
+mimir search --pattern "^process"        # symbols by regular expression
+mimir read -s process_data               # the source of a symbol
+mimir edit --symbol process_data --mode symbol --content "fn process_data() {}"
+mimir sync                               # up to date, wait until nothing is provisional
 ```
-Layer 7: Application    mimir-cli
-Layer 6: Agent          mimir-agent, mimir-llm, mimir-tools
-Layer 5: Execution      mimir-edit, mimir-tasks
-Layer 4: Graph          mimir-graph, mimir-graph-actor
-Layer 3: Index          mimir-symbols, mimir-relations, mimir-files
-Layer 2: Parsing        mimir-parse-core, mimir-parse-rust
-Layer 1: Storage        mimir-content, mimir-cache, mimir-persist, mimir-snapshot
-Layer 0: Primitives     mimir-types, mimir-error, mimir-protocol
-```
 
-## Crates
+In Claude Code, with the plugin in [integrations/claude-code](integrations/claude-code/README.md),
+the same operations are tools the model can use: `trace`, `search`, `read`, `edit_symbols`,
+`edit_lines`, `sync`, `status`. For any other MCP client, run `mimir mcp`.
 
-| Crate | Description |
-|-------|-------------|
-| `mimir-types` | Core types: IDs, Symbol, Location, Language |
-| `mimir-error` | Error hierarchy |
-| `mimir-protocol` | Commands, events, response types |
-| `mimir-content` | Content-addressed storage |
-| `mimir-cache` | LRU cache with moka |
-| `mimir-persist` | Bincode serialization |
-| `mimir-snapshot` | Snapshot create/restore |
-| `mimir-files` | File index and scanner |
-| `mimir-symbols` | Symbol table (DashMap) |
-| `mimir-relations` | Relationship graph (petgraph) |
-| `mimir-parse-core` | Language adapter infrastructure |
-| `mimir-parse-rust` | Rust language support |
-| `mimir-graph` | Graph facade |
-| `mimir-graph-actor` | Actor pattern for concurrent access |
-| `mimir-edit` | File editing with conflict detection |
-| `mimir-tasks` | Task lifecycle, checkpoints, persistence |
-| `mimir-llm` | LLM providers (Z.ai GLM-4.6, Anthropic) |
-| `mimir-tools` | Agent tools (read, edit, shell, trace, search) |
-| `mimir-agent` | Agent orchestration with tool execution loop |
-| `mimir-cli` | Command-line interface |
+## What an answer means
 
-## Call Resolution
+- A call in `trace` is exact. A call Mimir cannot be sure of is left out, never guessed.
+- `[via trait, possible]` and `[implementation, possible]`: which implementation runs is decided at
+  runtime.
+- `[as value, possible]`: a function named without being called, as in `.map(helper)`, or a constant
+  holding one. It may run later, or never.
+- `Partial:` analysis is still running, so calls may be missing. Ask again shortly.
 
-`mimir sync` takes call edges from a SCIP index written by `rust-analyzer`, the same tool an
-editor uses, so `x.get()` links to the `get` of `x`'s type, inside macros too. The index is
-cached and rebuilt only when a source file or manifest changes.
+Without `rust-analyzer`, or with `MIMIR_NO_SCIP=1`, only syntax rules apply. They find about half the
+calls, and `mimir sync` says how many files that covers.
 
-Without `rust-analyzer`, or with `MIMIR_NO_SCIP=1`, Mimir falls back to syntax rules. They leave
-out a call they cannot link for certain, so you get fewer callers, and `sync` tells you how many
-files were resolved this way.
+## How fast
 
-After an edit the index is kept, and a running `rust-analyzer` answers for the edited files only.
-Files that were not edited keep their edges until the next index, which `mimir sync --full`, a
-change to a manifest or more than 50 edited files will write. The daemon keeps that analyzer
-running and stops it after 10 idle minutes. A query waits half a second for all this; after that
-it answers from syntax rules for what is not done yet, and says the result is partial.
+On a copy of a project with 1311 Rust files and 20 168 symbols:
 
-A proc macro can fail at random while the index is written: `#[napi]` does when an `impl` is
-expanded before its struct. When the log names the macro, files with it on an `impl` go to the
-running analyzer too, so such a project pays for that on each sync until a new index succeeds.
+| | |
+|---|---|
+| A query with nothing changed | 0.01 to 0.02 s |
+| A first answer after an edit | under 1 s, marked partial until complete |
+| A complete answer after the first edit | about 22 s, then under 1 s |
+| From no daemon to a first answer | 2.5 s, with the index already written |
+| A first index | 1 to 2 minutes |
+| Memory | daemon about 200 to 340 MB; `rust-analyzer` 3.7 GB while in use, stopped after 10 idle minutes |
 
-**Accuracy** (Mimir's own workspace, calls between its functions, compared with `rust-analyzer`):
+## Accuracy
 
-- with `rust-analyzer`: 100% precision and recall
-- syntax only: 99.8% precision, 53.5% recall
+Mimir's call edges match the SCIP index they come from, and every entry of a hand-written list of
+traps in [crates/mimir-resolve-ra/tests/fixture.rs](crates/mimir-resolve-ra/tests/fixture.rs) holds:
+same names across types and crates, calls inside macros, trait methods. Scripts behind these numbers
+are in [scripts/bench](scripts/bench/README.md).
 
-A call through a trait, including `dyn`, links to the trait's method. `trace` then shows the
-implementations under it, and the trait's callers on each implementation, marked as possible
-because the target is decided at runtime. A function named without being called, as in
-`.map(helper)` or `&[run, stop]`, is not counted as a call: `trace` shows it on both sides marked
-`[as value, possible]`, because it may run later or never. A constant or static holding a function
-counts too, along with whoever uses that constant; other constants are left out. Without `rust-analyzer` this is found
-only outside macros, and a name bound in the function is taken for a local variable.
+Known limits: only Rust. A proc macro that fails silently while the index is written loses its calls;
+one that says so is handled.
 
-## Performance Targets
+## Develop
 
-- **Performance**: <100ms for trace() in 50k LOC project
-- **Cold start**: <5s to first working query
-- **Memory**: <500MB for 100k LOC project
-
-## Documentation
-
-- [Architecture](docs/ARCHITECTURE.md) - System design and data flow
-- [Phases](docs/PHASES.md) - Implementation milestones
-- [Decisions](docs/DECISIONS.md) - Architectural decisions
-- [CLI](docs/CLI.md) - Command-line usage
-- [Traits](docs/TRAITS.md) - Core trait definitions
+Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), the specification, and [CLAUDE.md](CLAUDE.md).
 
 ## License
 

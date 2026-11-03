@@ -24,13 +24,13 @@ edits by symbol. It is one binary, `mimir`, with no daemon to manage and no lang
 
 ## 2. Targets
 
-Each is a number `scripts/bench` can check, on a project of 20 000 symbols.
+Each is a number `scripts/bench` can check, on a project of 20 000 symbols. All hold today.
 
 | # | Target |
 |---|---|
 | T1 | A query with nothing changed: under 50 ms |
 | T2 | A query after an edit: first answer under 1 s, marked partial until complete |
-| T3 | From no daemon to a first answer, with the graph saved: under 5 s |
+| T3 | From no daemon to a first answer, with the index written: under 5 s |
 | T4 | Daemon idle, without the analyzer: under 400 MB |
 | T5 | Call edges: nothing lost against the SCIP index; every entry of the hand-written list in `crates/mimir-resolve-ra/tests/fixture.rs` holds |
 | T6 | After edits, the graph equals the graph from a new index: 0 differences |
@@ -43,7 +43,7 @@ Dependencies point inwards. IO lives at the edge.
   transports    mimir-cli, mimir-mcp, mimir-daemon     map a request to one engine call, nothing else
   client        mimir-client                           connect, start the daemon, one call per command
   wire          mimir-protocol                         requests and responses, typed
-  application   mimir-engine                           the one writer: sync, save, watch, query, edit
+  application   mimir-engine                           the one writer: sync, watch, query, edit
   adapters      mimir-resolve-ra, mimir-edit           rust-analyzer, files on disk
   ports + rules mimir-resolve                          linking rules and the port for a semantic source
   domain        mimir-graph, mimir-parse-core,         pure: no IO, no async, no clock, no environment
@@ -59,14 +59,21 @@ Dependencies point inwards. IO lives at the edge.
 | `mimir-resolve` | rules + port | turning references into edges; syntax rules; the port `SemanticSource` |
 | `mimir-resolve-ra` | adapter | the SCIP index and the running `rust-analyzer` |
 | `mimir-edit` | adapter | applying edits to files, with conflict detection |
-| `mimir-engine` | application | the actor; scanning, watching, saving the graph, the idle timer |
+| `mimir-engine` | application | the actor; scanning, watching, editing, reading source, saving the graph for measurements |
 | `mimir-protocol` | wire | every request and response over the socket |
-| `mimir-daemon` | transport | the socket server over the engine |
+| `mimir-daemon` | transport | the socket server over the engine, its lock and idle timer |
 | `mimir-client` | client | connecting, starting and restarting the daemon, the socket path |
 | `mimir-mcp` | transport | the MCP server: tools over the client |
 | `mimir-cli` | transport + composition | the `mimir` binary: arguments, output, which adapters run |
 
-Allowed dependencies between crates are listed in `scripts/check-architecture.sh` (`allowed`).
+Allowed dependencies between crates are listed in `scripts/check-architecture.sh` (`allowed`). The CLI chooses the semantic source, so only
+`commands/daemon.rs` names it.
+
+The socket is in a private directory under the system's temporary directory, by a hash of the
+project's path, because a socket's path is limited to about 100 characters. A daemon holds
+`.mimir/daemon.lock`, so a project has one. A client that finds a daemon of another version replaces
+it. `.mimir/graph/graph.json` is written by `mimir sync` for measurements; nothing reads it back,
+since the daemon builds the graph from the sources when it starts.
 
 ## 4. Rules
 
