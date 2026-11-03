@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tracing::{error, warn};
 
 use crate::actor::GraphActor;
-use crate::channel::{command_channel, event_channel};
+use crate::channel::command_channel;
 use crate::handle::GraphHandle;
 use crate::watcher::{FileWatcher, WatcherConfig, WatcherHandle};
 
@@ -39,11 +39,9 @@ pub async fn start(root: PathBuf, semantics: Arc<dyn SemanticSource>) -> Engine 
     registry.register(Arc::new(RustAdapter::new()));
 
     let (commands, receiver) = command_channel(256);
-    let (events, _) = event_channel(256);
     let actor = GraphActor::with_registry(root.clone(), Arc::new(registry), semantics);
-    let actor_events = events.clone();
     tokio::spawn(async move {
-        if let Err(e) = actor.run(receiver, actor_events).await {
+        if let Err(e) = actor.run(receiver).await {
             error!("The graph actor failed: {e}");
         }
     });

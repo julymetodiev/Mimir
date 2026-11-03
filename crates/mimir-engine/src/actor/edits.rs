@@ -1,7 +1,6 @@
 //! Applying edits to files, and taking the edited files into the graph at once.
 
 use crate::actor::GraphActor;
-use crate::channel::EventSender;
 use crate::error::GraphError;
 use crate::{edit, source};
 use mimir_edit::{EditError, EditOp, Editor};
@@ -17,7 +16,6 @@ impl GraphActor {
         edits: &[Edit],
         preview: bool,
         backup: bool,
-        events: &EventSender,
     ) -> Result<EditReport, GraphError> {
         let editor = if backup {
             Editor::new().with_backups()
@@ -26,13 +24,13 @@ impl GraphActor {
         };
         match self.apply_edits(&editor, edits, preview).await {
             Err(GraphError::Edit(EditError::HashMismatch { .. })) => {
-                self.scan_files(events).await?;
+                self.scan_files().await?;
                 let report = self.apply_edits(&editor, edits, preview).await?;
-                self.reload_edited(&report, preview, events)?;
+                self.reload_edited(&report, preview)?;
                 Ok(report)
             }
             Ok(report) => {
-                self.reload_edited(&report, preview, events)?;
+                self.reload_edited(&report, preview)?;
                 Ok(report)
             }
             Err(e) => Err(e),
@@ -113,12 +111,7 @@ impl GraphActor {
     }
 
     /// Take edited files into the graph at once, without waiting for the watcher to report them.
-    fn reload_edited(
-        &mut self,
-        report: &EditReport,
-        preview: bool,
-        events: &EventSender,
-    ) -> Result<(), GraphError> {
+    fn reload_edited(&mut self, report: &EditReport, preview: bool) -> Result<(), GraphError> {
         if preview {
             return Ok(());
         }
@@ -130,7 +123,7 @@ impl GraphActor {
             })?;
             let language = Language::from_path(&path);
             if self.registry.get_by_language(language).is_some() {
-                self.handle_add_file(path, content, language, events)?;
+                self.handle_add_file(path, content, language)?;
             }
         }
         Ok(())

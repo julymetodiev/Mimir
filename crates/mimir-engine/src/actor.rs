@@ -11,10 +11,9 @@ mod queries;
 #[cfg(test)]
 mod tests;
 
-use crate::channel::{CommandReceiver, EventSender};
+use crate::channel::CommandReceiver;
 use crate::command::GraphCommand;
 use crate::error::GraphError;
-use crate::event::GraphEvent;
 use mimir_graph::CodeGraph;
 use mimir_parse_core::AdapterRegistry;
 use mimir_protocol::SymbolInfo;
@@ -74,13 +73,6 @@ fn answer<T>(reply: oneshot::Sender<T>, value: T) {
     }
 }
 
-/// Send an event to its subscribers. With no subscriber, which is normal, nothing is lost.
-fn emit(events: &EventSender, event: GraphEvent) {
-    if events.send(event).is_err() {
-        debug!("No subscriber for the graph event");
-    }
-}
-
 /// The next command. Waiting for it is also when idle analyzers stop.
 async fn next_command(
     commands: &mut CommandReceiver,
@@ -124,11 +116,7 @@ impl GraphActor {
     }
 
     /// Run the actor's command processing loop.
-    pub async fn run(
-        mut self,
-        mut commands: CommandReceiver,
-        events: EventSender,
-    ) -> Result<(), GraphError> {
+    pub async fn run(mut self, mut commands: CommandReceiver) -> Result<(), GraphError> {
         info!("Graph actor starting for root: {}", self.root.display());
 
         while let Some(cmd) = next_command(&mut commands, self.semantics.as_ref()).await {
@@ -139,12 +127,12 @@ impl GraphActor {
                     language,
                     reply,
                 } => {
-                    let result = self.handle_add_file(path.clone(), content, language, &events);
+                    let result = self.handle_add_file(path.clone(), content, language);
                     answer(reply, result);
                 }
 
                 GraphCommand::RemoveFile { file_id, reply } => {
-                    let result = self.handle_remove_file(file_id, &events);
+                    let result = self.handle_remove_file(file_id);
                     answer(reply, result);
                 }
 
@@ -197,7 +185,7 @@ impl GraphActor {
                 }
 
                 GraphCommand::SyncComplete { full, reply } => {
-                    let result = self.handle_sync_complete(full, &events).await;
+                    let result = self.handle_sync_complete(full).await;
                     answer(reply, result);
                 }
 
@@ -207,7 +195,7 @@ impl GraphActor {
                     backup,
                     reply,
                 } => {
-                    let result = self.handle_edit(&edits, preview, backup, &events).await;
+                    let result = self.handle_edit(&edits, preview, backup).await;
                     answer(reply, result);
                 }
 
@@ -218,7 +206,7 @@ impl GraphActor {
                 }
 
                 GraphCommand::Sync { reply } => {
-                    let result = self.handle_sync(&events).await;
+                    let result = self.handle_sync().await;
                     answer(reply, result);
                 }
 

@@ -1,7 +1,7 @@
 //! Integration tests for mimir-engine.
 
+use mimir_engine::command_channel;
 use mimir_engine::{GraphActor, GraphHandle};
-use mimir_engine::{command_channel, event_channel};
 use mimir_parse_core::AdapterRegistry;
 use mimir_parse_rust::RustAdapter;
 use mimir_types::Language;
@@ -65,7 +65,6 @@ impl MyStruct {
 
     // Set up channels and actor
     let (cmd_tx, cmd_rx) = command_channel(64);
-    let (event_tx, _event_rx) = event_channel(64);
 
     let actor = GraphActor::with_registry(
         temp_dir.path().to_path_buf(),
@@ -74,7 +73,7 @@ impl MyStruct {
     );
 
     // Start actor
-    let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
+    let actor_handle = tokio::spawn(async move { actor.run(cmd_rx).await });
 
     let handle = GraphHandle::new(cmd_tx);
 
@@ -125,7 +124,6 @@ async fn test_incremental_sync() {
 
     // Set up channels and actor
     let (cmd_tx, cmd_rx) = command_channel(64);
-    let (event_tx, _event_rx) = event_channel(64);
 
     let actor = GraphActor::with_registry(
         temp_dir.path().to_path_buf(),
@@ -133,7 +131,7 @@ async fn test_incremental_sync() {
         Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
     );
 
-    let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
+    let actor_handle = tokio::spawn(async move { actor.run(cmd_rx).await });
 
     let handle = GraphHandle::new(cmd_tx);
 
@@ -178,7 +176,6 @@ async fn test_incremental_sync() {
 #[tokio::test]
 async fn test_add_file_directly() {
     let (cmd_tx, cmd_rx) = command_channel(64);
-    let (event_tx, mut event_rx) = event_channel(64);
 
     let actor = GraphActor::with_registry(
         PathBuf::from("/tmp"),
@@ -186,7 +183,7 @@ async fn test_add_file_directly() {
         Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
     );
 
-    let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
+    let actor_handle = tokio::spawn(async move { actor.run(cmd_rx).await });
 
     let handle = GraphHandle::new(cmd_tx);
 
@@ -201,8 +198,6 @@ async fn test_add_file_directly() {
         .unwrap();
 
     // Check we received the event
-    let event = event_rx.recv().await.unwrap();
-    assert!(matches!(event, mimir_engine::GraphEvent::FileAdded { .. }));
 
     // Find the symbols
     let fn_result = handle.find_symbol("test_fn").await.unwrap();
@@ -227,7 +222,6 @@ async fn test_add_file_directly() {
 #[tokio::test]
 async fn test_trace_symbols() {
     let (cmd_tx, cmd_rx) = command_channel(64);
-    let (event_tx, _event_rx) = event_channel(64);
 
     let actor = GraphActor::with_registry(
         PathBuf::from("/tmp"),
@@ -235,7 +229,7 @@ async fn test_trace_symbols() {
         Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
     );
 
-    let actor_handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
+    let actor_handle = tokio::spawn(async move { actor.run(cmd_rx).await });
 
     let handle = GraphHandle::new(cmd_tx);
 
@@ -321,14 +315,13 @@ async fn test_query_answers_before_the_index_is_done() {
         std::fs::copy(fixture.join(file), target).unwrap();
     }
     let (cmd_tx, cmd_rx) = command_channel(32);
-    let (event_tx, _event_rx) = event_channel(32);
     let actor = GraphActor::with_registry(
         project.clone(),
         create_test_registry(),
         Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
     )
     .with_query_wait(std::time::Duration::ZERO);
-    tokio::spawn(actor.run(cmd_rx, event_tx.clone()));
+    tokio::spawn(actor.run(cmd_rx));
     let handle = GraphHandle::new(cmd_tx);
     handle.sync().await.unwrap();
 
@@ -373,13 +366,12 @@ async fn test_edit_keeps_callers_in_other_files() {
         std::fs::copy(fixture.join(file), target).unwrap();
     }
     let (cmd_tx, cmd_rx) = command_channel(32);
-    let (event_tx, _event_rx) = event_channel(32);
     let actor = GraphActor::with_registry(
         project.clone(),
         create_test_registry(),
         Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
     );
-    tokio::spawn(actor.run(cmd_rx, event_tx.clone()));
+    tokio::spawn(actor.run(cmd_rx));
     let handle = GraphHandle::new(cmd_tx);
     handle.sync().await.unwrap();
 

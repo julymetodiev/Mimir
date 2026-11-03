@@ -1,5 +1,5 @@
 use super::*;
-use crate::channel::{command_channel, event_channel};
+use crate::channel::command_channel;
 use mimir_parse_rust::RustAdapter;
 use mimir_protocol::SearchOptions;
 use mimir_types::Language;
@@ -14,13 +14,12 @@ fn create_test_registry() -> Arc<AdapterRegistry> {
 async fn names_by_kind(kind: &str) -> Vec<String> {
     let source = "pub struct Point { x: i32 }\nenum Color { Red, Green }\nfn area(p: i32) -> i32 { p }\nstruct Wrap<T> { t: T }\n";
     let (cmd_tx, cmd_rx) = command_channel(16);
-    let (event_tx, _event_rx) = event_channel(16);
     let actor = GraphActor::with_registry(
         PathBuf::from("/tmp/test"),
         create_test_registry(),
         Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
     );
-    let handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
+    let handle = tokio::spawn(async move { actor.run(cmd_rx).await });
 
     let (reply_tx, reply_rx) = oneshot::channel();
     cmd_tx
@@ -75,7 +74,6 @@ async fn test_kind_filter_variant() {
 #[tokio::test]
 async fn test_actor_lifecycle() {
     let (cmd_tx, cmd_rx) = command_channel(16);
-    let (event_tx, _event_rx) = event_channel(16);
 
     let actor = GraphActor::with_registry(
         PathBuf::from("/tmp/test"),
@@ -83,7 +81,7 @@ async fn test_actor_lifecycle() {
         Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
     );
 
-    let handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
+    let handle = tokio::spawn(async move { actor.run(cmd_rx).await });
 
     cmd_tx.send(GraphCommand::Shutdown).await.unwrap();
     handle.await.unwrap().unwrap();
@@ -93,7 +91,6 @@ async fn test_actor_lifecycle() {
 #[tokio::test]
 async fn test_add_file() {
     let (cmd_tx, cmd_rx) = command_channel(16);
-    let (event_tx, mut event_rx) = event_channel(16);
 
     let actor = GraphActor::with_registry(
         PathBuf::from("/tmp/test"),
@@ -101,7 +98,7 @@ async fn test_add_file() {
         Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
     );
 
-    let handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
+    let handle = tokio::spawn(async move { actor.run(cmd_rx).await });
 
     // Add a file
     let (reply_tx, reply_rx) = oneshot::channel();
@@ -118,10 +115,6 @@ async fn test_add_file() {
     let file_id = reply_rx.await.unwrap().unwrap();
     assert_eq!(file_id, FileId::new(1));
 
-    // Check event was emitted
-    let event = event_rx.recv().await.unwrap();
-    assert!(matches!(event, GraphEvent::FileAdded { .. }));
-
     cmd_tx.send(GraphCommand::Shutdown).await.unwrap();
     handle.await.unwrap().unwrap();
 }
@@ -129,7 +122,6 @@ async fn test_add_file() {
 #[tokio::test]
 async fn test_find_symbol() {
     let (cmd_tx, cmd_rx) = command_channel(16);
-    let (event_tx, _event_rx) = event_channel(16);
 
     let actor = GraphActor::with_registry(
         PathBuf::from("/tmp/test"),
@@ -137,7 +129,7 @@ async fn test_find_symbol() {
         Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
     );
 
-    let handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
+    let handle = tokio::spawn(async move { actor.run(cmd_rx).await });
 
     // Add a file
     let (reply_tx, reply_rx) = oneshot::channel();
@@ -174,7 +166,6 @@ async fn test_find_symbol() {
 #[tokio::test]
 async fn test_stats() {
     let (cmd_tx, cmd_rx) = command_channel(16);
-    let (event_tx, _event_rx) = event_channel(16);
 
     let actor = GraphActor::with_registry(
         PathBuf::from("/tmp/test"),
@@ -182,7 +173,7 @@ async fn test_stats() {
         Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
     );
 
-    let handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
+    let handle = tokio::spawn(async move { actor.run(cmd_rx).await });
 
     // Add a file
     let (reply_tx, reply_rx) = oneshot::channel();
@@ -214,7 +205,6 @@ async fn test_stats() {
 #[tokio::test]
 async fn test_remove_file() {
     let (cmd_tx, cmd_rx) = command_channel(16);
-    let (event_tx, _event_rx) = event_channel(16);
 
     let actor = GraphActor::with_registry(
         PathBuf::from("/tmp/test"),
@@ -222,7 +212,7 @@ async fn test_remove_file() {
         Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
     );
 
-    let handle = tokio::spawn(async move { actor.run(cmd_rx, event_tx).await });
+    let handle = tokio::spawn(async move { actor.run(cmd_rx).await });
 
     // Add a file
     let (reply_tx, reply_rx) = oneshot::channel();
@@ -269,4 +259,16 @@ async fn test_remove_file() {
 
     cmd_tx.send(GraphCommand::Shutdown).await.unwrap();
     handle.await.unwrap().unwrap();
+}
+
+#[test]
+fn test_kind_filter_takes_short_and_full_names() {
+    use crate::actor::queries::kind_matches;
+    use mimir_types::SymbolKind;
+    assert!(kind_matches(SymbolKind::Constant, "const"));
+    assert!(kind_matches(SymbolKind::Constant, "Constant"));
+    assert!(kind_matches(SymbolKind::EnumVariant, "enum_variant"));
+    assert!(kind_matches(SymbolKind::TypeAlias, "type"));
+    assert!(!kind_matches(SymbolKind::EnumVariant, "enum"));
+    assert!(!kind_matches(SymbolKind::Function, "struct"));
 }

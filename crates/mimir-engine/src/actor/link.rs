@@ -1,9 +1,7 @@
 //! Resolving edges between files, and bringing the tracked files up to date with the disk.
 
-use crate::actor::{GraphActor, emit};
-use crate::channel::EventSender;
+use crate::actor::GraphActor;
 use crate::error::GraphError;
-use crate::event::GraphEvent;
 use crate::save;
 use crate::scanner::{ScannedFile, Scanner};
 use mimir_protocol::{LinkSummary, SyncResult};
@@ -84,12 +82,8 @@ impl GraphActor {
     }
 
     /// Scan, resolve every edge without settling for a provisional answer, and save the graph.
-    pub async fn handle_sync_complete(
-        &mut self,
-        full: bool,
-        events: &EventSender,
-    ) -> Result<SyncResult, GraphError> {
-        let mut result = self.scan_files(events).await?;
+    pub async fn handle_sync_complete(&mut self, full: bool) -> Result<SyncResult, GraphError> {
+        let mut result = self.scan_files().await?;
         let started = Instant::now();
 
         // A link still running gives way: this one covers the same files or newer ones.
@@ -124,17 +118,15 @@ impl GraphActor {
     }
 
     /// Scan for changes and resolve edges, settling for a provisional answer if that takes long.
-    pub async fn handle_sync(&mut self, events: &EventSender) -> Result<SyncResult, GraphError> {
-        let result = self.scan_files(events).await?;
+    pub async fn handle_sync(&mut self) -> Result<SyncResult, GraphError> {
+        let result = self.scan_files().await?;
         self.ensure_linked().await;
         Ok(result)
     }
 
     /// Bring the tracked files and their symbols up to date with the disk.
-    pub async fn scan_files(&mut self, events: &EventSender) -> Result<SyncResult, GraphError> {
+    pub async fn scan_files(&mut self) -> Result<SyncResult, GraphError> {
         let start = Instant::now();
-
-        emit(events, GraphEvent::SyncStarted);
 
         // Scan the directory
         let scanner = Scanner::new(&self.root);
@@ -165,13 +157,13 @@ impl GraphActor {
                 if tracked.content_hash != scanned.content_hash {
                     // File was updated - remove old, add new
                     if let Some(removed_count) =
-                        self.remove_file_by_path(&scanned.absolute_path.clone(), events)
+                        self.remove_file_by_path(&scanned.absolute_path.clone())
                     {
                         symbols_removed += removed_count;
                     }
 
                     // Add updated file
-                    match self.sync_add_file(&scanned, events) {
+                    match self.sync_add_file(&scanned) {
                         Ok(added_count) => {
                             symbols_added += added_count;
                             files_updated += 1;
@@ -188,7 +180,7 @@ impl GraphActor {
                 // File unchanged - skip
             } else {
                 // New file - add it
-                match self.sync_add_file(&scanned, events) {
+                match self.sync_add_file(&scanned) {
                     Ok(added_count) => {
                         symbols_added += added_count;
                         files_added += 1;
@@ -204,7 +196,7 @@ impl GraphActor {
         let tracked_paths: Vec<PathBuf> = self.files.keys().cloned().collect();
         for path in tracked_paths {
             if !seen_paths.contains(&path)
-                && let Some(removed_count) = self.remove_file_by_path(&path, events)
+                && let Some(removed_count) = self.remove_file_by_path(&path)
             {
                 symbols_removed += removed_count;
                 files_removed += 1;
@@ -232,23 +224,11 @@ impl GraphActor {
             files_added, files_updated, files_removed, duration_ms
         );
 
-        emit(
-            events,
-            GraphEvent::SyncCompleted {
-                files_processed: files_added + files_updated,
-                duration_ms,
-            },
-        );
-
         Ok(result)
     }
 
     /// Add a file during sync operation.
-    pub fn sync_add_file(
-        &mut self,
-        scanned: &ScannedFile,
-        events: &EventSender,
-    ) -> Result<usize, GraphError> {
+    pub fn sync_add_file(&mut self, scanned: &ScannedFile) -> Result<usize, GraphError> {
         // Read file content
         let content =
             std::fs::read_to_string(&scanned.absolute_path).map_err(|source| GraphError::Read {
@@ -262,7 +242,6 @@ impl GraphActor {
             content,
             scanned.content_hash,
             scanned.language,
-            events,
         )?;
 
         Ok(symbols_count)

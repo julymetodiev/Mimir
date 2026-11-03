@@ -1,72 +1,12 @@
-//! Actor-based graph management for Mimir.
-//!
-//! This crate provides an actor-based architecture for managing the code graph.
-//! The actor model ensures thread-safe access to the graph while allowing
-//! concurrent queries.
-//!
-//! # Architecture
-//!
-//! ```text
-//! ┌─────────────────┐
-//! │   GraphHandle   │──────┐
-//! │    (client)     │      │
-//! └─────────────────┘      │
-//!                          │ commands
-//! ┌─────────────────┐      │         ┌─────────────────┐
-//! │   GraphHandle   │──────┼────────▶│   GraphActor    │
-//! │    (client)     │      │         │    (owner)      │
-//! └─────────────────┘      │         └─────────────────┘
-//!                          │                  │
-//! ┌─────────────────┐      │                  │ events
-//! │   GraphHandle   │──────┘                  │
-//! │    (client)     │                         ▼
-//! └─────────────────┘               ┌─────────────────┐
-//!                                   │   Subscribers   │
-//!                                   └─────────────────┘
-//! ```
-//!
-//! # Example
-//!
-//! ```ignore
-//! use mimir_engine::{GraphActor, GraphHandle};
-//! use mimir_engine::{command_channel, event_channel};
-//! use std::path::PathBuf;
-//!
-//! #[tokio::main]
-//! async fn main() {
-//!     // Create channels
-//!     let (cmd_tx, cmd_rx) = command_channel(256);
-//!     let (event_tx, _event_rx) = event_channel(64);
-//!
-//!     // Start actor
-//!     let actor = GraphActor::with_registry(PathBuf::from("."), registry, semantics);
-//!     tokio::spawn(async move {
-//!         actor.run(cmd_rx, event_tx).await
-//!     });
-//!
-//!     // Create handle
-//!     let handle = GraphHandle::new(cmd_tx);
-//!
-//!     // Use handle
-//!     let file_id = handle.add_file(
-//!         PathBuf::from("src/main.rs"),
-//!         "fn main() {}".to_string(),
-//!         Language::Rust,
-//!     ).await?;
-//!
-//!     let response = handle.find_symbol("main").await?;
-//!     println!("Found: {:?}", response.symbols);
-//!
-//!     handle.shutdown().await?;
-//! }
-//! ```
+//! The application layer: one actor owns the graph and is the only writer. It scans and watches the
+//! project, resolves edges, answers queries and applies edits. [`start`] runs it for a project and
+//! gives a [`GraphHandle`], a cheap handle to send it commands.
 
 mod actor;
 mod channel;
 mod command;
 mod edit;
 mod error;
-mod event;
 mod handle;
 mod save;
 mod scanner;
@@ -75,9 +15,8 @@ mod start;
 mod watcher;
 
 pub use actor::GraphActor;
-pub use channel::{CommandSender, command_channel, event_channel};
+pub use channel::{CommandSender, command_channel};
 pub use command::GraphCommand;
 pub use error::GraphError;
-pub use event::GraphEvent;
 pub use handle::GraphHandle;
 pub use start::{Engine, start};

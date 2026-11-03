@@ -247,11 +247,10 @@ impl GraphActor {
                 || pattern.is_match(&symbol.qualified_name.to_string())
             {
                 // Apply kind filter if specified
-                if let Some(ref kind_filter) = options.kind_filter {
-                    let kind = symbol.kind.to_string();
-                    if !kind.contains(&kind_filter.to_lowercase()) {
-                        continue;
-                    }
+                if let Some(ref kind_filter) = options.kind_filter
+                    && !kind_matches(symbol.kind, kind_filter)
+                {
+                    continue;
                 }
 
                 matches.push(self.symbol_to_info(&symbol));
@@ -271,4 +270,20 @@ impl GraphActor {
             truncated,
         })
     }
+}
+
+/// Whether a kind is what a filter asks for: part of its short name, or its full name.
+pub fn kind_matches(kind: SymbolKind, filter: &str) -> bool {
+    let filter = filter.to_lowercase();
+    let full = match kind {
+        SymbolKind::Constant => "constant",
+        SymbolKind::Variable => "variable",
+        SymbolKind::Parameter => "parameter",
+        SymbolKind::TypeAlias => "type_alias",
+        SymbolKind::TypeParameter => "type_parameter",
+        SymbolKind::EnumVariant => "enum_variant",
+        _ => "",
+    };
+    let short = kind.to_string();
+    short.contains(&filter) || full == filter
 }

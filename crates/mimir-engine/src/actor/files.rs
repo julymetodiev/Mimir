@@ -1,9 +1,7 @@
 //! Adding, inserting and removing files in the graph.
 
-use crate::actor::{GraphActor, TrackedFile, emit};
-use crate::channel::EventSender;
+use crate::actor::{GraphActor, TrackedFile};
 use crate::error::GraphError;
-use crate::event::GraphEvent;
 use mimir_resolve::ProjectFile;
 use mimir_types::{ContentHash, FileId, Language, Symbol};
 use std::path::PathBuf;
@@ -16,7 +14,6 @@ impl GraphActor {
         path: PathBuf,
         content: String,
         language: Language,
-        events: &EventSender,
     ) -> Result<FileId, GraphError> {
         debug!("Adding file: {}", path.display());
 
@@ -26,14 +23,14 @@ impl GraphActor {
                 "File already exists, removing old version: {:?}",
                 tracked.file_id
             );
-            self.handle_remove_file(tracked.file_id, events)?;
+            self.handle_remove_file(tracked.file_id)?;
         }
 
         // Store reverse mapping for file path lookup
         let relative_path = path.strip_prefix(&self.root).unwrap_or(&path).to_path_buf();
         let content_hash = ContentHash::compute(content.as_bytes());
         let (file_id, _) =
-            self.insert_file(path, relative_path, content, content_hash, language, events)?;
+            self.insert_file(path, relative_path, content, content_hash, language)?;
 
         self.needs_link = true;
 
@@ -48,7 +45,6 @@ impl GraphActor {
         content: String,
         content_hash: ContentHash,
         language: Language,
-        events: &EventSender,
     ) -> Result<(FileId, usize), GraphError> {
         // Get adapter for this language
         let adapter = self
@@ -108,24 +104,11 @@ impl GraphActor {
 
         let symbols_count = extracted_symbols.len();
 
-        emit(
-            events,
-            GraphEvent::FileAdded {
-                file_id,
-                path,
-                symbols_count,
-            },
-        );
-
         Ok((file_id, symbols_count))
     }
 
     /// Handle removing a file from the graph.
-    pub fn handle_remove_file(
-        &mut self,
-        file_id: FileId,
-        events: &EventSender,
-    ) -> Result<bool, GraphError> {
+    pub fn handle_remove_file(&mut self, file_id: FileId) -> Result<bool, GraphError> {
         debug!("Removing file: {:?}", file_id);
 
         // Find and remove from tracked files
@@ -146,36 +129,16 @@ impl GraphActor {
         let was_removed = !removed.is_empty();
         self.needs_link = true;
 
-        if was_removed {
-            emit(
-                events,
-                GraphEvent::FileRemoved {
-                    file_id,
-                    path: PathBuf::new(),
-                },
-            );
-        }
-
         Ok(was_removed)
     }
 
     /// Remove a file by path.
-    pub fn remove_file_by_path(&mut self, path: &PathBuf, events: &EventSender) -> Option<usize> {
+    pub fn remove_file_by_path(&mut self, path: &PathBuf) -> Option<usize> {
         if let Some(tracked) = self.files.remove(path) {
             self.file_paths.remove(&tracked.file_id);
             self.sources.remove(&tracked.file_id);
             let removed = self.graph.remove_file(tracked.file_id);
             let symbols_removed = removed.len();
-
-            if symbols_removed > 0 {
-                emit(
-                    events,
-                    GraphEvent::FileRemoved {
-                        file_id: tracked.file_id,
-                        path: path.clone(),
-                    },
-                );
-            }
 
             Some(symbols_removed)
         } else {
