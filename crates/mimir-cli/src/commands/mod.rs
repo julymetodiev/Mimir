@@ -96,8 +96,9 @@ pub enum Commands {
         #[arg(long)]
         symbol: Option<String>,
 
-        /// Edit mode: replace, insert, delete, lines, symbol, after.
-        /// 'symbol' replaces a whole symbol; 'after' adds new code right after one.
+        /// Edit mode: replace, insert, delete, lines, symbol, after, text.
+        /// 'symbol' replaces a whole symbol; 'after' adds new code right after one;
+        /// 'text' replaces --old with --content.
         #[arg(short, long, default_value = "replace")]
         mode: String,
 
@@ -116,6 +117,14 @@ pub enum Commands {
         /// New content to insert or replace with.
         #[arg(short, long)]
         content: Option<String>,
+
+        /// The exact text to replace, for 'text' mode. It must occur once unless --all is given.
+        #[arg(long)]
+        old: Option<String>,
+
+        /// Replace every place --old occurs.
+        #[arg(long)]
+        all: bool,
 
         /// Preview changes without applying.
         #[arg(short, long)]

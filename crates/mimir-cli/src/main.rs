@@ -77,6 +77,8 @@ async fn main() -> anyhow::Result<()> {
             end,
             content,
             preview,
+            old,
+            all,
             backup,
         } => {
             let edit_mode: commands::edit::EditMode =
@@ -88,6 +90,8 @@ async fn main() -> anyhow::Result<()> {
                 start,
                 end,
                 content,
+                old,
+                all,
                 preview,
                 backup,
             })

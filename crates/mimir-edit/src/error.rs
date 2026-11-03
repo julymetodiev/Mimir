@@ -36,6 +36,21 @@ pub enum EditError {
         total_lines: u32,
     },
 
+    #[error("The text to replace is not in {path}: it must match exactly, so read the file again")]
+    TextNotFound { path: PathBuf },
+
+    #[error(
+        "The text to replace occurs {count} times in {path}, on lines {lines}: include lines around it to say which, or ask for all"
+    )]
+    TextNotUnique {
+        path: PathBuf,
+        count: usize,
+        lines: String,
+    },
+
+    #[error("No text to replace was given for {path}")]
+    EmptyText { path: PathBuf },
+
     #[error("Overlapping edits detected in batch operation")]
     OverlappingEdits,
 

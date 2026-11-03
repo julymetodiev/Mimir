@@ -1,6 +1,6 @@
 ---
 name: mimir-code
-description: Use Mimir instead of Grep, Glob, Read and Write in a project (MCP tools named grep, files, read_file, trace, search, read, edit_symbols, insert_after, edit_lines, write_file, sync, status) - for searching text in any file, finding files by name, reading a file, creating a file, before changing, renaming or removing a Rust function, when asking who calls something or what it calls, when tracing a bug through calls, when finding a symbol by name, or when replacing a function, struct or impl or adding code next to one.
+description: Use Mimir instead of Grep, Glob, Read, Edit and Write in a project (MCP tools named grep, files, read_file, trace, search, read, edit_symbols, insert_after, edit_lines, replace_text, write_file, sync, status) - for searching text in any file, finding files by name, reading a file, creating a file, before changing, renaming or removing a Rust function, when asking who calls something or what it calls, when tracing a bug through calls, when finding a symbol by name, or when replacing a function, struct or impl or adding code next to one.
 ---
 
 # Mimir
@@ -20,6 +20,7 @@ of `x`'s type. Plain text search cannot tell same-named methods apart, so use `t
 | A symbol's source, without knowing its file | `read` |
 | Replace whole functions, structs or impls | `edit_symbols` |
 | Add a function, method, variant or field after an existing symbol | `insert_after` |
+| Change a few words or lines in any file, without line numbers | `replace_text` |
 | Replace lines in a file | `edit_lines` |
 | Create a file, in any language; `overwrite: true` to replace one | `write_file` |
 
@@ -46,7 +47,8 @@ Outside the project, use your usual tools: Mimir reads only the project's files.
 `edit_symbols` replaces a symbol's lines. Doc comments and attributes above it are not part of it.
 When several symbols share a name, such as `new`, it fails and lists them: pass `file`, or a
 qualified name such as `Kind::Variant`. `insert_after` adds code below a symbol the same way.
-Use `preview: true` when unsure. A file changed since it was read is re-read first, so the right
+`replace_text` needs the exact text, with enough around it to occur once; otherwise it fails and
+names the lines. With several edits, if one does not apply, no file changes. Use `preview: true` when unsure. A file changed since it was read is re-read first, so the right
 lines are replaced, and if the edit still does not apply it fails rather than guess.
 
 After editing, a `trace` shows the new calls at once. `sync` is rarely needed; changes are followed

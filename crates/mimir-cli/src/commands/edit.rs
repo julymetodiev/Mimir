@@ -21,6 +21,8 @@ pub enum EditMode {
     Symbol,
     /// Add new code after a symbol (requires --symbol).
     After,
+    /// Replace exact text (requires --old).
+    Text,
 }
 
 impl std::str::FromStr for EditMode {
@@ -34,8 +36,9 @@ impl std::str::FromStr for EditMode {
             "lines" => Ok(Self::Lines),
             "symbol" => Ok(Self::Symbol),
             "after" => Ok(Self::After),
+            "text" => Ok(Self::Text),
             _ => Err(format!(
-                "Unknown edit mode: {s}. Use: replace, insert, delete, lines, symbol, after"
+                "Unknown edit mode: {s}. Use: replace, insert, delete, lines, symbol, after, text"
             )),
         }
     }
@@ -49,6 +52,8 @@ pub struct EditRequest<'a> {
     pub start: Option<u32>,
     pub end: Option<u32>,
     pub content: Option<String>,
+    pub old: Option<String>,
+    pub all: bool,
     pub preview: bool,
     pub backup: bool,
 }
@@ -96,6 +101,11 @@ pub async fn execute(request: EditRequest<'_>) -> Result<()> {
         EditMode::Delete => EditChange::Delete {
             start: start()?,
             end: end()?,
+        },
+        EditMode::Text => EditChange::Text {
+            old: request.old.clone().context("This mode requires --old")?,
+            new: content()?,
+            all: request.all,
         },
     };
     apply(

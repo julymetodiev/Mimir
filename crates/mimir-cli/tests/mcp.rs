@@ -115,6 +115,7 @@ fn test_tools_work_end_to_end() {
         "files",
         "read_file",
         "edit_lines",
+        "replace_text",
         "write_file",
         "sync",
         "status",
@@ -219,6 +220,66 @@ fn test_tools_work_end_to_end() {
     let (outside, failed) = server.call(
         "write_file",
         json!({"file": "../outside.txt", "content": "x"}),
+    );
+    assert!(
+        failed && outside.contains("outside the project"),
+        "{outside}"
+    );
+
+    fs::write(project.path().join("notes.md"), "one two\nthree one\n").unwrap();
+    fs::write(project.path().join("more.md"), "keep\n").unwrap();
+    let (many, failed) = server.call(
+        "replace_text",
+        json!({"edits": [
+            {"file": "more.md", "old": "keep", "new": "changed"},
+            {"file": "notes.md", "old": "one", "new": "1"}
+        ]}),
+    );
+    assert!(failed && many.contains("on lines 1, 2"), "{many}");
+    assert_eq!(
+        fs::read_to_string(project.path().join("more.md")).unwrap(),
+        "keep\n"
+    );
+
+    let (preview, failed) = server.call(
+        "replace_text",
+        json!({"edits": [{"file": "more.md", "old": "keep", "new": "changed"}], "preview": true}),
+    );
+    assert!(!failed && preview.contains("+changed"), "{preview}");
+    assert_eq!(
+        fs::read_to_string(project.path().join("more.md")).unwrap(),
+        "keep\n"
+    );
+
+    let (done, failed) = server.call(
+        "replace_text",
+        json!({"edits": [
+            {"file": "notes.md", "old": "one two", "new": "1 2"},
+            {"file": "notes.md", "old": "1 2", "new": "first"},
+            {"file": "more.md", "old": "keep", "new": "changed"}
+        ]}),
+    );
+    assert!(!failed, "{done}");
+    assert_eq!(
+        fs::read_to_string(project.path().join("notes.md")).unwrap(),
+        "first\nthree one\n"
+    );
+    assert_eq!(
+        fs::read_to_string(project.path().join("more.md")).unwrap(),
+        "changed\n"
+    );
+
+    let (done, failed) = server.call(
+        "replace_text",
+        json!({"edits": [{"file": "src/lib.rs", "old": "helper()", "new": "helper_two()", "all": true}]}),
+    );
+    assert!(!failed, "{done}");
+    let (found, failed) = server.call("search", json!({"pattern": "^helper_two$"}));
+    assert!(!failed && found.contains("src/lib.rs"), "{found}");
+
+    let (outside, failed) = server.call(
+        "replace_text",
+        json!({"edits": [{"file": "/etc/hosts", "old": "a", "new": "b"}]}),
     );
     assert!(
         failed && outside.contains("outside the project"),

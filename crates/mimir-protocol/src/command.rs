@@ -91,6 +91,8 @@ pub enum EditChange {
     Insert { at: u32, content: String },
     /// Delete a byte range.
     Delete { start: u32, end: u32 },
+    /// Replace text that must occur once, or every place it occurs if `all` is set.
+    Text { old: String, new: String, all: bool },
 }
 
 /// One edit.

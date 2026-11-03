@@ -32,7 +32,7 @@ misses and does not confuse same-named methods. An entry marked possible (via tr
 implementation, as value) may run at runtime or not. A result with provisional true is still \
 being resolved: ask again shortly. Use grep instead of searching text with other tools: each match says which symbol it is in. \
 Use files to find files and read_file to read them. Use read and search to find code by symbol, \
-edit_symbols to replace whole symbols, insert_after to add code and write_file to create a file.";
+edit_symbols to replace whole symbols, insert_after to add code, replace_text for small changes and write_file to create a file.";
 
 /// Serve MCP on stdin and stdout until the client disconnects.
 pub async fn serve(from: PathBuf) -> Result<(), McpError> {
@@ -174,6 +174,29 @@ struct EditLinesArguments {
     end: u32,
     /// The new text.
     content: String,
+    /// Only show what would change.
+    #[serde(default)]
+    preview: bool,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct TextEdit {
+    /// The file, by absolute path or relative to the project.
+    file: PathBuf,
+    /// The exact text to find, with enough around it to occur once. It may span lines.
+    old: String,
+    /// What to put in its place.
+    new: String,
+    /// Replace every place it occurs, instead of refusing when there are several.
+    #[serde(default)]
+    all: bool,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ReplaceTextArguments {
+    /// The replacements, applied together: if one does not apply, no file changes. In one file they
+    /// apply in this order, each to the result of the one before.
+    edits: Vec<TextEdit>,
     /// Only show what would change.
     #[serde(default)]
     preview: bool,
@@ -395,7 +418,30 @@ impl MimirServer {
     }
 
     #[tool(
-        description = "Create a new file of the project, in any language, with its directories. An existing file is refused unless overwrite is true. To change part of a file, use edit_symbols or edit_lines."
+        description = "Replace exact text in files of the project, in any language, without line numbers. Text that is not there or occurs several times is refused, naming the lines. Use this instead of other edit tools for a small change."
+    )]
+    async fn replace_text(
+        &self,
+        Parameters(arguments): Parameters<ReplaceTextArguments>,
+    ) -> Result<String, String> {
+        let edits = arguments
+            .edits
+            .into_iter()
+            .map(|edit| Edit {
+                target: EditTarget::File(edit.file),
+                change: EditChange::Text {
+                    old: edit.old,
+                    new: edit.new,
+                    all: edit.all,
+                },
+            })
+            .collect();
+        self.with_client(async |client| client.edit(edits, arguments.preview, false).await)
+            .await
+    }
+
+    #[tool(
+        description = "Create a new file of the project, in any language, with its directories. An existing file is refused unless overwrite is true. To change part of a file, use replace_text or edit_symbols."
     )]
     async fn write_file(
         &self,

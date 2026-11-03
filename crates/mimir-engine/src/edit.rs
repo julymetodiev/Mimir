@@ -74,6 +74,7 @@ pub fn on_file(path: &Path, change: &EditChange) -> Result<EditOp, GraphError> {
         } => EditOp::replace(path, Span::new(*start, *end), content),
         EditChange::Insert { at, content } => EditOp::insert(path, *at, content),
         EditChange::Delete { start, end } => EditOp::delete(path, Span::new(*start, *end)),
+        EditChange::Text { old, new, all } => EditOp::replace_text(path, old, new, *all),
     })
 }
 

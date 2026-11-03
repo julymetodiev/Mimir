@@ -47,6 +47,7 @@ mod atomic;
 mod editor;
 mod error;
 mod op;
+mod text;
 
 pub use error::EditError;
 

@@ -55,6 +55,20 @@ pub enum EditOp {
         /// Expected content hash for optimistic locking.
         expected_hash: Option<ContentHash>,
     },
+
+    /// Replace text found by what it says.
+    ReplaceText {
+        /// Path to the file.
+        file_path: PathBuf,
+        /// The text to find, which must occur once unless `all` is set.
+        old: String,
+        /// What to put in its place.
+        new: String,
+        /// Replace every place it occurs.
+        all: bool,
+        /// Expected content hash for optimistic locking.
+        expected_hash: Option<ContentHash>,
+    },
 }
 
 impl EditOp {
@@ -111,6 +125,22 @@ impl EditOp {
         }
     }
 
+    /// Create a replace text operation.
+    pub fn replace_text(
+        file_path: impl Into<PathBuf>,
+        old: impl Into<String>,
+        new: impl Into<String>,
+        all: bool,
+    ) -> Self {
+        Self::ReplaceText {
+            file_path: file_path.into(),
+            old: old.into(),
+            new: new.into(),
+            all,
+            expected_hash: None,
+        }
+    }
+
     /// Set the expected hash for optimistic locking.
     pub fn with_expected_hash(mut self, hash: ContentHash) -> Self {
         match &mut self {
@@ -118,6 +148,7 @@ impl EditOp {
             Self::Insert { expected_hash, .. } => *expected_hash = Some(hash),
             Self::Delete { expected_hash, .. } => *expected_hash = Some(hash),
             Self::ReplaceLines { expected_hash, .. } => *expected_hash = Some(hash),
+            Self::ReplaceText { expected_hash, .. } => *expected_hash = Some(hash),
         }
         self
     }
@@ -129,6 +160,7 @@ impl EditOp {
             Self::Insert { file_path, .. } => file_path,
             Self::Delete { file_path, .. } => file_path,
             Self::ReplaceLines { file_path, .. } => file_path,
+            Self::ReplaceText { file_path, .. } => file_path,
         }
     }
 
@@ -139,6 +171,7 @@ impl EditOp {
             Self::Insert { expected_hash, .. } => expected_hash.as_ref(),
             Self::Delete { expected_hash, .. } => expected_hash.as_ref(),
             Self::ReplaceLines { expected_hash, .. } => expected_hash.as_ref(),
+            Self::ReplaceText { expected_hash, .. } => expected_hash.as_ref(),
         }
     }
 }

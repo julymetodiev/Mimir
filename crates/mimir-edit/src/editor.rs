@@ -2,6 +2,7 @@
 
 use crate::atomic;
 use crate::op::{Diff, EditOp, EditResult as OpResult};
+use crate::text;
 use crate::{EditError, EditResult};
 use mimir_types::ContentHash;
 use std::path::{Path, PathBuf};
@@ -334,6 +335,14 @@ impl Editor {
 
                 Ok(result)
             }
+
+            EditOp::ReplaceText {
+                file_path,
+                old,
+                new,
+                all,
+                ..
+            } => text::replaced(file_path, content, old, new, *all),
         }
     }
 
@@ -344,6 +353,8 @@ impl Editor {
             EditOp::Insert { position, .. } => *position,
             EditOp::Delete { span, .. } => span.start,
             EditOp::ReplaceLines { start_line, .. } => *start_line * 10000, // Approximate
+            // Found in the text as it is by then, so these go last and in the order given.
+            EditOp::ReplaceText { .. } => 0,
         }
     }
 
@@ -356,6 +367,7 @@ impl Editor {
                 EditOp::Insert { position, .. } => Some((*position, *position)),
                 EditOp::Delete { span, .. } => Some((span.start, span.end)),
                 EditOp::ReplaceLines { .. } => None, // Line operations handled separately
+                EditOp::ReplaceText { .. } => None,  // Found in the text as it is by then
             })
             .collect();
 
@@ -391,6 +403,7 @@ impl Editor {
                     old_lines[(*start_line as usize - 1)..(*end_line as usize)].join("\n");
                 (*start_line, *end_line, old_region, new_content.clone())
             }
+            EditOp::ReplaceText { .. } => text::changed_lines(old, new),
             _ => {
                 // For byte-based operations, find affected lines
                 let old_lines: Vec<&str> = old.lines().collect();
