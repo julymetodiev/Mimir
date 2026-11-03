@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use mimir_resolve::{ProjectFile, Refresh, ScipIndex, SemanticSource};
+use mimir_resolve::{ProjectFile, Refresh, SemanticIndex, SemanticSource};
 
 pub use index::load_or_generate;
 pub use live::Analyzers;
@@ -27,7 +27,7 @@ impl SemanticSource for RustAnalyzer {
         cache_dir: &Path,
         files: &[ProjectFile],
         refresh: Refresh,
-    ) -> Vec<ScipIndex> {
+    ) -> Vec<SemanticIndex> {
         // Reading what is saved uses no analyzer, so it must not wait for one that is busy.
         if refresh == Refresh::Saved {
             let mut none = Analyzers::default();

@@ -1,6 +1,7 @@
 //! What the graph holds follows the disk, whoever changed it, and is what a scan would find.
 
 use mimir_engine::{Engine, GraphHandle, start};
+use mimir_parse_rust::RustAdapter;
 use mimir_protocol::{Edit, EditChange, EditTarget};
 use mimir_resolve::NoSemanticSource;
 use std::path::{Path, PathBuf};
@@ -20,7 +21,12 @@ async fn engine(files: &[(&str, &str)]) -> (TempDir, PathBuf, Engine) {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
     }
-    let engine = start(root.clone(), Arc::new(NoSemanticSource)).await;
+    let engine = start(
+        root.clone(),
+        vec![Arc::new(RustAdapter::new())],
+        Arc::new(NoSemanticSource),
+    )
+    .await;
     // The first scan is done when the first answer comes.
     engine.handle().stats().await.unwrap();
     (dir, root, engine)

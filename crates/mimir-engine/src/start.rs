@@ -1,7 +1,6 @@
 //! Starting the engine for a project: the actor, its languages and the file watcher.
 
-use mimir_parse_core::AdapterRegistry;
-use mimir_parse_rust::RustAdapter;
+use mimir_parse_core::{AdapterRegistry, LanguageAdapter};
 use mimir_resolve::SemanticSource;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -39,14 +38,20 @@ impl Engine {
 }
 
 /// Start the engine for `root` and queue the first scan, which any later command waits for.
-pub async fn start(root: PathBuf, semantics: Arc<dyn SemanticSource>) -> Engine {
+pub async fn start(
+    root: PathBuf,
+    languages: Vec<Arc<dyn LanguageAdapter>>,
+    semantics: Arc<dyn SemanticSource>,
+) -> Engine {
     let leftovers_of = root.clone();
     tokio::task::spawn_blocking(move || {
         scanner::remove_leftover_writes(&leftovers_of, LEFTOVER_AGE);
     });
 
     let registry = AdapterRegistry::new();
-    registry.register(Arc::new(RustAdapter::new()));
+    for language in languages {
+        registry.register(language);
+    }
 
     let (commands, receiver) = command_channel(256);
     let actor = GraphActor::with_registry(root.clone(), Arc::new(registry), semantics);

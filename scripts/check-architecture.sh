@@ -36,19 +36,22 @@ allowed() {
     mimir-types) echo "" ;;
     mimir-parse-core) echo "mimir-types" ;;
     mimir-parse-rust) echo "mimir-types mimir-parse-core" ;;
+    mimir-parse-ts) echo "mimir-types mimir-parse-core" ;;
     mimir-graph) echo "mimir-types" ;;
     mimir-resolve) echo "mimir-types mimir-graph mimir-parse-core" ;;
-    mimir-resolve-ra) echo "mimir-types mimir-parse-core mimir-resolve" ;;
+    mimir-lsp) echo "mimir-types" ;;
+    mimir-resolve-ra) echo "mimir-types mimir-parse-core mimir-resolve mimir-lsp" ;;
+    mimir-resolve-tsrs) echo "mimir-types mimir-parse-core mimir-resolve mimir-lsp" ;;
     mimir-edit) echo "mimir-types" ;;
     mimir-protocol) echo "mimir-types" ;;
-    mimir-engine) echo "mimir-types mimir-graph mimir-parse-core mimir-parse-rust mimir-resolve mimir-edit mimir-protocol" ;;
-    mimir-daemon) echo "mimir-protocol mimir-engine mimir-resolve" ;;
+    mimir-engine) echo "mimir-types mimir-graph mimir-parse-core mimir-resolve mimir-edit mimir-protocol" ;;
+    mimir-daemon) echo "mimir-protocol mimir-engine mimir-parse-core mimir-resolve" ;;
     mimir-client) echo "mimir-types mimir-protocol" ;;
     mimir-mcp) echo "mimir-protocol mimir-client" ;;
     mimir-view-wire) echo "" ;;
     mimir-view) echo "mimir-types mimir-protocol mimir-client mimir-view-wire" ;;
     mimir-view-page) echo "mimir-view-wire" ;;
-    mimir-cli) echo "mimir-types mimir-protocol mimir-client mimir-daemon mimir-mcp mimir-view mimir-resolve mimir-resolve-ra" ;;
+    mimir-cli) echo "mimir-types mimir-protocol mimir-client mimir-daemon mimir-mcp mimir-view mimir-parse-core mimir-parse-rust mimir-parse-ts mimir-resolve mimir-resolve-ra mimir-resolve-tsrs" ;;
     *) echo "NOT-IN-SPEC" ;;
   esac
 }
@@ -71,7 +74,7 @@ unused_deps() { # dependencies declared but not named in the crate's source
   done
   echo "$n"
 }
-DOMAIN='crates/mimir-types crates/mimir-graph crates/mimir-parse-core crates/mimir-parse-rust'
+DOMAIN='crates/mimir-types crates/mimir-graph crates/mimir-parse-core crates/mimir-parse-rust crates/mimir-parse-ts'
 TRANSPORT='crates/mimir-cli crates/mimir-mcp crates/mimir-daemon crates/mimir-client crates/mimir-view'
 
 now() {

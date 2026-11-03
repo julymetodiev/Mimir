@@ -4,7 +4,7 @@
 Compares what the manifests declare with crates.io. `cargo outdated` compares the lock file, and
 can miss a dependency a major version behind.
 """
-import json, pathlib, sys, tomllib, urllib.request
+import json, pathlib, re, sys, tomllib, urllib.request
 
 
 def declared():
@@ -38,6 +38,13 @@ def behind(version, newest):
 
 stale = [(name, version, latest(name)) for name, version in sorted(declared().items())]
 stale = [entry for entry in stale if behind(entry[1], entry[2])]
+
+# `tsrs` runs as a program, and the version it was measured with is in the code.
+tested = re.search(r'TESTED_VERSION: &str = "(.+?)"', pathlib.Path("crates/mimir-resolve-tsrs/src/lib.rs").read_text()).group(1)
+with urllib.request.urlopen("https://registry.npmjs.org/tsrs/latest", timeout=20) as response:
+    newest_tsrs = json.load(response)["version"].split("-")[0]
+if tested != newest_tsrs:
+    stale.append(("tsrs", tested, newest_tsrs))
 for name, version, newest in stale:
     print(f"error: {name} is at {version}, the latest is {newest}")
 if not stale:

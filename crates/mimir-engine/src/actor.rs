@@ -19,7 +19,7 @@ use crate::project_files;
 use mimir_graph::CodeGraph;
 use mimir_parse_core::AdapterRegistry;
 use mimir_protocol::{ActivityKind, GraphEvent, SymbolInfo};
-use mimir_resolve::{ProjectFile, ScipIndex, SemanticSource};
+use mimir_resolve::{ProjectFile, SemanticIndex, SemanticSource};
 use mimir_types::{ContentHash, FileId, IdGenerator, Symbol};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -93,7 +93,7 @@ fn answer<T>(reply: oneshot::Sender<T>, value: T) {
 enum Next {
     Command(Option<GraphCommand>),
     /// The semantic resolution a sync waits for has ended.
-    LinkEnded(Result<Vec<ScipIndex>, tokio::task::JoinError>),
+    LinkEnded(Result<Vec<SemanticIndex>, tokio::task::JoinError>),
 }
 
 /// The next thing to do. Waiting for it is also when idle analyzers stop.

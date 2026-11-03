@@ -1115,9 +1115,13 @@ dependencies = [
  "mimir-client",
  "mimir-daemon",
  "mimir-mcp",
+ "mimir-parse-core",
+ "mimir-parse-rust",
+ "mimir-parse-ts",
  "mimir-protocol",
  "mimir-resolve",
  "mimir-resolve-ra",
+ "mimir-resolve-tsrs",
  "mimir-view",
  "mimir-view-wire",
  "predicates",
@@ -1145,6 +1149,8 @@ name = "mimir-daemon"
 version = "0.2.0"
 dependencies = [
  "mimir-engine",
+ "mimir-parse-core",
+ "mimir-parse-rust",
  "mimir-protocol",
  "mimir-resolve",
  "serde_json",
@@ -1175,6 +1181,7 @@ dependencies = [
  "mimir-graph",
  "mimir-parse-core",
  "mimir-parse-rust",
+ "mimir-parse-ts",
  "mimir-protocol",
  "mimir-resolve",
  "mimir-resolve-ra",
@@ -1200,6 +1207,16 @@ dependencies = [
  "petgraph",
  "serde",
  "tempfile",
+]
+
+[[package]]
+name = "mimir-lsp"
+version = "0.2.0"
+dependencies = [
+ "mimir-types",
+ "serde_json",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -1239,6 +1256,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "mimir-parse-ts"
+version = "0.2.0"
+dependencies = [
+ "mimir-parse-core",
+ "mimir-types",
+ "tree-sitter",
+ "tree-sitter-javascript",
+ "tree-sitter-typescript",
+]
+
+[[package]]
 name = "mimir-protocol"
 version = "0.2.0"
 dependencies = [
@@ -1264,8 +1292,24 @@ name = "mimir-resolve-ra"
 version = "0.2.0"
 dependencies = [
  "mimir-graph",
+ "mimir-lsp",
  "mimir-parse-core",
  "mimir-parse-rust",
+ "mimir-resolve",
+ "mimir-types",
+ "serde_json",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "mimir-resolve-tsrs"
+version = "0.2.0"
+dependencies = [
+ "mimir-graph",
+ "mimir-lsp",
+ "mimir-parse-core",
+ "mimir-parse-ts",
  "mimir-resolve",
  "mimir-types",
  "serde_json",
@@ -2253,6 +2297,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-javascript"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68204f2abc0627a90bdf06e605f5c470aa26fdcb2081ea553a04bdad756693f5"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-language"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2263,6 +2317,16 @@ name = "tree-sitter-rust"
 version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "439e577dbe07423ec2582ac62c7531120dbfccfa6e5f92406f93dd271a120e45"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-typescript"
+version = "0.23.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c5f76ed8d947a75cc446d5fccd8b602ebf0cde64ccf2ffa434d873d7a575eff"
 dependencies = [
  "cc",
  "tree-sitter-language",

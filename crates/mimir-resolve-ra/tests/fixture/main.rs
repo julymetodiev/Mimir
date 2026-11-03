@@ -13,7 +13,7 @@ use expected::{
 use std::collections::BTreeSet;
 
 use mimir_graph::{EdgeKind, TraceRelationship};
-use mimir_resolve::{Refresh, ScipIndex, link};
+use mimir_resolve::{Refresh, SemanticIndex, link};
 use mimir_resolve_ra::{Analyzers, load_or_generate};
 use support::{
     call_edges, callees_of, edges_of_kind, expected, find, implementation_edges, index, label,
@@ -23,7 +23,7 @@ use support::{
 #[test]
 fn syntax_rules_never_guess() {
     let (graph, files) = index();
-    let indexes: [ScipIndex; 0] = [];
+    let indexes: [SemanticIndex; 0] = [];
     let report = link(&graph, &files, &indexes);
 
     let linked = call_edges(&graph, &files);

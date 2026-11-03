@@ -19,8 +19,12 @@ mimir-client = { workspace = true }
 mimir-daemon = { workspace = true }
 mimir-mcp = { workspace = true }
 mimir-view = { workspace = true }
+mimir-parse-core = { workspace = true }
+mimir-parse-rust = { workspace = true }
+mimir-parse-ts = { workspace = true }
 mimir-resolve = { workspace = true }
 mimir-resolve-ra = { workspace = true }
+mimir-resolve-tsrs = { workspace = true }
 clap = { workspace = true }
 tokio = { workspace = true }
 tracing-subscriber = { workspace = true }

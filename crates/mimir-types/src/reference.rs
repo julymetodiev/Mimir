@@ -56,6 +56,9 @@ pub enum ReferenceKind {
 
     /// A field read, written or named in a pattern.
     FieldUse,
+
+    /// A field written, where a parser can tell: a setter runs, not a getter.
+    FieldWrite,
 }
 
 impl ReferenceKind {}
@@ -71,6 +74,7 @@ impl fmt::Display for ReferenceKind {
             Self::LocalRead => "local_read",
             Self::TypeUse => "type_use",
             Self::FieldUse => "field_use",
+            Self::FieldWrite => "field_write",
         };
         write!(f, "{}", s)
     }

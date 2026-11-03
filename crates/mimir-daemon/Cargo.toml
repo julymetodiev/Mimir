@@ -12,6 +12,7 @@ publish = false
 [dependencies]
 mimir-protocol.workspace = true
 mimir-engine.workspace = true
+mimir-parse-core.workspace = true
 mimir-resolve.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -19,4 +20,5 @@ tokio.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+mimir-parse-rust.workspace = true
 tempfile.workspace = true

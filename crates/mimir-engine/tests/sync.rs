@@ -2,7 +2,7 @@
 
 use mimir_engine::start;
 use mimir_protocol::{ActivityKind, GraphEvent, SnapshotEdgeKind, TraceOptions};
-use mimir_resolve::{NoSemanticSource, ProjectFile, Refresh, ScipIndex, SemanticSource};
+use mimir_resolve::{NoSemanticSource, ProjectFile, Refresh, SemanticIndex, SemanticSource};
 use mimir_types::Language;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
@@ -24,7 +24,7 @@ impl HeldIndex {
 }
 
 impl SemanticSource for HeldIndex {
-    fn load(&self, _: &Path, _: &Path, _: &[ProjectFile], refresh: Refresh) -> Vec<ScipIndex> {
+    fn load(&self, _: &Path, _: &Path, _: &[ProjectFile], refresh: Refresh) -> Vec<SemanticIndex> {
         if matches!(refresh, Refresh::Full) {
             let mut released = self.released.lock().unwrap();
             while !*released {
@@ -48,7 +48,12 @@ async fn test_queries_are_answered_during_a_sync_and_the_sync_still_ends() {
     .unwrap();
 
     let source = Arc::new(HeldIndex::default());
-    let engine = start(root.clone(), source.clone()).await;
+    let engine = start(
+        root.clone(),
+        vec![Arc::new(mimir_parse_rust::RustAdapter::new())],
+        source.clone(),
+    )
+    .await;
     let handle = engine.handle().clone();
     handle.stats().await.unwrap();
 
@@ -99,7 +104,12 @@ async fn test_a_file_changed_during_a_sync_keeps_its_edges() {
     std::fs::write(root.join("b.rs"), "fn callee() {}\n").unwrap();
 
     let source = Arc::new(HeldIndex::default());
-    let engine = start(root.clone(), source.clone()).await;
+    let engine = start(
+        root.clone(),
+        vec![Arc::new(mimir_parse_rust::RustAdapter::new())],
+        source.clone(),
+    )
+    .await;
     let handle = engine.handle().clone();
     handle.stats().await.unwrap();
 
@@ -134,7 +144,12 @@ async fn test_a_file_with_the_same_text_keeps_its_symbols() {
     let dir = TempDir::new().unwrap();
     let root = dir.path().canonicalize().unwrap();
     std::fs::write(root.join("a.rs"), "fn a() {}\n").unwrap();
-    let engine = start(root.clone(), Arc::new(NoSemanticSource)).await;
+    let engine = start(
+        root.clone(),
+        vec![Arc::new(mimir_parse_rust::RustAdapter::new())],
+        Arc::new(NoSemanticSource),
+    )
+    .await;
     let handle = engine.handle();
     let before = handle.find_symbol("a").await.unwrap().symbols[0].id;
 
@@ -153,7 +168,12 @@ async fn test_a_sync_without_a_semantic_source_is_answered() {
     let dir = TempDir::new().unwrap();
     let root = dir.path().canonicalize().unwrap();
     std::fs::write(root.join("a.rs"), "fn a() {}\n").unwrap();
-    let engine = start(root, Arc::new(NoSemanticSource)).await;
+    let engine = start(
+        root,
+        vec![Arc::new(mimir_parse_rust::RustAdapter::new())],
+        Arc::new(NoSemanticSource),
+    )
+    .await;
 
     let result = engine.handle().sync_complete(false).await.unwrap();
 
@@ -171,7 +191,12 @@ async fn test_a_watcher_hears_changes_and_activity() {
         "fn caller() { callee(); }\nfn callee() {}\n",
     )
     .unwrap();
-    let engine = start(root.clone(), Arc::new(NoSemanticSource)).await;
+    let engine = start(
+        root.clone(),
+        vec![Arc::new(mimir_parse_rust::RustAdapter::new())],
+        Arc::new(NoSemanticSource),
+    )
+    .await;
     let handle = engine.handle().clone();
     handle.stats().await.unwrap();
 

@@ -8,9 +8,12 @@ use mimir_types::{FileId, Symbol, SymbolKind};
 
 use crate::ProjectFile;
 
-/// Whether a symbol is a function or method.
+/// Whether a symbol is a function, method or constructor.
 pub fn is_callable(symbol: &Symbol) -> bool {
-    matches!(symbol.kind, SymbolKind::Function | SymbolKind::Method)
+    matches!(
+        symbol.kind,
+        SymbolKind::Function | SymbolKind::Method | SymbolKind::Constructor
+    )
 }
 
 /// Whether a symbol is a type, trait, alias, variant or field.
@@ -18,6 +21,8 @@ pub fn is_data(symbol: &Symbol) -> bool {
     matches!(
         symbol.kind,
         SymbolKind::Struct
+            | SymbolKind::Class
+            | SymbolKind::Interface
             | SymbolKind::Enum
             | SymbolKind::EnumVariant
             | SymbolKind::Union
@@ -160,6 +165,35 @@ impl SymbolTable {
             .collect();
         named.sort_by_key(|s| s.span.start);
         named.get(n).copied()
+    }
+
+    /// The next function or method with this name from a line on: what an overload's signature
+    /// declares, since overloads are one symbol, at the body.
+    pub fn definition_after(&self, file: FileId, line: u32, name: &str) -> Option<&Arc<Symbol>> {
+        self.by_file
+            .get(&file)?
+            .iter()
+            .filter(|s| s.name == name && s.range.start_line >= line)
+            .min_by_key(|s| s.range.start_line)
+    }
+
+    /// The methods a class declares in a file.
+    pub fn methods_in_owner(&self, file: FileId, owner: &str) -> Vec<Arc<Symbol>> {
+        self.by_file
+            .get(&file)
+            .into_iter()
+            .flatten()
+            .filter(|s| owner_of(s) == Some(owner))
+            .cloned()
+            .collect()
+    }
+
+    /// The constructor a class declares in a file.
+    pub fn constructor_of(&self, file: FileId, class: &str) -> Option<&Arc<Symbol>> {
+        self.by_file.get(&file)?.iter().find(|s| {
+            s.kind == SymbolKind::Constructor
+                && s.qualified_name.segments().first().map(String::as_str) == Some(class)
+        })
     }
 
     /// The constant or static with this name declared on a line.

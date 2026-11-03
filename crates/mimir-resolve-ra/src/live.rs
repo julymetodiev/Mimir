@@ -17,8 +17,10 @@ use mimir_resolve::{LiveDocument, ProjectFile, Target, type_name};
 
 mod lsp;
 
-pub use crate::live::lsp::stop;
-use crate::live::lsp::{Analyzer, Location};
+use mimir_lsp::Location;
+pub use mimir_lsp::stop;
+
+use crate::live::lsp::Analyzer;
 
 /// Going to the definition of these lands on what they use (`fmt`, `from_str`, `from`), not on
 /// them. Those are not the calls written here, and an index does not report them.
@@ -122,7 +124,7 @@ fn resolve_documents(
                 .filter_map(target)
                 .collect();
             if reference.kind == ReferenceKind::FieldUse {
-                document.field_sites.insert((line, column), found);
+                document.all_sites.insert((line, column), found);
                 continue;
             }
             if let Some(found) = choose(found, &reference.name)

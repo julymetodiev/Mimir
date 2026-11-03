@@ -13,6 +13,7 @@ publish = false
 mimir-types.workspace = true
 mimir-parse-core.workspace = true
 mimir-resolve.workspace = true
+mimir-lsp.workspace = true
 tracing.workspace = true
 serde_json.workspace = true
 

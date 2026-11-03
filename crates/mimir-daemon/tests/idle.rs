@@ -13,6 +13,7 @@ async fn test_stops_when_idle() {
     let served = mimir_daemon::run(
         root,
         Duration::from_millis(200),
+        vec![Arc::new(mimir_parse_rust::RustAdapter::new())],
         Arc::new(mimir_resolve::NoSemanticSource),
     );
     tokio::time::timeout(Duration::from_secs(20), served)
@@ -32,6 +33,7 @@ async fn test_stops_when_its_project_is_gone() {
     let served = tokio::spawn(mimir_daemon::run(
         root.clone(),
         Duration::from_secs(3600),
+        vec![Arc::new(mimir_parse_rust::RustAdapter::new())],
         Arc::new(mimir_resolve::NoSemanticSource),
     ));
     while !socket.exists() {
@@ -59,6 +61,7 @@ async fn test_a_watcher_keeps_the_daemon_until_it_goes() {
     let served = tokio::spawn(mimir_daemon::run(
         root.clone(),
         Duration::from_millis(200),
+        vec![Arc::new(mimir_parse_rust::RustAdapter::new())],
         Arc::new(mimir_resolve::NoSemanticSource),
     ));
     // The socket's file comes a moment before it listens.

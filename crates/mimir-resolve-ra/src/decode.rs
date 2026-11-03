@@ -2,12 +2,12 @@
 
 use std::path::PathBuf;
 
-use mimir_resolve::{Occurrence, ScipIndex};
+use mimir_resolve::{Occurrence, SemanticIndex};
 
 /// Decode what is needed of `scip.proto`: `Index.documents = 2`; `Document.relative_path = 1`,
 /// `occurrences = 2`; `Occurrence.range = 1`, `symbol = 2`, `symbol_roles = 3`.
-pub fn decode(bytes: &[u8]) -> Result<ScipIndex, String> {
-    let mut index = ScipIndex::default();
+pub fn decode(bytes: &[u8]) -> Result<SemanticIndex, String> {
+    let mut index = SemanticIndex::default();
     for field in Fields::new(bytes) {
         if let (2, Value::Bytes(document)) = field? {
             let mut path = None;

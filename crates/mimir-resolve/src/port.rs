@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::ProjectFile;
@@ -16,7 +17,7 @@ pub trait SemanticSource: Send + Sync {
         cache_dir: &Path,
         files: &[ProjectFile],
         refresh: Refresh,
-    ) -> Vec<ScipIndex>;
+    ) -> Vec<SemanticIndex>;
 
     /// Give up whatever is held for the next edit, if unused for `idle`.
     fn stop_if_idle(&self, idle: Duration);
@@ -26,11 +27,54 @@ pub trait SemanticSource: Send + Sync {
 pub struct NoSemanticSource;
 
 impl SemanticSource for NoSemanticSource {
-    fn load(&self, _: &Path, _: &Path, _: &[ProjectFile], _: Refresh) -> Vec<ScipIndex> {
+    fn load(&self, _: &Path, _: &Path, _: &[ProjectFile], _: Refresh) -> Vec<SemanticIndex> {
         Vec::new()
     }
 
     fn stop_if_idle(&self, _: Duration) {}
+}
+
+/// Several sources as one. Each picks the files of its language out of what it is given, and each
+/// works at the same time: one may take minutes.
+pub struct SemanticSources {
+    sources: Vec<Arc<dyn SemanticSource>>,
+}
+
+impl SemanticSources {
+    pub fn new(sources: Vec<Arc<dyn SemanticSource>>) -> Self {
+        Self { sources }
+    }
+}
+
+impl SemanticSource for SemanticSources {
+    fn load(
+        &self,
+        project: &Path,
+        cache_dir: &Path,
+        files: &[ProjectFile],
+        refresh: Refresh,
+    ) -> Vec<SemanticIndex> {
+        std::thread::scope(|scope| {
+            let running: Vec<_> = self
+                .sources
+                .iter()
+                .map(|source| scope.spawn(move || source.load(project, cache_dir, files, refresh)))
+                .collect();
+            running
+                .into_iter()
+                .flat_map(|source| match source.join() {
+                    Ok(indexes) => indexes,
+                    Err(panic) => std::panic::resume_unwind(panic),
+                })
+                .collect()
+        })
+    }
+
+    fn stop_if_idle(&self, idle: Duration) {
+        for source in &self.sources {
+            source.stop_if_idle(idle);
+        }
+    }
 }
 
 /// What a position in an edited file refers to. `line` is 1-based.
@@ -47,9 +91,9 @@ pub struct Target {
 pub struct LiveDocument {
     /// By a reference's start: 1-based line, 0-based column.
     pub sites: HashMap<(u32, u32), Target>,
-    /// Every answer for a site that may be a field. In `Config { name }` the name is a field and a
+    /// Every answer for a site that may have several. In `Config { name }` the name is a field and a
     /// variable at once, and the server gives both.
-    pub field_sites: HashMap<(u32, u32), Vec<Target>>,
+    pub all_sites: HashMap<(u32, u32), Vec<Target>>,
     /// The trait of each `impl Tr for T`, by the line of the `impl`.
     pub traits: HashMap<u32, Target>,
 }
@@ -67,11 +111,12 @@ pub struct Occurrence {
 
 /// A decoded index. Document paths are relative to `root`, itself relative to the project.
 #[derive(Debug, Clone, Default)]
-pub struct ScipIndex {
+pub struct SemanticIndex {
     pub root: PathBuf,
     pub documents: HashMap<PathBuf, Vec<Occurrence>>,
-    /// Files edited since the index, by path relative to the project.
-    pub live: HashMap<PathBuf, LiveDocument>,
+    /// Files a running language server answered for, by path relative to the project: for Rust those
+    /// edited since the index, and for a language with no index, every file.
+    pub answers: HashMap<PathBuf, LiveDocument>,
     /// Files edited since the index with no answers yet, which syntax rules resolve for now.
     pub unanswered: HashSet<PathBuf>,
 }
@@ -88,7 +133,7 @@ pub enum Refresh {
     Saved,
 }
 
-impl ScipIndex {
+impl SemanticIndex {
     pub fn covers(&self, path: &Path) -> bool {
         path.strip_prefix(&self.root)
             .is_ok_and(|p| self.documents.contains_key(p))
@@ -96,7 +141,7 @@ impl ScipIndex {
 
     /// Whether a file changed since the index, so its entries here no longer hold.
     pub fn is_edited(&self, path: &Path) -> bool {
-        self.live.contains_key(path) || self.unanswered.contains(path)
+        self.answers.contains_key(path) || self.unanswered.contains(path)
     }
 
     /// Whether the index holds any file under a directory.
@@ -104,5 +149,54 @@ impl ScipIndex {
         self.documents
             .keys()
             .any(|path| self.root.join(path).starts_with(dir))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    #[derive(Default)]
+    struct Fake {
+        root: &'static str,
+        idle: Mutex<Vec<Duration>>,
+    }
+
+    impl SemanticSource for Fake {
+        fn load(&self, _: &Path, _: &Path, _: &[ProjectFile], _: Refresh) -> Vec<SemanticIndex> {
+            vec![SemanticIndex {
+                root: PathBuf::from(self.root),
+                ..SemanticIndex::default()
+            }]
+        }
+
+        fn stop_if_idle(&self, idle: Duration) {
+            self.idle.lock().unwrap().push(idle);
+        }
+    }
+
+    #[test]
+    fn several_sources_answer_as_one_in_their_order() {
+        let first = Arc::new(Fake {
+            root: "a",
+            ..Fake::default()
+        });
+        let second = Arc::new(Fake {
+            root: "b",
+            ..Fake::default()
+        });
+        let all = SemanticSources::new(vec![first.clone(), second.clone()]);
+
+        let roots: Vec<PathBuf> = all
+            .load(Path::new("."), Path::new("."), &[], Refresh::Saved)
+            .into_iter()
+            .map(|index| index.root)
+            .collect();
+        assert_eq!(roots, [PathBuf::from("a"), PathBuf::from("b")]);
+
+        all.stop_if_idle(Duration::from_secs(1));
+        assert_eq!(first.idle.lock().unwrap().len(), 1);
+        assert_eq!(second.idle.lock().unwrap().len(), 1);
     }
 }

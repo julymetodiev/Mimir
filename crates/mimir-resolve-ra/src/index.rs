@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use mimir_resolve::{ProjectFile, Refresh, ScipIndex};
+use mimir_resolve::{ProjectFile, Refresh, SemanticIndex};
 use mimir_types::ContentHash;
 use tracing::{info, warn};
 
@@ -30,13 +30,13 @@ pub fn load_or_generate(
     files: &[ProjectFile],
     analyzers: &mut Analyzers,
     refresh: Refresh,
-) -> Vec<ScipIndex> {
+) -> Vec<SemanticIndex> {
     let rust: Vec<&Path> = files
         .iter()
         .map(|f| f.path.as_path())
         .filter(|p| p.is_relative() && p.extension().is_some_and(|e| e == "rs"))
         .collect();
-    let mut indexes: Vec<ScipIndex> = Vec::new();
+    let mut indexes: Vec<SemanticIndex> = Vec::new();
     let mut tried: HashSet<PathBuf> = HashSet::new();
     while tried.len() < MAX_ROOTS {
         let uncovered = rust
@@ -94,7 +94,7 @@ fn next_cargo_root(
     project: &Path,
     file: &Path,
     tried: &HashSet<PathBuf>,
-    indexes: &[ScipIndex],
+    indexes: &[SemanticIndex],
 ) -> Option<PathBuf> {
     let dirs: Vec<&Path> = file.ancestors().skip(1).collect();
     dirs.into_iter()
@@ -114,7 +114,7 @@ fn load_root(
     files: &[ProjectFile],
     analyzers: &mut Analyzers,
     refresh: Refresh,
-) -> Result<ScipIndex, LoadError> {
+) -> Result<SemanticIndex, LoadError> {
     let abs = project.join(root);
     let snapshot = Snapshot::of(project, root, files);
     let stem = format!(
@@ -129,7 +129,7 @@ fn load_root(
         cache_dir.join(format!("{stem}.log")),
         cache_dir.join(format!("{stem}.macros")),
     );
-    let read = || -> Result<ScipIndex, LoadError> {
+    let read = || -> Result<SemanticIndex, LoadError> {
         let bytes = fs::read(&index_file).map_err(|e| LoadError::Failed(e.to_string()))?;
         let mut index = decode(&bytes)?;
         index.root = root.to_path_buf();
@@ -167,7 +167,7 @@ fn load_root(
             }
             match analyzers.resolve(project, &abs, files, &asked) {
                 Ok(live) => {
-                    index.live = live;
+                    index.answers = live;
                     return Ok(index);
                 }
                 // A new index would not help files whose macros may fail again.
@@ -225,7 +225,7 @@ fn load_root(
             .collect();
         fs::write(&failed_file, list).map_err(|e| LoadError::Failed(e.to_string()))?;
         match analyzers.resolve(project, &abs, files, &suspects) {
-            Ok(live) => index.live = live,
+            Ok(live) => index.answers = live,
             Err(e) => warn!(
                 "No running analyzer for {:?}, keeping what the index says: {e}",
                 root
@@ -282,7 +282,7 @@ fn names_macro(line: &str, name: &str) -> bool {
 /// Files whose index entries no longer hold: changed ones it covered, and new ones.
 /// A changed file it did not cover is behind `cfg`, where an analyzer knows no more than it did.
 fn edited_files<'a>(
-    index: &ScipIndex,
+    index: &SemanticIndex,
     saved: &Snapshot,
     now: &Snapshot,
     files: &'a [ProjectFile],
@@ -398,10 +398,10 @@ mod tests {
             fs::create_dir_all(project.join(dir)).unwrap();
             fs::write(project.join(dir).join("Cargo.toml"), "").unwrap();
         }
-        let index = ScipIndex {
+        let index = SemanticIndex {
             root: PathBuf::new(),
             documents: HashMap::from([(PathBuf::from("crates/member/src/lib.rs"), Vec::new())]),
-            ..ScipIndex::default()
+            ..SemanticIndex::default()
         };
         let tried = HashSet::from([PathBuf::new()]);
         let next = |file: &str| {

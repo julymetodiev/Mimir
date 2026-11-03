@@ -26,7 +26,7 @@ pub enum McpError {
 }
 
 /// What the server tells a model about itself.
-const INSTRUCTIONS: &str = "Mimir knows the call graph of this project, from rust-analyzer. Use \
+const INSTRUCTIONS: &str = "Mimir knows the call graph of this project, from its language's compiler. Use \
 trace before changing a function, to see who calls it and what it calls: it finds callers grep \
 misses and does not confuse same-named methods. An entry marked possible (via trait, \
 implementation, as value) may run at runtime or not. A result with provisional true is still \

@@ -5,7 +5,7 @@ use crate::error::GraphError;
 use crate::save;
 use crate::scanner::{ScannedFile, Scanner};
 use mimir_protocol::{LinkSummary, SyncResult};
-use mimir_resolve::{LinkReport, ProjectFile, Refresh, ScipIndex, link};
+use mimir_resolve::{LinkReport, ProjectFile, Refresh, SemanticIndex, link};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tokio::sync::oneshot;
@@ -13,7 +13,7 @@ use tracing::{debug, info, warn};
 
 /// Semantic resolution running in the background, for a set of files.
 pub struct PendingLink {
-    pub indexes: tokio::task::JoinHandle<Vec<ScipIndex>>,
+    pub indexes: tokio::task::JoinHandle<Vec<SemanticIndex>>,
     files: Vec<ProjectFile>,
     /// The graph already holds what syntax rules give for these files.
     linked_by_syntax: bool,
@@ -88,7 +88,7 @@ impl GraphActor {
     }
 
     /// Take in what semantic resolution found, and answer the syncs that wait for it.
-    pub fn finish_link(&mut self, indexes: Result<Vec<ScipIndex>, tokio::task::JoinError>) {
+    pub fn finish_link(&mut self, indexes: Result<Vec<SemanticIndex>, tokio::task::JoinError>) {
         let Some(pending) = self.pending.take() else {
             return;
         };

@@ -2,6 +2,7 @@
 //! call. It stops when no request has come for a while; the next client starts it again.
 
 use mimir_engine::GraphHandle;
+use mimir_parse_core::LanguageAdapter;
 use mimir_protocol::{GraphEvent, IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult};
 use mimir_resolve::SemanticSource;
 use std::fs::{self, File, TryLockError};
@@ -81,6 +82,7 @@ impl LastUsed {
 pub async fn run(
     root: PathBuf,
     idle: Duration,
+    languages: Vec<Arc<dyn LanguageAdapter>>,
     semantics: Arc<dyn SemanticSource>,
 ) -> Result<(), DaemonError> {
     let agent_dir = root.join(".mimir");
@@ -112,7 +114,7 @@ pub async fn run(
     }
 
     // The first scan is queued before anyone connects, so every query waits for it in the actor.
-    let engine = mimir_engine::start(root.clone(), semantics).await;
+    let engine = mimir_engine::start(root.clone(), languages, semantics).await;
     let listener = UnixListener::bind(&socket).map_err(io_error("bind", &socket))?;
     info!("Serving {} on {}", root.display(), socket.display());
 

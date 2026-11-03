@@ -5,9 +5,12 @@ members = [
     # M2: Graph crates
     "crates/mimir-parse-core",
     "crates/mimir-parse-rust",
+    "crates/mimir-parse-ts",
     "crates/mimir-graph",
     "crates/mimir-resolve",
+    "crates/mimir-lsp",
     "crates/mimir-resolve-ra",
+    "crates/mimir-resolve-tsrs",
     # M3: Actor crates
     "crates/mimir-edit",
     "crates/mimir-protocol",
@@ -37,11 +40,14 @@ mimir-types = { path = "crates/mimir-types" }
 # Internal crates - Layer 2 (Parsing)
 mimir-parse-core = { path = "crates/mimir-parse-core" }
 mimir-parse-rust = { path = "crates/mimir-parse-rust" }
+mimir-parse-ts = { path = "crates/mimir-parse-ts" }
 
 # Internal crates - Layer 3
 mimir-graph = { path = "crates/mimir-graph" }
 mimir-resolve = { path = "crates/mimir-resolve" }
+mimir-lsp = { path = "crates/mimir-lsp" }
 mimir-resolve-ra = { path = "crates/mimir-resolve-ra" }
+mimir-resolve-tsrs = { path = "crates/mimir-resolve-tsrs" }
 mimir-edit = { path = "crates/mimir-edit" }
 mimir-protocol = { path = "crates/mimir-protocol" }
 mimir-engine = { path = "crates/mimir-engine" }
@@ -80,6 +86,8 @@ regex = "1.13.1"
 # Parsing
 tree-sitter = "0.27.1"
 tree-sitter-rust = "0.24.2"
+tree-sitter-typescript = "0.23.2"
+tree-sitter-javascript = "0.25.0"
 
 # CLI
 clap = { version = "4.6.7", features = ["derive"] }

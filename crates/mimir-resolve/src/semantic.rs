@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use mimir_graph::EdgeKind;
-use mimir_types::{Confidence, FileId, ReferenceKind, Span, Symbol, SymbolKind};
+use mimir_types::{Confidence, FileId, Language, ReferenceKind, Span, Symbol, SymbolKind};
 
 use crate::ProjectFile;
 use crate::definitions::{
@@ -14,14 +14,15 @@ use crate::definitions::{
 };
 use crate::edges::{ConstantUse, EdgeSet, files_by_path};
 use crate::lookup::{SymbolTable, trait_of};
-use crate::port::{LiveDocument, Occurrence, ScipIndex};
+use crate::port::{LiveDocument, Occurrence, SemanticIndex};
+use crate::script;
 
 /// Add an edge for each call and each function named as a value in the indexes.
 /// Returns the files they cover.
 pub fn resolve(
     table: &SymbolTable,
     files: &[ProjectFile],
-    indexes: &[ScipIndex],
+    indexes: &[SemanticIndex],
     edges: &mut EdgeSet,
     constant_uses: &mut Vec<ConstantUse>,
 ) -> HashSet<FileId> {
@@ -189,12 +190,16 @@ pub fn resolve(
             }
         }
 
-        for (path, document) in &index.live {
+        for (path, document) in &index.answers {
             let Some(file) = by_path.get(path.as_path()) else {
                 continue;
             };
             covered.insert(file.file_id);
-            resolve_live(table, file, document, &by_path, edges, constant_uses);
+            if Language::from_path(path).family() == Language::TypeScript {
+                script::resolve_answers(table, file, document, &by_path, edges, constant_uses);
+            } else {
+                resolve_live(table, file, document, &by_path, edges, constant_uses);
+            }
         }
     }
     covered
@@ -233,7 +238,7 @@ fn add_data_uses(
     }
 }
 
-fn add_data_use(from: &Symbol, target: &Symbol, span: Span, edges: &mut EdgeSet) {
+pub fn add_data_use(from: &Symbol, target: &Symbol, span: Span, edges: &mut EdgeSet) {
     if from.id == target.id {
         return;
     }
@@ -258,7 +263,7 @@ fn resolve_live(
         let (line, column) = (reference.range.start_line, reference.range.start_col);
         if reference.kind == ReferenceKind::FieldUse {
             let field = document
-                .field_sites
+                .all_sites
                 .get(&(line, column))
                 .into_iter()
                 .flatten()

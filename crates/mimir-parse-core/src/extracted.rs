@@ -110,10 +110,16 @@ pub struct ExtractedReference {
     /// Name of the containing symbol (the "from" side).
     pub container: Option<String>,
 
-    /// How a call or function value is written; `context` holds its receiver or path.
-    /// `None` for anything else.
+    /// How a call or function value is written; `context` holds its receiver or path. On an import,
+    /// [`CallForm::Bound`] says that the name here is not the name in the other file. `None` for
+    /// anything else.
     #[serde(default)]
     pub call_form: Option<CallForm>,
+
+    /// Where a semantic source can be asked what a receiver's type is: its last name, as a 1-based
+    /// line and a column. `None` if it has no such name, as in `make().run()`, or is `this`.
+    #[serde(default)]
+    pub receiver_at: Option<(u32, u32)>,
 }
 
 /// How a call is written, which decides what its name can refer to.
@@ -127,6 +133,9 @@ pub enum CallForm {
     Scoped,
     /// `Struct { name }`, which only a value can be.
     Shorthand,
+    /// `name()` where the function around it also binds `name`, somewhere. Only a semantic source
+    /// can say which one it is.
+    Bound,
 }
 
 impl ExtractedReference {
@@ -141,12 +150,19 @@ impl ExtractedReference {
             context: None,
             container: None,
             call_form: None,
+            receiver_at: None,
         }
     }
 
     /// Set the form of a call.
     pub fn with_call_form(mut self, form: CallForm) -> Self {
         self.call_form = Some(form);
+        self
+    }
+
+    /// Set where a receiver's type can be asked for.
+    pub fn with_receiver_at(mut self, at: Option<(u32, u32)>) -> Self {
+        self.receiver_at = at;
         self
     }
 

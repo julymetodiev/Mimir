@@ -9,6 +9,7 @@ use std::path::Path;
 pub enum Language {
     Rust,
     TypeScript,
+    Tsx,
     JavaScript,
     Python,
     Go,
@@ -25,7 +26,8 @@ impl Language {
     pub fn from_extension(ext: &str) -> Self {
         match ext.to_lowercase().as_str() {
             "rs" => Self::Rust,
-            "ts" | "tsx" | "mts" | "cts" => Self::TypeScript,
+            "ts" | "mts" | "cts" => Self::TypeScript,
+            "tsx" => Self::Tsx,
             "js" | "jsx" | "mjs" | "cjs" => Self::JavaScript,
             "py" | "pyi" | "pyw" => Self::Python,
             "go" => Self::Go,
@@ -50,6 +52,7 @@ impl Language {
         match self {
             Self::Rust => "Rust",
             Self::TypeScript => "TypeScript",
+            Self::Tsx => "TSX",
             Self::JavaScript => "JavaScript",
             Self::Python => "Python",
             Self::Go => "Go",
@@ -58,6 +61,14 @@ impl Language {
             Self::C => "C",
             Self::Cpp => "C++",
             Self::Unknown => "Unknown",
+        }
+    }
+
+    /// Languages whose files can call each other, and so are linked together.
+    pub const fn family(&self) -> Self {
+        match self {
+            Self::Tsx | Self::JavaScript => Self::TypeScript,
+            other => *other,
         }
     }
 
@@ -82,7 +93,7 @@ mod tests {
     fn test_from_extension() {
         assert_eq!(Language::from_extension("rs"), Language::Rust);
         assert_eq!(Language::from_extension("ts"), Language::TypeScript);
-        assert_eq!(Language::from_extension("tsx"), Language::TypeScript);
+        assert_eq!(Language::from_extension("tsx"), Language::Tsx);
         assert_eq!(Language::from_extension("py"), Language::Python);
         assert_eq!(Language::from_extension("xyz"), Language::Unknown);
     }
@@ -92,7 +103,7 @@ mod tests {
         assert_eq!(Language::from_path(Path::new("main.rs")), Language::Rust);
         assert_eq!(
             Language::from_path(Path::new("src/components/App.tsx")),
-            Language::TypeScript
+            Language::Tsx
         );
         assert_eq!(
             Language::from_path(Path::new("README.md")),

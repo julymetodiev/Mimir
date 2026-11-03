@@ -61,6 +61,8 @@ fn resolve_call(
     qualifier: Option<&str>,
 ) -> Option<Arc<Symbol>> {
     match form {
+        // Only a semantic source can say which of the names it is.
+        CallForm::Bound => None,
         CallForm::Plain | CallForm::Shorthand => free_function(table, file, name),
         CallForm::Scoped => {
             let path = qualifier.unwrap_or("");

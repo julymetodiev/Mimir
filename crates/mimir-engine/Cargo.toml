@@ -15,7 +15,6 @@ mimir-protocol.workspace = true
 mimir-edit.workspace = true
 mimir-graph.workspace = true
 mimir-parse-core.workspace = true
-mimir-parse-rust.workspace = true
 mimir-resolve.workspace = true
 chrono.workspace = true
 ignore.workspace = true
@@ -30,6 +29,8 @@ notify-debouncer-mini.workspace = true
 regex.workspace = true
 
 [dev-dependencies]
+mimir-parse-rust.workspace = true
+mimir-parse-ts.workspace = true
 mimir-resolve-ra.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tempfile.workspace = true

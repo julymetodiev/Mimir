@@ -1,0 +1,27 @@
+[package]
+name = "mimir-resolve-tsrs"
+description = "tsrs as Mimir's semantic source for TypeScript and JavaScript"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+mimir-types.workspace = true
+mimir-parse-core.workspace = true
+mimir-resolve.workspace = true
+mimir-lsp.workspace = true
+tracing.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+mimir-graph.workspace = true
+mimir-parse-ts.workspace = true
+tempfile.workspace = true
+
+[[test]]
+name = "fixture"
+path = "tests/fixture/main.rs"
