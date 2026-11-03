@@ -6,6 +6,8 @@ All notable changes to Mimir are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-03
+
 First public release: Rust projects, on macOS and Linux.
 
 ### Added
