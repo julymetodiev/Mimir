@@ -1,3 +1,4 @@
+use alpha::Named as Renamed;
 use alpha::{Disk, Memory, Store};
 
 /// Named like `helper` in alpha, so a lookup by name alone picks the wrong one.
@@ -85,6 +86,15 @@ pub fn forwarding(disk: &Disk) -> String {
     let text = disk.to_string();
     let other: String = Disk::new().into();
     text + &other
+}
+
+pub struct Aliased;
+
+/// The trait goes by another name here.
+impl Renamed for Aliased {
+    fn name(&self) -> u32 {
+        1
+    }
 }
 
 pub fn generic_as_value() -> Option<u32> {

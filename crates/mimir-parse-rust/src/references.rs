@@ -133,12 +133,17 @@ fn extract_function_value(
     };
     let name = name_node.utf8_text(source).ok()?;
     // Uppercase is a constant, a variant or a type.
-    if name.starts_with(char::is_uppercase) || (form != CallForm::Scoped && bound.contains(name)) {
+    if name.starts_with(char::is_uppercase) {
         return None;
     }
     let qualifier = qualifier.and_then(|q| q.utf8_text(source).ok());
+    let kind = if form != CallForm::Scoped && bound.contains(name) {
+        ReferenceKind::LocalRead
+    } else {
+        ReferenceKind::FunctionValue
+    };
     Some(call_reference(
-        ReferenceKind::FunctionValue,
+        kind,
         name.to_string(),
         name_node,
         form,

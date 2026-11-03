@@ -128,6 +128,10 @@ change to a manifest or more than 50 edited files will write. The daemon keeps t
 running and stops it after 10 idle minutes. A query waits half a second for all this; after that
 it answers from syntax rules for what is not done yet, and says the result is partial.
 
+A proc macro can fail at random while the index is written: `#[napi]` does when an `impl` is
+expanded before its struct. When the log names the macro, files with it on an `impl` go to the
+running analyzer too, so such a project pays for that on each sync until a new index succeeds.
+
 **Accuracy** (Mimir's own workspace, calls between its functions, compared with `rust-analyzer`):
 
 - with `rust-analyzer`: 100% precision and recall

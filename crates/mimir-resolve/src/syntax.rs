@@ -96,7 +96,11 @@ pub(crate) fn resolve_shorthand_values(
     edges: &mut EdgeSet,
 ) {
     for file in files.iter().filter(|f| covered.contains(&f.file_id)) {
-        for reference in file.references.iter().filter(|r| r.call_form == Some(CallForm::Shorthand)) {
+        for reference in file
+            .references
+            .iter()
+            .filter(|r| r.kind == ReferenceKind::FunctionValue && r.call_form == Some(CallForm::Shorthand))
+        {
             let from = table.any_at(file.file_id, reference.span.start);
             if let (Some(from), Some(target)) = (from, free_function(table, file.file_id, &reference.name)) {
                 edges.add(from.id, target.id, EdgeKind::UsesAsValue, reference.span, Confidence::High);

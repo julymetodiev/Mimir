@@ -60,6 +60,9 @@ pub enum ReferenceKind {
     /// Variable read.
     Read,
 
+    /// A name bound in the function, read where a function could also be named.
+    LocalRead,
+
     /// Variable write/assignment.
     Write,
 
@@ -80,7 +83,12 @@ impl ReferenceKind {
     pub fn is_data_access(&self) -> bool {
         matches!(
             self,
-            Self::Read | Self::Write | Self::FieldAccess | Self::Borrow | Self::MutableBorrow
+            Self::Read
+                | Self::LocalRead
+                | Self::Write
+                | Self::FieldAccess
+                | Self::Borrow
+                | Self::MutableBorrow
         )
     }
 
@@ -105,6 +113,7 @@ impl fmt::Display for ReferenceKind {
             Self::Inheritance => "extends",
             Self::Implementation => "impl",
             Self::Read => "read",
+            Self::LocalRead => "local_read",
             Self::Write => "write",
             Self::Borrow => "borrow",
             Self::MutableBorrow => "mut_borrow",

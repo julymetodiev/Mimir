@@ -104,8 +104,7 @@ fn resolve_documents(
     for file in stale {
         analyzer.update(&project.join(&file.path), &file.source)?;
     }
-    let target = |found: Option<Location>| {
-        let found = found?;
+    let target = |found: Location| {
         let path = found.path.strip_prefix(&project).ok()?.to_path_buf();
         let line = sources.get(path.as_path())?.split('\n').nth(found.line as usize)?;
         let name = line.get(found.column as usize..found.end_column as usize)?.to_string();
@@ -116,22 +115,37 @@ fn resolve_documents(
     for file in stale {
         let path = project.join(&file.path);
         let mut document = LiveDocument::default();
-        for reference in file.references.iter().filter(|r| r.call_form.is_some() || r.kind == ReferenceKind::Read) {
+        for reference in file.references.iter().filter(|r| {
+            matches!(r.kind, ReferenceKind::Call | ReferenceKind::FunctionValue | ReferenceKind::Read)
+        }) {
             let (line, column) = site_of(reference);
-            if let Some(found) = target(analyzer.definition(&path, line - 1, column)?)
+            let found = analyzer.definition(&path, line - 1, column)?.into_iter().filter_map(target).collect();
+            if let Some(found) = choose(found, &reference.name)
                 && (found.name == reference.name || !FORWARDING_METHODS.contains(&reference.name.as_str()))
             {
                 document.sites.insert((line, column), found);
             }
         }
         for (line, column) in impl_trait_names(&file.source) {
-            if let Some(found) = target(analyzer.definition(&path, line - 1, column)?) {
+            let found = analyzer.definition(&path, line - 1, column)?.into_iter().find_map(target);
+            if let Some(found) = found {
                 document.traits.insert(line, found);
             }
         }
         documents.insert(file.path.clone(), document);
     }
     Ok(documents)
+}
+
+/// The answer meant by a site. Inside a macro the server answers once per expansion, and those
+/// can include whatever the macro calls; a different name only fits a renaming import.
+fn choose(found: Vec<Target>, name: &str) -> Option<Target> {
+    let mut found = found.into_iter();
+    let first = found.next()?;
+    if first.name == name {
+        return Some(first);
+    }
+    found.find(|t| t.name == name).or(Some(first))
 }
 
 fn site_of(reference: &ExtractedReference) -> (u32, u32) {
@@ -293,24 +307,27 @@ impl Analyzer {
         }
     }
 
-    /// The definition of what is at a 0-based position.
-    fn definition(&mut self, path: &Path, line: u32, column: u32) -> Result<Option<Location>, String> {
+    /// The definitions of what is at a 0-based position.
+    fn definition(&mut self, path: &Path, line: u32, column: u32) -> Result<Vec<Location>, String> {
         let result = self.request("textDocument/definition", json!({
             "textDocument": {"uri": uri_of(path)},
             "position": {"line": line, "character": column},
         }), QUERY_TIMEOUT)?;
-        let first = if result.is_array() { &result[0] } else { &result };
-        let (Some(uri), Some(start)) = (first["uri"].as_str(), first["range"]["start"].as_object()) else {
-            return Ok(None);
-        };
-        let end = &first["range"]["end"];
+        let one = std::slice::from_ref(&result);
+        let answers = result.as_array().map_or(one, Vec::as_slice);
         let number = |v: &Value| v.as_u64().map(|n| n as u32);
-        let (Some(path), Some(line), Some(column), Some(end_column)) =
-            (path_of(uri), number(&start["line"]), number(&start["character"]), number(&end["character"]))
-        else {
-            return Ok(None);
-        };
-        Ok(Some(Location { path, line, column, end_column }))
+        Ok(answers
+            .iter()
+            .filter_map(|answer| {
+                let range = &answer["range"];
+                Some(Location {
+                    path: path_of(answer["uri"].as_str()?)?,
+                    line: number(&range["start"]["line"])?,
+                    column: number(&range["start"]["character"])?,
+                    end_column: number(&range["end"]["character"])?,
+                })
+            })
+            .collect())
     }
 
     fn request(&mut self, method: &str, params: Value, timeout: Duration) -> Result<Value, String> {
@@ -442,6 +459,16 @@ fn path_of(uri: &str) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chooses_the_answer_with_the_name_at_the_site() {
+        let target = |name: &str| Target { path: PathBuf::from("a.rs"), line: 1, name: name.to_string() };
+        let chosen = |found: &[&str], name| choose(found.iter().map(|n| target(n)).collect(), name).map(|t| t.name);
+
+        assert_eq!(chosen(&["block_on", "helper"], "helper").as_deref(), Some("helper"));
+        assert_eq!(chosen(&["original"], "renamed").as_deref(), Some("original"));
+        assert_eq!(chosen(&[], "helper"), None);
+    }
 
     #[test]
     fn a_uri_survives_the_round_trip() {

@@ -135,13 +135,19 @@ impl ApplyPatchTool {
             ));
         }
 
-        // End marker is optional (model often truncates output)
-        let has_end_marker = last_line == Some(END_PATCH_MARKER);
+        // A model's output can be cut off anywhere, so a patch with no end is not safe to apply:
+        // its last change may be half written, and nothing would say so.
+        if lines.len() < 2 || last_line != Some(END_PATCH_MARKER) {
+            return Err(PatchError::MissingMarkers(
+                "Patch has no '*** End Patch', so it may have been cut off. Nothing was applied. \
+                 Send the whole patch again, split into smaller patches if it is long."
+                    .into(),
+            ));
+        }
 
         // Parse operations between markers
         let mut ops = Vec::new();
-        let end_idx = if has_end_marker { lines.len() - 1 } else { lines.len() };
-        let content_lines = &lines[1..end_idx];
+        let content_lines = &lines[1..lines.len() - 1];
         let mut idx = 0;
         let mut line_num = 2; // 1-indexed, starting after Begin Patch
 
@@ -826,9 +832,25 @@ mod tests {
     }
 
     #[test]
-    fn test_end_marker_is_optional() {
+    fn test_missing_end_marker() {
         let patch = "*** Begin Patch\n*** Update File: test.rs\n@@\n+line";
-        assert_eq!(ApplyPatchTool::parse_patch(patch).unwrap().len(), 1);
+        assert!(ApplyPatchTool::parse_patch(patch).is_err());
+        assert!(ApplyPatchTool::parse_patch("*** Begin Patch").is_err());
+    }
+
+    #[tokio::test]
+    async fn test_patch_cut_off_changes_nothing() {
+        let dir = TempDir::new().unwrap();
+        let context = ToolContext::new(dir.path());
+        let file = dir.path().join("test.rs");
+        std::fs::write(&file, "fn a() {}\nfn b() {}\n").unwrap();
+
+        let cut_off = "*** Begin Patch\n*** Update File: test.rs\n@@\n-fn a() {}\n+fn a() { half";
+        let result = ApplyPatchTool.execute(serde_json::json!({ "patch": cut_off }), &context).await;
+
+        assert!(!result.success);
+        assert!(result.error.as_deref().is_some_and(|e| e.contains("cut off")), "{:?}", result.error);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "fn a() {}\nfn b() {}\n");
     }
 
     #[test]

@@ -46,7 +46,7 @@ impl From<ReferenceKind> for EdgeKind {
             ReferenceKind::FieldAccess => EdgeKind::AccessesField,
             ReferenceKind::Inheritance => EdgeKind::Extends,
             ReferenceKind::Implementation => EdgeKind::Implements,
-            ReferenceKind::Read => EdgeKind::Reads,
+            ReferenceKind::Read | ReferenceKind::LocalRead => EdgeKind::Reads,
             ReferenceKind::Write => EdgeKind::Writes,
             ReferenceKind::Borrow => EdgeKind::Borrows,
             ReferenceKind::MutableBorrow => EdgeKind::MutablyBorrows,

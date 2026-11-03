@@ -25,6 +25,8 @@ const MAX_ROOTS: usize = 8;
 const TIMEOUT: Duration = Duration::from_secs(600);
 /// An edit can change what files outside it resolve to, so edits may not pile up forever.
 const MAX_EDITED_FILES: usize = 50;
+/// What the log of an index holds when a proc macro failed and said so.
+const MACRO_FAILURE: &str = "proc-macro tried to print";
 
 /// One occurrence of a symbol in a document. Lines and columns are 0-based.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -160,6 +162,7 @@ fn load_root(
     let snapshot = Snapshot::of(project, root, files);
     let stem = format!("scip-{}", ContentHash::compute(root.to_string_lossy().as_bytes()).to_hex());
     let (index_file, key_file) = (cache_dir.join(format!("{stem}.scip")), cache_dir.join(format!("{stem}.key")));
+    let (log_file, failed_file) = (cache_dir.join(format!("{stem}.log")), cache_dir.join(format!("{stem}.macros")));
     let read = || -> Result<ScipIndex, LoadError> {
         let bytes = fs::read(&index_file).map_err(|e| LoadError::Failed(e.to_string()))?;
         let mut index = decode(&bytes)?;
@@ -168,42 +171,108 @@ fn load_root(
     };
 
     let saved = fs::read_to_string(&key_file).ok().filter(|_| index_file.is_file()).map(|text| Snapshot::parse(&text));
+    let failed = || macro_failures(&failed_file, files);
     if refresh == Refresh::Saved {
         let saved = saved.ok_or(LoadError::NotSaved)?;
         let mut index = read()?;
         let edited = edited_files(&index, &saved, &snapshot, files);
-        index.unanswered = edited.into_iter().map(|f| f.path.clone()).collect();
+        index.unanswered = edited.into_iter().chain(failed()).map(|f| f.path.clone()).collect();
         return Ok(index);
     }
-    if let Some(saved) = saved {
-        if saved == snapshot {
-            return read();
-        }
-        if refresh == Refresh::Edits && saved.manifests == snapshot.manifests {
-            let mut index = read()?;
-            let edited = edited_files(&index, &saved, &snapshot, files);
-            if edited.is_empty() {
+    let usable = saved.filter(|saved| match refresh {
+        Refresh::Full => *saved == snapshot,
+        _ => saved.manifests == snapshot.manifests,
+    });
+    if let Some(saved) = usable {
+        let mut index = read()?;
+        let edited = edited_files(&index, &saved, &snapshot, files);
+        if edited.len() <= MAX_EDITED_FILES {
+            let edits_only = edited.is_empty();
+            let asked: Vec<_> = union(edited, failed());
+            if asked.is_empty() {
                 return Ok(index);
             }
-            if edited.len() <= MAX_EDITED_FILES {
-                match analyzers.resolve(project, &abs, files, &edited) {
-                    Ok(live) => {
-                        index.live = live;
-                        return Ok(index);
-                    }
-                    Err(e) => warn!("No running analyzer for {:?}, writing a new index: {e}", root),
+            match analyzers.resolve(project, &abs, files, &asked) {
+                Ok(live) => {
+                    index.live = live;
+                    return Ok(index);
                 }
+                // A new index would not help files whose macros may fail again.
+                Err(e) if edits_only => {
+                    warn!("No running analyzer for {:?}, keeping what the index says: {e}", root);
+                    return Ok(index);
+                }
+                Err(e) => warn!("No running analyzer for {:?}, writing a new index: {e}", root),
             }
         }
     }
 
     fs::create_dir_all(cache_dir).map_err(|e| LoadError::Failed(e.to_string()))?;
     let _ = fs::remove_file(&key_file);
+    let _ = fs::remove_file(&failed_file);
     let started = Instant::now();
-    run_rust_analyzer(&abs, &index_file)?;
+    run_rust_analyzer(&abs, &index_file, &log_file)?;
     fs::write(&key_file, snapshot.text()).map_err(|e| LoadError::Failed(e.to_string()))?;
     info!("Semantic index for {:?} written in {:?}", root, started.elapsed());
-    read()
+
+    let mut index = read()?;
+    let log = fs::read_to_string(&log_file).unwrap_or_default();
+    let failures: Vec<&str> = log.lines().filter(|line| line.contains(MACRO_FAILURE)).collect();
+    if !failures.is_empty() {
+        let suspects: Vec<&ProjectFile> = files
+            .iter()
+            .filter(|f| f.path.starts_with(root) && index.covers(&f.path))
+            .filter(|f| macros_on_impls(&f.source).iter().any(|name| failures.iter().any(|l| names_macro(l, name))))
+            .collect();
+        warn!("A proc macro failed in the index for {:?}: {} files go to a running analyzer", root, suspects.len());
+        let list: String = suspects.iter().map(|f| format!("{}\n", f.path.display())).collect();
+        fs::write(&failed_file, list).map_err(|e| LoadError::Failed(e.to_string()))?;
+        match analyzers.resolve(project, &abs, files, &suspects) {
+            Ok(live) => index.live = live,
+            Err(e) => warn!("No running analyzer for {:?}, keeping what the index says: {e}", root),
+        }
+    }
+    Ok(index)
+}
+
+fn union<'a>(mut files: Vec<&'a ProjectFile>, more: Vec<&'a ProjectFile>) -> Vec<&'a ProjectFile> {
+    for file in more {
+        if !files.iter().any(|f| f.path == file.path) {
+            files.push(file);
+        }
+    }
+    files
+}
+
+/// The files recorded as possibly hit by a proc macro that failed during the index.
+fn macro_failures<'a>(list: &Path, files: &'a [ProjectFile]) -> Vec<&'a ProjectFile> {
+    let Ok(list) = fs::read_to_string(list) else {
+        return Vec::new();
+    };
+    let listed: HashSet<&Path> = list.lines().map(Path::new).collect();
+    files.iter().filter(|f| listed.contains(f.path.as_path())).collect()
+}
+
+/// The attribute macros on `impl`s: the items a macro with state can fail on, as `#[napi]` does
+/// on an `impl` reached before its struct. The impl's methods then go unresolved.
+fn macros_on_impls(source: &str) -> Vec<&str> {
+    let (mut found, mut above) = (Vec::new(), Vec::new());
+    for line in source.lines().map(str::trim_start) {
+        if let Some(attribute) = line.strip_prefix("#[") {
+            let path = attribute.split(['(', ']', ' ']).next().unwrap_or("");
+            above.push(path.rsplit("::").next().unwrap_or(path));
+        } else if line.starts_with("impl") && line[4..].starts_with([' ', '<']) {
+            found.append(&mut above);
+        } else if !line.is_empty() && !line.starts_with("//") {
+            above.clear();
+        }
+    }
+    found
+}
+
+/// Whether a line of the log names a macro, as a whole word.
+fn names_macro(line: &str, name: &str) -> bool {
+    line.split(|c: char| !c.is_alphanumeric() && c != '_').any(|word| word == name)
 }
 
 /// Files whose index entries no longer hold: changed ones it covered, and new ones.
@@ -281,8 +350,10 @@ impl Snapshot {
     }
 }
 
-fn run_rust_analyzer(root: &Path, output: &Path) -> Result<(), LoadError> {
+fn run_rust_analyzer(root: &Path, output: &Path, log: &Path) -> Result<(), LoadError> {
     let mut child = Command::new("rust-analyzer")
+        .arg("--log-file")
+        .arg(log)
         .args(["scip", "."])
         .arg("--output")
         .arg(output)
@@ -383,6 +454,13 @@ pub(crate) fn resolve(
                 .filter(|r| r.kind == ReferenceKind::Import)
                 .map(|r| r.span)
                 .collect();
+            // A failed macro leaves a parameter resolved to the function of the same name.
+            let locals: HashSet<u32> = file
+                .references
+                .iter()
+                .filter(|r| r.kind == ReferenceKind::LocalRead)
+                .map(|r| r.span.start)
+                .collect();
             for o in occurrences.iter().filter(|o| o.roles & (ROLE_DEFINITION | ROLE_IMPORT) == 0 && is_function(&o.symbol)) {
                 let Some(target) = definitions.get(o.symbol.as_str(), file.file_id) else {
                     continue;
@@ -399,7 +477,10 @@ pub(crate) fn resolve(
                     .is_some_and(|t| t.starts_with(|c: char| c.is_alphabetic() || c == '_'));
                 let (from, kind) = if is_call(after) {
                     (table.callable_at(file.file_id, o.line + 1, o.column), EdgeKind::Calls)
-                } else if !named || imports.iter().any(|i| i.start <= start && start < i.end) {
+                } else if !named
+                    || imports.iter().any(|i| i.start <= start && start < i.end)
+                    || locals.contains(&start)
+                {
                     continue;
                 } else {
                     (table.any_at(file.file_id, start), EdgeKind::UsesAsValue)
@@ -510,14 +591,15 @@ fn resolve_live(
             edges.add(from.id, target.id, kind, reference.span, Confidence::Certain);
         }
     }
-    for (method, trait_name) in table.trait_impls_in(file.file_id) {
+    for (method, _) in table.trait_impls_in(file.file_id) {
         let declared = table
             .impl_at(file.file_id, method.range.start_line)
             .and_then(|block| document.traits.get(&block.range.start_line))
-            .and_then(|t| by_path.get(t.path.as_path()))
-            .and_then(|defined_in| {
+            .and_then(|declared| {
+                // Its own name: the impl may use another, from `use a::Tr as Other`.
+                let defined_in = by_path.get(declared.path.as_path())?;
                 table
-                    .methods_of(trait_name, &method.name)
+                    .methods_of(&declared.name, &method.name)
                     .iter()
                     .find(|s| s.file_id == defined_in.file_id && trait_of(s).is_none())
             });
@@ -776,6 +858,23 @@ mod tests {
         assert!(!is_call(", other)"));
         assert!(!is_call("::<u32>)"));
         assert!(!is_call(""));
+    }
+
+    #[test]
+    fn finds_the_macros_on_impls() {
+        assert_eq!(macros_on_impls("#[napi]\nimpl Core {}\n"), ["napi"]);
+        assert_eq!(macros_on_impls("#[napi]\n// why\nimpl<T> Core<T> {}\n"), ["napi"]);
+        assert_eq!(macros_on_impls("    #[async_trait::async_trait]\n    impl A for B {}\n"), ["async_trait"]);
+        assert!(macros_on_impls("#[napi]\npub struct Core;\nimpl Core {}\n").is_empty());
+        assert!(macros_on_impls("#[napi]\nimplement();\n").is_empty());
+    }
+
+    #[test]
+    fn a_failure_names_its_macro_as_a_whole_word() {
+        let line = "ERROR proc-macro tried to print : `napi` macro expand failed.";
+        assert!(names_macro(line, "napi"));
+        assert!(!names_macro(line, "nap"));
+        assert!(!names_macro(line, "async_trait"));
     }
 
     #[test]

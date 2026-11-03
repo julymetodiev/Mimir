@@ -57,6 +57,7 @@ const IMPLEMENTS: &[(&str, &str)] = &[
     ("alpha::Memory::load", "alpha::Store::load"),
     ("alpha::Disk::name", "alpha::Named::name"),
     ("beta::Own::load", "beta::Store::load"),
+    ("beta::Aliased::name", "alpha::Named::name"),
 ];
 
 /// Those syntax links: `Store` is two traits, so it leaves their methods out.
