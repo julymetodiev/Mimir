@@ -137,6 +137,11 @@ async fn main() -> anyhow::Result<()> {
         commands::Commands::Files { glob, limit, json } => {
             commands::files::list(glob, limit, json).await?
         }
+        commands::Commands::Write {
+            file,
+            content,
+            overwrite,
+        } => commands::files::write(&file, content, overwrite).await?,
         commands::Commands::Cat {
             file,
             first,

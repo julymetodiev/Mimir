@@ -115,6 +115,7 @@ fn test_tools_work_end_to_end() {
         "files",
         "read_file",
         "edit_lines",
+        "write_file",
         "sync",
         "status",
     ] {
@@ -179,6 +180,46 @@ fn test_tools_work_end_to_end() {
     assert_eq!(text["text"], "2\t    2");
 
     let (outside, failed) = server.call("read_file", json!({"file": "/etc/hosts"}));
+    assert!(
+        failed && outside.contains("outside the project"),
+        "{outside}"
+    );
+
+    let (written, failed) = server.call(
+        "write_file",
+        json!({"file": "src/made/new.rs", "content": "pub fn fresh() -> u32 {\n    1\n}\n"}),
+    );
+    assert!(!failed, "{written}");
+    let (found, failed) = server.call("search", json!({"pattern": "^fresh$"}));
+    assert!(!failed && found.contains("src/made/new.rs"), "{found}");
+
+    let (again, failed) = server.call(
+        "write_file",
+        json!({"file": "src/made/new.rs", "content": "pub fn other() {}\n"}),
+    );
+    assert!(failed && again.contains("already exists"), "{again}");
+    assert!(
+        fs::read_to_string(project.path().join("src/made/new.rs"))
+            .unwrap()
+            .contains("fresh")
+    );
+
+    let (replaced, failed) = server.call(
+        "write_file",
+        json!({"file": "src/made/new.rs", "content": "pub fn other() {}\n", "overwrite": true}),
+    );
+    assert!(!failed, "{replaced}");
+    let (found, failed) = server.call("search", json!({"pattern": "^(fresh|other)$"}));
+    assert!(!failed, "{found}");
+    assert!(
+        found.contains("other") && !found.contains("fresh"),
+        "{found}"
+    );
+
+    let (outside, failed) = server.call(
+        "write_file",
+        json!({"file": "../outside.txt", "content": "x"}),
+    );
     assert!(
         failed && outside.contains("outside the project"),
         "{outside}"

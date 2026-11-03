@@ -15,6 +15,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::channel::CommandSender;
 use crate::command::GraphCommand;
+use crate::scanner;
 
 /// Default patterns to ignore when watching.
 const DEFAULT_IGNORE_PATTERNS: &[&str] = &[
@@ -159,6 +160,9 @@ impl FileWatcher {
                             let watch_event = match event.kind {
                                 DebouncedEventKind::Any => {
                                     if event.path.exists() {
+                                        if !scanner::visits(&root, &event.path) {
+                                            continue;
+                                        }
                                         WatchEvent::Changed(event.path)
                                     } else {
                                         WatchEvent::Removed(event.path)

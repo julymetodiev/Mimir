@@ -1,6 +1,6 @@
 ---
 name: mimir-code
-description: Use Mimir instead of Grep, Glob and Read in a project (MCP tools named grep, files, read_file, trace, search, read, edit_symbols, insert_after, edit_lines, sync, status) - for searching text in any file, finding files by name, reading a file, before changing, renaming or removing a Rust function, when asking who calls something or what it calls, when tracing a bug through calls, when finding a symbol by name, or when replacing a function, struct or impl or adding code next to one.
+description: Use Mimir instead of Grep, Glob, Read and Write in a project (MCP tools named grep, files, read_file, trace, search, read, edit_symbols, insert_after, edit_lines, write_file, sync, status) - for searching text in any file, finding files by name, reading a file, creating a file, before changing, renaming or removing a Rust function, when asking who calls something or what it calls, when tracing a bug through calls, when finding a symbol by name, or when replacing a function, struct or impl or adding code next to one.
 ---
 
 # Mimir
@@ -21,6 +21,7 @@ of `x`'s type. Plain text search cannot tell same-named methods apart, so use `t
 | Replace whole functions, structs or impls | `edit_symbols` |
 | Add a function, method, variant or field after an existing symbol | `insert_after` |
 | Replace lines in a file | `edit_lines` |
+| Create a file, in any language; `overwrite: true` to replace one | `write_file` |
 
 Outside the project, use your usual tools: Mimir reads only the project's files.
 

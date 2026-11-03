@@ -1,11 +1,12 @@
 //! Applying edits to files, and taking the edited files into the graph at once.
 
 use mimir_types::Symbol;
+use std::path::Path;
 use std::sync::Arc;
 
 use crate::actor::GraphActor;
 use crate::error::GraphError;
-use crate::{edit, project_files, source};
+use crate::{edit, project_files, scanner, source};
 use mimir_edit::{EditError, EditOp, Editor};
 use mimir_protocol::{Edit, EditReport, EditTarget, FileEdit};
 use mimir_types::Language;
@@ -39,6 +40,27 @@ impl GraphActor {
             }
             Err(e) => Err(e),
         }
+    }
+
+    /// Write a whole file, new or replaced, and take it into the graph at once.
+    pub async fn handle_write_file(
+        &mut self,
+        path: &Path,
+        content: &str,
+        overwrite: bool,
+    ) -> Result<EditReport, GraphError> {
+        let real = project_files::writable(&self.root, path)?;
+        let written = Editor::new().write_file(&real, content, overwrite).await?;
+        let report = EditReport {
+            files: vec![FileEdit {
+                path: self.relative(&written.file_path),
+                bytes_changed: written.bytes_changed,
+                lines_changed: written.lines_changed,
+                diff: None,
+            }],
+        };
+        self.reload_edited(&report, false)?;
+        Ok(report)
     }
 
     async fn apply_edits(
@@ -147,7 +169,9 @@ impl GraphActor {
                 source,
             })?;
             let language = Language::from_path(&path);
-            if self.registry.get_by_language(language).is_some() {
+            if self.registry.get_by_language(language).is_some()
+                && scanner::visits(&self.root, &path)
+            {
                 self.handle_add_file(path, content, language)?;
             }
         }

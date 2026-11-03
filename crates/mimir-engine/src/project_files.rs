@@ -5,7 +5,7 @@ use ignore::{Walk, WalkBuilder};
 use mimir_protocol::{FileText, FilesResponse};
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::error::GraphError;
 
@@ -14,6 +14,11 @@ const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
 /// How many lines of a file come back unless asked otherwise.
 const DEFAULT_LINES: u32 = 2000;
 
+/// A directory of git or of Mimir itself: inside the root, but not one of the project's files.
+fn is_tooling(name: &str) -> bool {
+    matches!(name, ".git" | ".mimir")
+}
+
 /// Every entry of a project git does not ignore, in path order, only those matching `glob` if given.
 pub fn walk(root: &Path, glob: Option<&str>) -> Result<Walk, GraphError> {
     let mut walker = WalkBuilder::new(root);
@@ -21,7 +26,7 @@ pub fn walk(root: &Path, glob: Option<&str>) -> Result<Walk, GraphError> {
         .hidden(false)
         .require_git(false)
         .sort_by_file_path(Path::cmp)
-        .filter_entry(|entry| !matches!(entry.file_name().to_str(), Some(".git" | ".mimir")));
+        .filter_entry(|entry| !entry.file_name().to_str().is_some_and(is_tooling));
     if let Some(glob) = glob {
         let invalid = |source| GraphError::InvalidGlob {
             glob: glob.to_string(),
@@ -62,6 +67,40 @@ pub fn inside(root: &Path, path: &Path) -> Result<PathBuf, GraphError> {
     } else {
         Err(GraphError::OutsideProject(absolute))
     }
+}
+
+/// Where a write to `path` lands, which may not exist yet: inside the project, not through a link
+/// leading out of it, and not among the files of git or Mimir.
+pub fn writable(root: &Path, path: &Path) -> Result<PathBuf, GraphError> {
+    let absolute = root.join(path);
+    let outside = || GraphError::OutsideProject(absolute.clone());
+    let existing = absolute
+        .ancestors()
+        .find(|ancestor| ancestor.symlink_metadata().is_ok())
+        .ok_or_else(outside)?;
+    let rest = absolute.strip_prefix(existing).map_err(|_| outside())?;
+    if !rest
+        .components()
+        .all(|part| matches!(part, Component::Normal(_)))
+    {
+        return Err(outside());
+    }
+    let base = inside(root, existing).map_err(|e| match e {
+        GraphError::OutsideProject(_) => outside(),
+        other => other,
+    })?;
+    // Joining nothing would add a slash, and a file with a slash after it is taken for a directory.
+    let real = if rest.as_os_str().is_empty() {
+        base
+    } else {
+        base.join(rest)
+    };
+    let tooling = real
+        .strip_prefix(root)
+        .map_err(|_| outside())?
+        .components()
+        .any(|part| part.as_os_str().to_str().is_some_and(is_tooling));
+    if tooling { Err(outside()) } else { Ok(real) }
 }
 
 /// Lines of a file: from `first`, 1-indexed, up to `last` inclusive, or a screenful if not given.
@@ -172,6 +211,43 @@ mod tests {
             read(&root, &absolute, None, None).unwrap().path,
             Path::new("a.rs")
         );
+    }
+
+    #[test]
+    fn test_a_write_may_land_on_a_new_path_of_the_project() {
+        let (_dir, root) = project();
+        for (path, real) in [
+            ("new.rs", "new.rs"),
+            ("a.rs", "a.rs"),
+            ("src/deep/er/new.rs", "src/deep/er/new.rs"),
+        ] {
+            let written = writable(&root, Path::new(path)).unwrap();
+            assert_eq!(written.to_str(), root.join(real).to_str(), "{path}");
+        }
+    }
+
+    #[test]
+    fn test_a_write_may_not_leave_the_project() {
+        let (_dir, root) = project();
+        let outside = TempDir::new().unwrap();
+        let elsewhere = outside.path().canonicalize().unwrap();
+        std::os::unix::fs::symlink(&elsewhere, root.join("out")).unwrap();
+        std::os::unix::fs::symlink(elsewhere.join("none.txt"), root.join("dangling.txt")).unwrap();
+        fs::create_dir(root.join(".git")).unwrap();
+        std::os::unix::fs::symlink(root.join(".git"), root.join("to_git")).unwrap();
+
+        for path in [
+            elsewhere.join("new.txt"),
+            PathBuf::from("../new.txt"),
+            PathBuf::from("no_dir/../../new.txt"),
+            PathBuf::from("out/new.txt"),
+            PathBuf::from("dangling.txt"),
+            PathBuf::from(".git/hooks/pre-commit"),
+            PathBuf::from("to_git/config"),
+            PathBuf::from(".mimir/new"),
+        ] {
+            assert!(writable(&root, &path).is_err(), "{path:?}");
+        }
     }
 
     #[test]

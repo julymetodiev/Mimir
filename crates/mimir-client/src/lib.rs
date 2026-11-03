@@ -271,6 +271,24 @@ impl Client {
         }
     }
 
+    /// Write a whole file of the project.
+    pub async fn write_file(
+        &mut self,
+        path: PathBuf,
+        content: String,
+        overwrite: bool,
+    ) -> Result<EditReport, ClientError> {
+        let command = IpcCommand::WriteFile {
+            path,
+            content,
+            overwrite,
+        };
+        match self.call(command).await? {
+            IpcData::Edited(report) => Ok(report),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
     /// Apply edits together, or with `preview` only show them.
     pub async fn edit(
         &mut self,

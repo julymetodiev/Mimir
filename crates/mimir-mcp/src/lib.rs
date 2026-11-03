@@ -32,7 +32,7 @@ misses and does not confuse same-named methods. An entry marked possible (via tr
 implementation, as value) may run at runtime or not. A result with provisional true is still \
 being resolved: ask again shortly. Use grep instead of searching text with other tools: each match says which symbol it is in. \
 Use files to find files and read_file to read them. Use read and search to find code by symbol, \
-edit_symbols to replace whole symbols and insert_after to add code.";
+edit_symbols to replace whole symbols, insert_after to add code and write_file to create a file.";
 
 /// Serve MCP on stdin and stdout until the client disconnects.
 pub async fn serve(from: PathBuf) -> Result<(), McpError> {
@@ -177,6 +177,17 @@ struct EditLinesArguments {
     /// Only show what would change.
     #[serde(default)]
     preview: bool,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct WriteFileArguments {
+    /// The file, by absolute path or relative to the project. Missing directories are made.
+    file: PathBuf,
+    /// The whole text of the file.
+    content: String,
+    /// Replace the file if it exists. Without this, an existing file is refused.
+    #[serde(default)]
+    overwrite: bool,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -381,6 +392,21 @@ impl MimirServer {
         };
         self.with_client(async |client| client.edit(vec![edit], arguments.preview, false).await)
             .await
+    }
+
+    #[tool(
+        description = "Create a new file of the project, in any language, with its directories. An existing file is refused unless overwrite is true. To change part of a file, use edit_symbols or edit_lines."
+    )]
+    async fn write_file(
+        &self,
+        Parameters(arguments): Parameters<WriteFileArguments>,
+    ) -> Result<String, String> {
+        self.with_client(async |client| {
+            client
+                .write_file(arguments.file, arguments.content, arguments.overwrite)
+                .await
+        })
+        .await
     }
 
     #[tool(

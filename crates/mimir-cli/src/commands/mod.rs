@@ -210,6 +210,20 @@ pub enum Commands {
         json: bool,
     },
 
+    /// Create a file of the project, from --content or standard input.
+    Write {
+        /// The file. Missing directories are made.
+        file: PathBuf,
+
+        /// The whole text of the file. Without this, it is read from standard input.
+        #[arg(long)]
+        content: Option<String>,
+
+        /// Replace the file if it exists.
+        #[arg(long)]
+        overwrite: bool,
+    },
+
     /// Show a file of the project, with line numbers.
     Cat {
         /// The file.

@@ -270,3 +270,42 @@ fn test_a_qualified_name_chooses_among_variants_in_one_file() {
     );
     stop(dir);
 }
+
+#[test]
+fn test_a_file_git_ignores_stays_out_of_the_graph() {
+    let project = project();
+    let dir = project.path();
+    fs::write(dir.join(".gitignore"), "skipped/\n").unwrap();
+    mimir(dir).arg("sync").assert().success();
+
+    mimir(dir)
+        .args([
+            "write",
+            "skipped/written.rs",
+            "--content",
+            "pub fn written() {}",
+        ])
+        .assert()
+        .success();
+    assert!(dir.join("skipped/written.rs").exists());
+
+    // Written together, so once the file it does follow is in, the others have been decided.
+    fs::write(dir.join("skipped/seen.rs"), "pub fn seen_too() {}\n").unwrap();
+    fs::write(dir.join("src/seen.rs"), "pub fn seen() {}\n").unwrap();
+    let appeared = (0..100).any(|_| {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let found = mimir(dir)
+            .args(["search", "--pattern", "^seen$"])
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&found.stdout).contains("src/seen.rs")
+    });
+    assert!(appeared, "the watcher did not report src/seen.rs");
+
+    mimir(dir)
+        .args(["search", "--pattern", "^(written|seen_too)$"])
+        .assert()
+        .success()
+        .stdout(contains("No symbols found"));
+    stop(dir);
+}

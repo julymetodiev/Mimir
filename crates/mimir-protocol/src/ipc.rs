@@ -97,6 +97,13 @@ pub enum IpcCommand {
         last: Option<u32>,
     },
 
+    /// Write a whole file of the project.
+    WriteFile {
+        path: PathBuf,
+        content: String,
+        overwrite: bool,
+    },
+
     /// Request daemon shutdown.
     Shutdown,
 }

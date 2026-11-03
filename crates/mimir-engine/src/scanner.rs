@@ -28,6 +28,28 @@ pub struct ScannedFile {
     pub content_hash: ContentHash,
 }
 
+/// The walk of a scan: what it does not visit is not part of the graph.
+fn walker(root: &Path) -> WalkBuilder {
+    let mut walker = WalkBuilder::new(root);
+    walker
+        .hidden(true) // Respect hidden files
+        .git_ignore(true) // Respect .gitignore
+        .git_global(true) // Respect global gitignore
+        .git_exclude(true); // Respect .git/info/exclude
+    walker
+}
+
+/// Whether a scan would visit this path. A file reported or edited one at a time goes into the graph
+/// only if so, or a scan would take it out again. Only the way down to it is walked.
+pub fn visits(root: &Path, path: &Path) -> bool {
+    let wanted = path.to_path_buf();
+    walker(root)
+        .filter_entry(move |entry| wanted.starts_with(entry.path()))
+        .build()
+        .flatten()
+        .any(|entry| entry.path() == path)
+}
+
 /// Directory scanner with gitignore support.
 pub struct Scanner {
     root: PathBuf,
@@ -48,13 +70,7 @@ impl Scanner {
         let root = self.root.clone();
         let max_size = self.max_file_size;
 
-        // Use ignore crate for gitignore support
-        let walker = WalkBuilder::new(&root)
-            .hidden(true) // Respect hidden files
-            .git_ignore(true) // Respect .gitignore
-            .git_global(true) // Respect global gitignore
-            .git_exclude(true) // Respect .git/info/exclude
-            .build();
+        let walker = walker(&root).build();
 
         let mut files = Vec::new();
 
@@ -128,6 +144,28 @@ mod tests {
     use super::*;
     use std::io::Write;
     use tempfile::TempDir;
+
+    #[test]
+    fn test_visits_what_a_scan_visits() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+        std::fs::create_dir(root.join(".git")).unwrap();
+        std::fs::create_dir_all(root.join("skipped/deep")).unwrap();
+        std::fs::create_dir(root.join("src")).unwrap();
+        std::fs::write(root.join(".gitignore"), "skipped/\n").unwrap();
+
+        for (path, visited) in [
+            ("src/new.rs", true),
+            ("top.rs", true),
+            ("skipped/new.rs", false),
+            ("skipped/deep/new.rs", false),
+            (".hidden.rs", false),
+        ] {
+            let path = root.join(path);
+            std::fs::write(&path, "fn a() {}\n").unwrap();
+            assert_eq!(visits(root, &path), visited, "{path:?}");
+        }
+    }
 
     #[tokio::test]
     async fn test_scan_empty_dir() {

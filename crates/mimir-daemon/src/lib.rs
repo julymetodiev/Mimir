@@ -236,6 +236,14 @@ async fn answer(request: IpcRequest, handle: &GraphHandle, identity: &str) -> Ip
             .read_file(path, first, last)
             .await
             .map(IpcData::FileText),
+        IpcCommand::WriteFile {
+            path,
+            content,
+            overwrite,
+        } => handle
+            .write_file(path, content, overwrite)
+            .await
+            .map(IpcData::Edited),
         IpcCommand::Shutdown => Ok(IpcData::ShutdownAck),
     };
     IpcResponse::new(

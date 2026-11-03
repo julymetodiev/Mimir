@@ -297,6 +297,26 @@ impl GraphHandle {
         answer.await.map_err(|_| GraphError::EngineStopped)?
     }
 
+    /// Write a whole file of the project.
+    pub async fn write_file(
+        &self,
+        path: PathBuf,
+        content: String,
+        overwrite: bool,
+    ) -> Result<EditReport, GraphError> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(GraphCommand::WriteFile {
+                path,
+                content,
+                overwrite,
+                reply,
+            })
+            .await
+            .map_err(|_| GraphError::EngineStopped)?;
+        answer.await.map_err(|_| GraphError::EngineStopped)?
+    }
+
     /// Search for symbols by pattern.
     pub async fn search(&self, options: SearchOptions) -> Result<SearchResponse, GraphError> {
         let (reply_tx, reply_rx) = oneshot::channel();

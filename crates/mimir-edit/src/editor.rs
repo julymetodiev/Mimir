@@ -5,6 +5,7 @@ use crate::{EditError, EditResult};
 use mimir_types::ContentHash;
 use std::path::{Path, PathBuf};
 use tokio::fs;
+use tokio::io::AsyncWriteExt;
 
 /// Editor for applying file operations with conflict detection.
 #[derive(Debug, Default)]
@@ -138,6 +139,66 @@ impl Editor {
         }
 
         Ok(results)
+    }
+
+    /// Write a whole file, making the directories it needs. A file already there is left alone
+    /// unless `overwrite` says otherwise; only then is it replaced, and only if it is text.
+    pub async fn write_file(
+        &self,
+        path: &Path,
+        content: &str,
+        overwrite: bool,
+    ) -> EditResult<OpResult> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).await?;
+        }
+        let old = if overwrite {
+            match fs::read_to_string(path).await {
+                Ok(old) => old,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+                Err(e) => return Err(e.into()),
+            }
+        } else {
+            String::new()
+        };
+        if overwrite {
+            fs::write(path, content).await?;
+        } else {
+            self.create_file(path, content).await?;
+        }
+        Ok(OpResult {
+            file_path: path.to_path_buf(),
+            old_hash: ContentHash::compute(old.as_bytes()),
+            new_hash: ContentHash::compute(content.as_bytes()),
+            bytes_changed: content.len() as i64 - old.len() as i64,
+            lines_changed: content.lines().count() as i64 - old.lines().count() as i64,
+            lines_modified: old.lines().count().max(content.lines().count()),
+        })
+    }
+
+    /// Write a file that must not exist yet. Asking for that in one step, not by looking first,
+    /// means nothing that appears in between is lost.
+    async fn create_file(&self, path: &Path, content: &str) -> EditResult<()> {
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .await
+            .map_err(|e| match e.kind() {
+                std::io::ErrorKind::AlreadyExists => EditError::FileExists {
+                    path: path.to_path_buf(),
+                },
+                _ => EditError::Io(e),
+            })?;
+        let written = async {
+            file.write_all(content.as_bytes()).await?;
+            file.flush().await
+        };
+        if let Err(e) = written.await {
+            fs::remove_file(path).await?;
+            return Err(e.into());
+        }
+        Ok(())
     }
 
     /// Read file content, returning an error if not found.

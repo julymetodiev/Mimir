@@ -3,6 +3,7 @@ use mimir_types::Span;
 use tempfile::tempdir;
 
 mod batch;
+mod write;
 
 async fn apply(editor: &Editor, op: &EditOp) -> EditResult<OpResult> {
     editor

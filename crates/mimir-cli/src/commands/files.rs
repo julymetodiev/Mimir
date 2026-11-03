@@ -1,4 +1,4 @@
-//! Files and cat commands: the project's files as they are on disk.
+//! Files, cat and write commands: the project's files as they are on disk.
 
 use anyhow::Result;
 use mimir_client::Client;
@@ -17,6 +17,27 @@ pub async fn list(glob: Option<String>, limit: Option<u32>, json: bool) -> Resul
     }
     if found.files.len() < found.total {
         println!("Showing {} of {} files", found.files.len(), found.total);
+    }
+    Ok(())
+}
+
+/// Write a whole file of the project, from `content` or standard input.
+pub async fn write(file: &Path, content: Option<String>, overwrite: bool) -> Result<()> {
+    let content = match content {
+        Some(content) => content,
+        None => std::io::read_to_string(std::io::stdin())?,
+    };
+    let mut client = Client::open(&std::env::current_dir()?).await?;
+    let report = client
+        .write_file(std::path::absolute(file)?, content, overwrite)
+        .await?;
+    for file in &report.files {
+        println!(
+            "Wrote: {} ({:+} bytes, {:+} lines)",
+            file.path.display(),
+            file.bytes_changed,
+            file.lines_changed
+        );
     }
     Ok(())
 }

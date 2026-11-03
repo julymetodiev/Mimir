@@ -10,6 +10,9 @@ pub enum EditError {
     #[error("File not found: {path}")]
     FileNotFound { path: PathBuf },
 
+    #[error("{path} already exists: to replace it, say so with overwrite")]
+    FileExists { path: PathBuf },
+
     #[error("Content hash mismatch for {path}: expected {expected}, got {actual}")]
     HashMismatch {
         path: PathBuf,

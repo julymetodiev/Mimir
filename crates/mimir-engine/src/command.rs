@@ -115,6 +115,14 @@ pub enum GraphCommand {
         reply: oneshot::Sender<Result<FileText, GraphError>>,
     },
 
+    /// Write a whole file of the project.
+    WriteFile {
+        path: PathBuf,
+        content: String,
+        overwrite: bool,
+        reply: oneshot::Sender<Result<EditReport, GraphError>>,
+    },
+
     /// Shutdown the actor.
     Shutdown,
 }

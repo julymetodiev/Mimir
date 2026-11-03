@@ -242,6 +242,16 @@ impl GraphActor {
                     answer(reply, project_files::read(&self.root, &path, first, last));
                 }
 
+                GraphCommand::WriteFile {
+                    path,
+                    content,
+                    overwrite,
+                    reply,
+                } => {
+                    let result = self.handle_write_file(&path, &content, overwrite).await;
+                    answer(reply, result);
+                }
+
                 GraphCommand::Shutdown => {
                     info!("Graph actor shutting down");
                     break;

@@ -21,13 +21,14 @@ mimir grep "TODO" --path "*.rs"          # text in any file, with the symbol it 
 mimir read -s process_data               # the source of a symbol
 mimir files "crates/**/*.rs"             # files by glob, skipping what git ignores
 mimir cat src/lib.rs --first 10 --last 40  # a file, numbered
+mimir write src/new.rs --content "fn new() {}"  # a new file; --overwrite to replace one
 mimir edit --symbol process_data --mode symbol --content "fn process_data() {}"
 mimir sync                               # up to date, wait until nothing is provisional
 ```
 
 In Claude Code, with the plugin in [integrations/claude-code](integrations/claude-code/README.md),
 the same operations are tools the model can use: `trace`, `search`, `read`, `edit_symbols`,
-`insert_after`, `grep`, `files`, `read_file`, `edit_lines`, `sync`, `status`. For any other MCP client, run `mimir mcp`.
+`insert_after`, `grep`, `files`, `read_file`, `edit_lines`, `write_file`, `sync`, `status`. For any other MCP client, run `mimir mcp`.
 
 ## What an answer means
 
