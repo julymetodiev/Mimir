@@ -11,7 +11,8 @@ edits by symbol. It is one binary, `mimir`, with no daemon to manage and no lang
 ```
   Claude Code ── plugin ── mimir mcp ─┐
                                       ├── client ── socket ── daemon ── engine
-  a person ─────────────── mimir ... ─┘
+  a person ─────────────── mimir ... ─┤
+  a browser ── mimir view ────────────┘
 ```
 
 - **One daemon per project**, started by the first command that needs it and stopped when idle.
@@ -34,6 +35,8 @@ Each is a number `scripts/bench` can check, on a project of 20 000 symbols. All 
 | T4 | Daemon idle, without the analyzer: under 400 MB |
 | T5 | Call edges: nothing lost against the SCIP index; every entry of the hand-written list in `crates/mimir-resolve-ra/tests/fixture/expected.rs` holds |
 | T6 | After edits, the graph equals the graph from a new index: 0 differences |
+| T7 | `mimir view`: first frame of the whole graph under 1 s, then 60 frames a second with layout running, on a current laptop |
+| T8 | With no view open, T1 to T4 hold as if the view did not exist |
 
 ## 3. Layers
 
@@ -64,6 +67,9 @@ Dependencies point inwards. IO lives at the edge.
 | `mimir-daemon` | transport | the socket server over the engine, its lock and idle timer |
 | `mimir-client` | client | connecting, starting and restarting the daemon, the socket path |
 | `mimir-mcp` | transport | the MCP server: tools over the client |
+| `mimir-view` | transport | `mimir view`: the built page and a local web server over the client |
+| `mimir-view-wire` | wire | the binary form of a snapshot and of events, as the browser gets them; no IO |
+| `mimir-view-page` | client, in the browser | drawing and laying out the graph, on the GPU; compiled to WebAssembly |
 | `mimir-cli` | transport + composition | the `mimir` binary: arguments, output, which adapters run |
 
 Allowed dependencies between crates are listed in `scripts/check-architecture.sh` (`allowed`). The CLI chooses the semantic source, so only
@@ -118,6 +124,41 @@ only as `self.field` in a method of such a type.
 ## 6. Checks
 
 Work is not done until `scripts/check.sh` passes: `scripts/check-architecture.sh` (and `--new HEAD`),
-`scripts/check-file-size.sh`, `scripts/check-version.sh`, `scripts/check-deps.py`, `cargo deny check`,
+`scripts/check-file-size.sh`, `scripts/check-version.sh`, `scripts/check-page.sh`, `scripts/check-deps.py`, `cargo deny check`,
 `cargo doc` with warnings as errors, `cargo fmt --check`,
 `cargo clippy --all-targets -- -D warnings`, `cargo test`. Budgets only go down, to 0.
+
+## 7. The view
+
+`mimir view` opens a browser on the project's graph, which changes as the code and the agents do. It
+reads and never writes: rule 4 stands, and the page has no way to ask for an edit.
+
+```
+  page (WebAssembly, GPU) ── WebSocket ── mimir view ── client ── socket ── daemon ── engine
+```
+
+- **The engine announces, and never waits.** It publishes events on a bounded broadcast channel: a
+  send does not block and costs nothing with no subscriber (T8). A subscriber that falls behind is told
+  so and takes a new snapshot; it never slows the actor.
+- **Events:** `GraphChanged` (a new generation of the graph, when a link ends, saying whether it is
+  provisional) and `Activity` (which symbols a query or an edit touched, without its text).
+- **The wire gains two commands.** `Snapshot` answers with every symbol and edge, compactly, and its
+  generation. `Watch` turns a connection into a stream of events. A client that watches counts as use,
+  so a view keeps the daemon from stopping as idle. The source of a symbol comes through the existing
+  `Source`, when the page asks for it.
+- **`mimir-view` holds no logic** (rule 3): it serves the page, passes snapshots and events on, and
+  opens the browser. It does not build or read the graph itself.
+- **It listens on `127.0.0.1` only**, on a free port, and answers only with the random token in the
+  address it opened, and only to its own origin. Any site open in the browser can reach a local port,
+  and the graph shows the names and structure of the code.
+- **The browser gets raw arrays**, in the form of `mimir-view-wire`, which go into GPU buffers as they
+  are. A snapshot goes again whole when the graph changes; a symbol keeps its place by file and name.
+- **The built page is in the repository**, in `crates/mimir-view/page`, so any way of installing gets
+  it without a WebAssembly toolchain. `scripts/build-page.sh` builds it and records a hash of its
+  sources; `scripts/check-page.sh` fails if the sources moved on. A release builds it anew from source.
+- **The page is built into `mimir`.** It loads nothing from the network. Layout runs in a compute
+  shader; where the browser has no WebGPU the page says so. Each symbol
+  starts at a place given by its crate and file and is held there by a weak spring, so the picture
+  shows the project's structure and stays where it was between runs.
+- **Domain types do not move to the browser** unless they build for it without IO: the page knows the
+  wire's snapshot, not `mimir-graph`.
