@@ -1,41 +1,14 @@
 //! The binary from outside: nobody starts a daemon, and every command works.
 
+mod common;
+
 use assert_cmd::Command;
-use assert_cmd::cargo::cargo_bin_cmd;
+use common::{mimir, project, stop};
+use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
-
-/// A git repository with one crate. The socket's directory is the system's, so tests stay apart by
-/// their project's path.
-fn project() -> TempDir {
-    let dir = TempDir::new().unwrap();
-    fs::create_dir(dir.path().join(".git")).unwrap();
-    fs::create_dir(dir.path().join("src")).unwrap();
-    fs::write(
-        dir.path().join("Cargo.toml"),
-        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
-    )
-    .unwrap();
-    fs::write(
-        dir.path().join("src/lib.rs"),
-        "pub fn helper() -> u32 {\n    1\n}\n\npub fn compute() -> u32 {\n    helper()\n}\n",
-    )
-    .unwrap();
-    dir
-}
-
-/// Mimir with syntax rules only, so these tests do not wait for an index.
-fn mimir(dir: &Path) -> Command {
-    let mut command = cargo_bin_cmd!("mimir");
-    command.current_dir(dir).env("MIMIR_NO_SCIP", "1");
-    command
-}
-
-fn stop(dir: &Path) {
-    mimir(dir).args(["daemon", "stop"]).assert().success();
-}
 
 #[test]
 fn test_every_query_works_without_starting_anything() {
@@ -85,25 +58,6 @@ fn test_sync_saves_the_graph_and_reports_the_link() {
 }
 
 #[test]
-fn test_an_edit_is_seen_by_the_next_sync() {
-    let project = project();
-    let dir = project.path();
-
-    mimir(dir).arg("sync").assert().success();
-    fs::write(
-        dir.join("src/other.rs"),
-        "pub fn other() -> u32 {\n    crate::helper()\n}\n",
-    )
-    .unwrap();
-    mimir(dir)
-        .arg("sync")
-        .assert()
-        .success()
-        .stdout(contains("1 added"));
-    stop(dir);
-}
-
-#[test]
 fn test_a_project_with_a_long_path_works() {
     let project = project();
     let deep = project.path().join("a".repeat(60)).join("b".repeat(60));
@@ -143,117 +97,6 @@ fn test_an_unknown_symbol_and_a_bad_pattern_are_errors() {
         .assert()
         .failure()
         .stderr(contains("Invalid pattern"));
-    stop(dir);
-}
-
-#[test]
-fn test_an_edit_goes_through_the_daemon_and_the_graph_follows() {
-    let project = project();
-    let dir = project.path();
-
-    mimir(dir)
-        .args([
-            "edit",
-            "--symbol",
-            "helper",
-            "--mode",
-            "symbol",
-            "--content",
-            "pub fn helper() -> u32 {\n    2\n}\n\npub fn extra() -> u32 {\n    helper()\n}",
-        ])
-        .assert()
-        .success()
-        .stdout(contains("src/lib.rs"));
-    assert!(
-        fs::read_to_string(dir.join("src/lib.rs"))
-            .unwrap()
-            .contains("    2\n")
-    );
-
-    mimir(dir)
-        .args(["trace", "-s", "helper", "--callers"])
-        .assert()
-        .success()
-        .stdout(contains("← extra"))
-        .stdout(contains("← compute"));
-    stop(dir);
-}
-
-#[test]
-fn test_an_edit_of_a_file_changed_behind_the_graph_lands_in_the_right_place() {
-    let project = project();
-    let dir = project.path();
-    mimir(dir)
-        .args(["read", "-s", "compute"])
-        .assert()
-        .success();
-
-    // The lines of `compute` move before anything could have told the daemon.
-    let moved = format!(
-        "// a new first line\n{}",
-        fs::read_to_string(dir.join("src/lib.rs")).unwrap()
-    );
-    fs::write(dir.join("src/lib.rs"), moved).unwrap();
-    mimir(dir)
-        .args([
-            "edit",
-            "--symbol",
-            "compute",
-            "--mode",
-            "symbol",
-            "--content",
-            "pub fn compute() -> u32 {\n    3\n}",
-        ])
-        .assert()
-        .success();
-
-    let edited = fs::read_to_string(dir.join("src/lib.rs")).unwrap();
-    assert!(edited.starts_with("// a new first line\n"));
-    assert!(edited.contains("pub fn helper() -> u32 {\n    1\n}"));
-    assert!(edited.contains("pub fn compute() -> u32 {\n    3\n}"));
-    stop(dir);
-}
-
-#[test]
-fn test_a_preview_changes_nothing_and_a_file_outside_is_refused() {
-    let project = project();
-    let dir = project.path();
-    let before = fs::read_to_string(dir.join("src/lib.rs")).unwrap();
-
-    mimir(dir)
-        .args([
-            "edit",
-            "--symbol",
-            "helper",
-            "--mode",
-            "symbol",
-            "--content",
-            "fn x() {}",
-            "--preview",
-        ])
-        .assert()
-        .success()
-        .stdout(contains("src/lib.rs"));
-    assert_eq!(fs::read_to_string(dir.join("src/lib.rs")).unwrap(), before);
-
-    let outside = TempDir::new().unwrap();
-    let file = outside.path().join("other.rs");
-    fs::write(&file, "fn y() {}\n").unwrap();
-    mimir(dir)
-        .args([
-            "edit",
-            "--mode",
-            "insert",
-            "--start",
-            "0",
-            "--content",
-            "//",
-        ])
-        .arg("--file")
-        .arg(&file)
-        .assert()
-        .failure()
-        .stderr(contains("outside the project"));
     stop(dir);
 }
 
@@ -360,135 +203,27 @@ fn test_a_rebuild_replaces_the_daemon_and_the_same_build_keeps_it() {
 }
 
 #[test]
-fn test_an_edit_of_a_shared_name_asks_which_and_a_file_answers() {
+fn test_grep_finds_text_anywhere_and_names_the_symbol() {
     let project = project();
     let dir = project.path();
-    fs::write(dir.join("src/lib.rs"), "pub fn run() -> u32 {\n    1\n}\n").unwrap();
-    fs::write(
-        dir.join("src/other.rs"),
-        "pub fn run() -> u32 {\n    2\n}\n",
-    )
-    .unwrap();
-    let edit = |extra: &[&str]| {
-        let mut command = mimir(dir);
-        command.args(["edit", "--symbol", "run", "--mode", "symbol"]);
-        command.args(["--content", "pub fn run() -> u32 {\n    3\n}"]);
-        command.args(extra);
-        command.assert()
-    };
-
-    edit(&[])
-        .failure()
-        .stderr(contains("src/other.rs"))
-        .stderr(contains("src/lib.rs"));
-    assert!(
-        !fs::read_to_string(dir.join("src/lib.rs"))
-            .unwrap()
-            .contains("    3")
-    );
-    assert!(
-        !fs::read_to_string(dir.join("src/other.rs"))
-            .unwrap()
-            .contains("    3")
-    );
-
-    edit(&["--file", "src/other.rs"]).success();
-    assert!(
-        fs::read_to_string(dir.join("src/other.rs"))
-            .unwrap()
-            .contains("    3")
-    );
-    assert!(
-        fs::read_to_string(dir.join("src/lib.rs"))
-            .unwrap()
-            .contains("    1")
-    );
+    fs::write(dir.join("notes.md"), "see helper in the docs\n").unwrap();
 
     mimir(dir)
-        .args(["read", "-s", "run", "--file", "src/lib.rs"])
+        .args(["grep", "helper"])
         .assert()
         .success()
-        .stdout(contains("src/lib.rs"));
-    stop(dir);
-}
-
-#[test]
-fn test_new_code_goes_after_a_symbol_at_every_level() {
-    let project = project();
-    let dir = project.path();
-    fs::write(
-        dir.join("src/lib.rs"),
-        "pub enum Kind {\n    One,\n    Two,\n}\n\npub struct S {\n    pub a: u32,\n}\n\nimpl S {\n    pub fn m(&self) {} // note\n}\n\npub fn f() {}\n",
-    )
-    .unwrap();
-    let after = |symbol: &str, content: &str| {
-        mimir(dir)
-            .args([
-                "edit",
-                "--mode",
-                "after",
-                "--symbol",
-                symbol,
-                "--content",
-                content,
-            ])
-            .assert()
-    };
-
-    after("Kind::One", "    Between,").success();
-    after("a", "    pub b: u32,").success();
-    after("m", "    pub fn n(&self) {}\n").success();
-    after("f", "pub fn g() {}").success();
-
-    assert_eq!(
-        fs::read_to_string(dir.join("src/lib.rs")).unwrap(),
-        "pub enum Kind {\n    One,\n    Between,\n    Two,\n}\n\npub struct S {\n    pub a: u32,\n    pub b: u32,\n}\n\nimpl S {\n    pub fn m(&self) {} // note\n\n    pub fn n(&self) {}\n}\n\npub fn f() {}\n\npub fn g() {}\n"
-    );
+        .stdout(contains("notes.md:1:see helper in the docs"))
+        .stdout(contains("src/lib.rs:6:    helper() [in compute]"));
     mimir(dir)
-        .args(["read", "-s", "g"])
+        .args(["grep", "helper", "--path", "*.md", "--limit", "5"])
         .assert()
         .success()
-        .stdout(contains("pub fn g() {}"));
-    stop(dir);
-}
-
-#[test]
-fn test_a_qualified_name_chooses_among_variants_in_one_file() {
-    let project = project();
-    let dir = project.path();
-    fs::write(
-        dir.join("src/lib.rs"),
-        "pub enum A {\n    Read,\n}\n\npub enum B {\n    Read,\n}\n",
-    )
-    .unwrap();
+        .stdout(contains("notes.md"))
+        .stdout(predicates::str::contains("src/lib.rs").not());
     mimir(dir)
-        .args([
-            "edit",
-            "--mode",
-            "symbol",
-            "--symbol",
-            "Read",
-            "--content",
-            "    X,",
-        ])
+        .args(["grep", "("])
         .assert()
         .failure()
-        .stderr(contains("could mean"));
-    mimir(dir)
-        .args([
-            "edit",
-            "--mode",
-            "symbol",
-            "--symbol",
-            "B::Read",
-            "--content",
-            "    X,",
-        ])
-        .assert()
-        .success();
-    assert_eq!(
-        fs::read_to_string(dir.join("src/lib.rs")).unwrap(),
-        "pub enum A {\n    Read,\n}\n\npub enum B {\n    X,\n}\n"
-    );
+        .stderr(contains("Invalid pattern"));
     stop(dir);
 }

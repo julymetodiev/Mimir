@@ -6,13 +6,13 @@ pub mod ipc;
 mod response;
 
 pub use command::{
-    Edit, EditChange, EditReport, EditTarget, FileEdit, FindOptions, LinkSummary, SearchOptions,
-    SyncResult, TraceOptions,
+    Edit, EditChange, EditReport, EditTarget, FileEdit, FindOptions, GrepOptions, LinkSummary,
+    SearchOptions, SyncResult, TraceOptions,
 };
 
 pub use response::{
-    FindResponse, SearchResponse, StatsResponse, SymbolInfo, SymbolSource, TraceNode,
-    TraceRelation, TraceResponse,
+    FindResponse, GrepMatch, GrepResponse, SearchResponse, StatsResponse, SymbolInfo, SymbolSource,
+    TraceNode, TraceRelation, TraceResponse,
 };
 
 pub use ipc::{

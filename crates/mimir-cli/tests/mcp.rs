@@ -111,6 +111,7 @@ fn test_tools_work_end_to_end() {
         "read",
         "edit_symbols",
         "insert_after",
+        "grep",
         "edit_lines",
         "sync",
         "status",
@@ -150,6 +151,16 @@ fn test_tools_work_end_to_end() {
     assert!(!failed, "{added}");
     let (trace, failed) = server.call("trace", json!({"symbol": "added"}));
     assert!(!failed && trace.contains("helper"), "{trace}");
+
+    let (found, failed) = server.call(
+        "grep",
+        json!({"pattern": "^ +helper\\(\\)", "path": "src/*"}),
+    );
+    assert!(!failed, "{found}");
+    let found: Value = serde_json::from_str(&found).unwrap();
+    assert!(found["total"].as_u64().unwrap() >= 1);
+    assert_eq!(found["matches"][0]["at"], "src/lib.rs:6", "{found}");
+    assert_eq!(found["matches"][0]["symbol"], "added", "{found}");
 
     let (missing, failed) = server.call("trace", json!({"symbol": "no_such_symbol"}));
     assert!(failed && missing.contains("no_such_symbol"), "{missing}");

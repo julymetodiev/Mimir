@@ -115,6 +115,25 @@ async fn main() -> anyhow::Result<()> {
             json,
             code,
         } => commands::search::execute(&pattern, kind.as_deref(), limit, json, code).await?,
+        commands::Commands::Grep {
+            pattern,
+            literal,
+            ignore_case,
+            path,
+            context,
+            limit,
+            json,
+        } => {
+            let options = mimir_protocol::GrepOptions {
+                pattern,
+                literal,
+                ignore_case,
+                path,
+                context,
+                limit,
+            };
+            commands::grep::execute(options, json).await?
+        }
         commands::Commands::Read {
             symbol,
             file,

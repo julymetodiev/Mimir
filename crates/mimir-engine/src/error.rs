@@ -40,6 +40,16 @@ pub enum GraphError {
         source: regex::Error,
     },
 
+    #[error("Invalid path filter '{glob}': {source}")]
+    InvalidGlob {
+        glob: String,
+        #[source]
+        source: ignore::Error,
+    },
+
+    #[error("Text search failed: {0}")]
+    Grep(#[source] tokio::task::JoinError),
+
     #[error("Scan failed: {0}")]
     Scan(#[source] std::io::Error),
 

@@ -42,6 +42,23 @@ pub struct SearchOptions {
     pub limit: Option<u32>,
 }
 
+/// What to look for in the text of a project's files.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GrepOptions {
+    /// A regular expression, or with `literal` the text itself.
+    pub pattern: String,
+    /// `pattern` is text, not a regular expression.
+    pub literal: bool,
+    /// Letter case does not matter.
+    pub ignore_case: bool,
+    /// Only files matching this glob, such as `*.md` or `crates/**/*.rs`.
+    pub path: Option<String>,
+    /// Lines to show around each match.
+    pub context: u32,
+    /// The most matches to return.
+    pub limit: Option<u32>,
+}
+
 /// What an edit applies to.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EditTarget {

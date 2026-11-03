@@ -2,6 +2,7 @@
 
 pub mod daemon;
 pub mod edit;
+pub mod grep;
 pub mod init;
 pub mod read;
 pub mod search;
@@ -162,6 +163,36 @@ pub enum Commands {
         /// Show source code snippet.
         #[arg(short, long)]
         code: bool,
+    },
+
+    /// Search the text of the project's files, as grep does, saying which symbol each match is in.
+    Grep {
+        /// A regular expression.
+        pattern: String,
+
+        /// Take the pattern as text, not as a regular expression.
+        #[arg(short = 'F', long)]
+        literal: bool,
+
+        /// Letter case does not matter.
+        #[arg(short, long)]
+        ignore_case: bool,
+
+        /// Only files matching this glob, such as `*.md` or `crates/**/*.rs`.
+        #[arg(short, long)]
+        path: Option<String>,
+
+        /// Lines to show around each match.
+        #[arg(short = 'C', long, default_value = "0")]
+        context: u32,
+
+        /// The most matches to return.
+        #[arg(short, long)]
+        limit: Option<u32>,
+
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Read source code by symbol name.

@@ -1,17 +1,18 @@
 ---
 name: mimir-code
-description: Use Mimir's call graph (MCP tools named trace, search, read, edit_symbols, insert_after, edit_lines, sync, status) when working in Rust code - before changing, renaming or removing a function, when asking who calls something or what it calls, when tracing a bug through calls, when finding a symbol by name, or when replacing a whole function, struct or impl. Prefer it over grep for these. Not for searching text, comments or non-code files, which it does not index.
+description: Use Mimir instead of grep and for code navigation (MCP tools named grep, trace, search, read, edit_symbols, insert_after, edit_lines, sync, status) - for searching text in any file of the project, before changing, renaming or removing a Rust function, when asking who calls something or what it calls, when tracing a bug through calls, when finding a symbol by name, or when replacing a function, struct or impl or adding code next to one.
 ---
 
 # Mimir
 
 Mimir holds the project's call graph, resolved by `rust-analyzer`, so `x.get()` links to the `get`
-of `x`'s type. Grep cannot tell same-named methods apart and misses calls inside macros.
+of `x`'s type. Plain text search cannot tell same-named methods apart, so use `trace` for calls and `grep` for text.
 
 ## When to use what
 
 | You want | Tool |
 |---|---|
+| Text anywhere in the project, in any language; each match says which symbol it is in | `grep` |
 | Who calls this, what it calls, before changing it | `trace` |
 | A symbol whose name you partly know (`total` counts all matches, not only those returned) | `search` |
 | A symbol's source, without knowing its file | `read` |
@@ -19,7 +20,7 @@ of `x`'s type. Grep cannot tell same-named methods apart and misses calls inside
 | Add a function, method, variant or field after an existing symbol | `insert_after` |
 | Replace lines in a file | `edit_lines` |
 
-Text, comments and non-Rust files: use your usual tools.
+Finding files by name, and reading a whole file: use your usual tools.
 
 ## Reading a trace
 

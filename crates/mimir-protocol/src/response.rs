@@ -69,6 +69,32 @@ pub struct SymbolSource {
     pub matches: usize,
 }
 
+/// A line of text that matched.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GrepMatch {
+    /// The file, relative to the project.
+    pub path: PathBuf,
+    /// The line's number, from 1.
+    pub line: u32,
+    /// The line.
+    pub text: String,
+    /// Lines just before it.
+    pub before: Vec<String>,
+    /// Lines just after it.
+    pub after: Vec<String>,
+    /// The innermost symbol holding the line, in a language Mimir parses.
+    pub symbol: Option<String>,
+}
+
+/// Lines of text that matched.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GrepResponse {
+    /// The first matches, by path and line.
+    pub matches: Vec<GrepMatch>,
+    /// All that match, of which `matches` may be the first few.
+    pub total: usize,
+}
+
 /// A node in a trace result.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraceNode {

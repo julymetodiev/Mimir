@@ -17,6 +17,7 @@ idle minutes.
 mimir trace -s process_data              # who calls it, what it calls
 mimir trace -s process_data --callers    # only who calls it
 mimir search --pattern "^process"        # symbols by regular expression
+mimir grep "TODO" --path "*.rs"          # text in any file, with the symbol it is in
 mimir read -s process_data               # the source of a symbol
 mimir edit --symbol process_data --mode symbol --content "fn process_data() {}"
 mimir sync                               # up to date, wait until nothing is provisional
@@ -24,7 +25,7 @@ mimir sync                               # up to date, wait until nothing is pro
 
 In Claude Code, with the plugin in [integrations/claude-code](integrations/claude-code/README.md),
 the same operations are tools the model can use: `trace`, `search`, `read`, `edit_symbols`,
-`insert_after`, `edit_lines`, `sync`, `status`. For any other MCP client, run `mimir mcp`.
+`insert_after`, `grep`, `edit_lines`, `sync`, `status`. For any other MCP client, run `mimir mcp`.
 
 ## What an answer means
 

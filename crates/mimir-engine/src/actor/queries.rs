@@ -2,15 +2,19 @@
 
 use crate::actor::GraphActor;
 use crate::error::GraphError;
-use crate::source;
+use crate::{grep, source};
 use mimir_graph::{TraceOptions as GraphTraceOptions, TraceRelationship};
 use mimir_protocol::{
-    FindResponse, SearchOptions, SearchResponse, StatsResponse, SymbolInfo, SymbolSource,
-    TraceNode, TraceRelation, TraceResponse,
+    FindResponse, GrepOptions, GrepResponse, SearchOptions, SearchResponse, StatsResponse,
+    SymbolInfo, SymbolSource, TraceNode, TraceRelation, TraceResponse,
 };
 use mimir_types::{FileId, Language, Symbol, SymbolId, SymbolKind};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+/// How many matches of a text search come back unless asked otherwise.
+const DEFAULT_GREP_LIMIT: u32 = 50;
 
 impl GraphActor {
     /// Handle finding symbols by name.
@@ -236,6 +240,40 @@ impl GraphActor {
             truncated,
             matches: 1,
         })
+    }
+
+    /// Search the text of the project's files and say which symbol each match is in. The files are
+    /// read off the actor, but it waits: a question after this one sees the same project.
+    pub async fn handle_grep(&self, options: GrepOptions) -> Result<GrepResponse, GraphError> {
+        let limit = options.limit.unwrap_or(DEFAULT_GREP_LIMIT) as usize;
+        let root = self.root.clone();
+        let mut matches = tokio::task::spawn_blocking(move || grep::search(&root, &options))
+            .await
+            .map_err(GraphError::Grep)??;
+        let total = matches.len();
+        matches.truncate(limit);
+
+        let ids: HashMap<&Path, FileId> = self
+            .file_paths
+            .iter()
+            .map(|(id, path)| (path.as_path(), *id))
+            .collect();
+        for found in &mut matches {
+            if let Some(id) = ids.get(found.path.as_path()) {
+                found.symbol = self.symbol_at(*id, found.line);
+            }
+        }
+        Ok(GrepResponse { matches, total })
+    }
+
+    /// The fullest name of the innermost symbol holding a line.
+    fn symbol_at(&self, file: FileId, line: u32) -> Option<String> {
+        self.graph
+            .symbols_in_file(file)
+            .iter()
+            .filter(|symbol| symbol.range.start_line <= line && line <= symbol.range.end_line)
+            .min_by_key(|symbol| symbol.range.end_line - symbol.range.start_line)
+            .map(|symbol| symbol.qualified_name.to_string())
     }
 
     /// Handle getting statistics.

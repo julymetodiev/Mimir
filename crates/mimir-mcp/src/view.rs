@@ -2,7 +2,8 @@
 //! a language per symbol are for programs, which get them through the CLI's `--json`.
 
 use mimir_protocol::{
-    SearchResponse, SymbolInfo, SymbolSource, TraceNode, TraceRelation, TraceResponse,
+    GrepMatch, GrepResponse, SearchResponse, SymbolInfo, SymbolSource, TraceNode, TraceRelation,
+    TraceResponse,
 };
 use serde::Serialize;
 
@@ -159,6 +160,48 @@ impl From<mimir_protocol::StatsResponse> for Status {
             files: stats.files_count,
             symbols: stats.symbols_count,
             edges: stats.references_count,
+        }
+    }
+}
+
+/// A line of text that matched.
+#[derive(Serialize)]
+pub struct Line {
+    at: String,
+    text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    symbol: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    before: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    after: Vec<String>,
+}
+
+impl From<GrepMatch> for Line {
+    fn from(found: GrepMatch) -> Self {
+        Self {
+            at: format!("{}:{}", found.path.display(), found.line),
+            text: found.text,
+            symbol: found.symbol,
+            before: found.before,
+            after: found.after,
+        }
+    }
+}
+
+/// A text search.
+#[derive(Serialize)]
+pub struct Grep {
+    matches: Vec<Line>,
+    /// All that match, of which `matches` may be the first few.
+    total: usize,
+}
+
+impl From<GrepResponse> for Grep {
+    fn from(found: GrepResponse) -> Self {
+        Self {
+            matches: found.matches.into_iter().map(Line::from).collect(),
+            total: found.total,
         }
     }
 }

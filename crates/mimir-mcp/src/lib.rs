@@ -4,7 +4,7 @@
 mod view;
 
 use mimir_client::Client;
-use mimir_protocol::{Edit, EditChange, EditTarget, SearchOptions, TraceOptions};
+use mimir_protocol::{Edit, EditChange, EditTarget, GrepOptions, SearchOptions, TraceOptions};
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{Implementation, ServerCapabilities, ServerConfig};
 use rmcp::transport::stdio;
@@ -30,8 +30,9 @@ const INSTRUCTIONS: &str = "Mimir knows the call graph of this project, from rus
 trace before changing a function, to see who calls it and what it calls: it finds callers grep \
 misses and does not confuse same-named methods. An entry marked possible (via trait, \
 implementation, as value) may run at runtime or not. A result with provisional true is still \
-being resolved: ask again shortly. Use read and search to find code by symbol, and edit_symbols \
-to replace whole symbols.";
+being resolved: ask again shortly. Use grep instead of searching text with other tools: each match says which symbol it is in. \
+Use read and search to find code by symbol, edit_symbols to replace whole symbols and \
+insert_after to add code.";
 
 /// Serve MCP on stdin and stdout until the client disconnects.
 pub async fn serve(from: PathBuf) -> Result<(), McpError> {
@@ -77,6 +78,25 @@ struct SearchArguments {
     /// Only this kind of symbol: function (methods too), method, struct, enum and so on.
     kind: Option<String>,
     /// The most results to return. The default is 20.
+    limit: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct GrepArguments {
+    /// A regular expression, or with `literal` the text itself.
+    pattern: String,
+    /// Take the pattern as text, not as a regular expression.
+    #[serde(default)]
+    literal: bool,
+    /// Letter case does not matter.
+    #[serde(default)]
+    ignore_case: bool,
+    /// Only files matching this glob, such as `*.md` or `crates/**/*.rs`.
+    path: Option<String>,
+    /// Lines to show around each match.
+    #[serde(default)]
+    context: u32,
+    /// The most matches to return. The default is 50.
     limit: Option<u32>,
 }
 
@@ -213,6 +233,25 @@ impl MimirServer {
             limit: arguments.limit,
         };
         self.with_client(async |client| Ok(view::Search::from(client.search(options).await?)))
+            .await
+    }
+
+    #[tool(
+        description = "Search the text of the project's files in any language, as grep does, skipping what git ignores. Each match says which symbol it is in. Use this instead of grep."
+    )]
+    async fn grep(
+        &self,
+        Parameters(arguments): Parameters<GrepArguments>,
+    ) -> Result<String, String> {
+        let options = GrepOptions {
+            pattern: arguments.pattern,
+            literal: arguments.literal,
+            ignore_case: arguments.ignore_case,
+            path: arguments.path,
+            context: arguments.context,
+            limit: arguments.limit,
+        };
+        self.with_client(async |client| Ok(view::Grep::from(client.grep(options).await?)))
             .await
     }
 

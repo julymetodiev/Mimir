@@ -216,6 +216,11 @@ impl GraphActor {
                     answer(reply, response);
                 }
 
+                GraphCommand::Grep { options, reply } => {
+                    let response = self.handle_grep(options).await;
+                    answer(reply, response);
+                }
+
                 GraphCommand::Shutdown => {
                     info!("Graph actor shutting down");
                     break;

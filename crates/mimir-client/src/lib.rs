@@ -2,9 +2,9 @@
 //! starts the daemon when it is not running; a daemon that went away is started again.
 
 use mimir_protocol::{
-    Edit, EditReport, FindOptions, FindResponse, IpcCommand, IpcData, IpcRequest, IpcResponse,
-    IpcResult, SearchOptions, SearchResponse, StatsResponse, SymbolSource, SyncResult,
-    TraceOptions, TraceResponse,
+    Edit, EditReport, FindOptions, FindResponse, GrepOptions, GrepResponse, IpcCommand, IpcData,
+    IpcRequest, IpcResponse, IpcResult, SearchOptions, SearchResponse, StatsResponse, SymbolSource,
+    SyncResult, TraceOptions, TraceResponse,
 };
 use mimir_types::SymbolId;
 use std::fs::{self, File};
@@ -231,6 +231,14 @@ impl Client {
     pub async fn search(&mut self, options: SearchOptions) -> Result<SearchResponse, ClientError> {
         match self.call(IpcCommand::Search { options }).await? {
             IpcData::SearchResult(found) => Ok(found),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Search the text of the project's files.
+    pub async fn grep(&mut self, options: GrepOptions) -> Result<GrepResponse, ClientError> {
+        match self.call(IpcCommand::Grep { options }).await? {
+            IpcData::GrepResult(found) => Ok(found),
             _ => Err(ClientError::UnexpectedResponse),
         }
     }

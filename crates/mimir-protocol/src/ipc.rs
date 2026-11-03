@@ -11,8 +11,12 @@ use std::os::unix::fs::{DirBuilderExt, MetadataExt};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-use crate::command::{Edit, EditReport, FindOptions, SearchOptions, SyncResult, TraceOptions};
-use crate::response::{FindResponse, SearchResponse, StatsResponse, SymbolSource, TraceResponse};
+use crate::command::{
+    Edit, EditReport, FindOptions, GrepOptions, SearchOptions, SyncResult, TraceOptions,
+};
+use crate::response::{
+    FindResponse, GrepResponse, SearchResponse, StatsResponse, SymbolSource, TraceResponse,
+};
 
 /// Request ID for correlating responses.
 pub type RequestId = u64;
@@ -75,6 +79,9 @@ pub enum IpcCommand {
 
     /// Search for symbols by pattern.
     Search { options: SearchOptions },
+
+    /// Search the text of the project's files.
+    Grep { options: GrepOptions },
 
     /// Request daemon shutdown.
     Shutdown,
@@ -143,6 +150,9 @@ pub enum IpcData {
 
     /// Search results.
     SearchResult(SearchResponse),
+
+    /// Lines of text that matched.
+    GrepResult(GrepResponse),
 
     /// Shutdown acknowledged.
     ShutdownAck,

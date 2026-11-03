@@ -228,6 +228,7 @@ async fn answer(request: IpcRequest, handle: &GraphHandle, identity: &str) -> Ip
         IpcCommand::Stats => handle.stats().await.map(IpcData::Stats),
         IpcCommand::Sync { full } => handle.sync_complete(full).await.map(IpcData::SyncResult),
         IpcCommand::Search { options } => handle.search(options).await.map(IpcData::SearchResult),
+        IpcCommand::Grep { options } => handle.grep(options).await.map(IpcData::GrepResult),
         IpcCommand::Shutdown => Ok(IpcData::ShutdownAck),
     };
     IpcResponse::new(

@@ -2,8 +2,8 @@
 
 use crate::error::GraphError;
 use mimir_protocol::{
-    Edit, EditReport, FindOptions, FindResponse, SearchOptions, SearchResponse, StatsResponse,
-    SymbolSource, SyncResult, TraceOptions, TraceResponse,
+    Edit, EditReport, FindOptions, FindResponse, GrepOptions, GrepResponse, SearchOptions,
+    SearchResponse, StatsResponse, SymbolSource, SyncResult, TraceOptions, TraceResponse,
 };
 use mimir_types::{FileId, Language, SymbolId};
 use std::path::PathBuf;
@@ -91,6 +91,12 @@ pub enum GraphCommand {
     Search {
         options: SearchOptions,
         reply: oneshot::Sender<Result<SearchResponse, GraphError>>,
+    },
+
+    /// Search the text of the project's files.
+    Grep {
+        options: GrepOptions,
+        reply: oneshot::Sender<Result<GrepResponse, GraphError>>,
     },
 
     /// Shutdown the actor.
