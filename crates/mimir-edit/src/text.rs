@@ -3,6 +3,8 @@
 use crate::{EditError, EditResult};
 use std::path::Path;
 
+const EXCERPT_CHARS: usize = 60;
+
 /// Where `old` starts in `content`, counting matches that overlap: in `aaa`, `aa` occurs twice, and
 /// replacing either would give a different file.
 fn places(content: &str, old: &str) -> Vec<usize> {
@@ -34,6 +36,7 @@ pub fn replaced(path: &Path, content: &str, old: &str, new: &str, all: bool) -> 
     match found.as_slice() {
         [] => Err(EditError::TextNotFound {
             path: path.to_path_buf(),
+            text: excerpt(old),
         }),
         _ if all => Ok(content.replace(old, new)),
         [at] => Ok(format!(
@@ -43,6 +46,7 @@ pub fn replaced(path: &Path, content: &str, old: &str, new: &str, all: bool) -> 
         )),
         many => Err(EditError::TextNotUnique {
             path: path.to_path_buf(),
+            text: excerpt(old),
             count: many.len(),
             lines: many
                 .iter()
@@ -50,6 +54,17 @@ pub fn replaced(path: &Path, content: &str, old: &str, new: &str, all: bool) -> 
                 .collect::<Vec<_>>()
                 .join(", "),
         }),
+    }
+}
+
+/// The start of a text, enough to tell which of several edits an error is about.
+fn excerpt(text: &str) -> String {
+    let first = text.lines().next().unwrap_or(text).trim();
+    let short: String = first.chars().take(EXCERPT_CHARS).collect();
+    if short.len() == text.len() {
+        short
+    } else {
+        format!("{short}...")
     }
 }
 
@@ -122,6 +137,14 @@ mod tests {
             replace("яяя", "яя", "b", false),
             Err(EditError::TextNotUnique { count: 2, .. })
         ));
+    }
+
+    #[test]
+    fn test_an_error_says_which_text() {
+        let error = replace("abc", "first line\nsecond", "y", false).unwrap_err();
+        assert!(error.to_string().contains("`first line...`"), "{error}");
+        let error = replace("x x", "x", "y", false).unwrap_err();
+        assert!(error.to_string().contains("`x` occurs 2 times"), "{error}");
     }
 
     #[test]

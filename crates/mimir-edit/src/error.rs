@@ -36,14 +36,15 @@ pub enum EditError {
         total_lines: u32,
     },
 
-    #[error("The text to replace is not in {path}: it must match exactly, so read the file again")]
-    TextNotFound { path: PathBuf },
+    #[error("`{text}` is not in {path}: it must match exactly, so read the file again")]
+    TextNotFound { path: PathBuf, text: String },
 
     #[error(
-        "The text to replace occurs {count} times in {path}, on lines {lines}: include lines around it to say which, or ask for all"
+        "`{text}` occurs {count} times in {path}, on lines {lines}: include lines around it to say which, or ask for all"
     )]
     TextNotUnique {
         path: PathBuf,
+        text: String,
         count: usize,
         lines: String,
     },
