@@ -5,12 +5,17 @@ use mimir_parse_rust::RustAdapter;
 use mimir_resolve::SemanticSource;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::{error, warn};
 
 use crate::actor::GraphActor;
 use crate::channel::command_channel;
 use crate::handle::GraphHandle;
+use crate::scanner;
 use crate::watcher::{FileWatcher, WatcherConfig, WatcherHandle};
+
+/// A write takes moments, so a temporary file this old lost its writer in a crash.
+const LEFTOVER_AGE: Duration = Duration::from_secs(3600);
 
 /// A running engine.
 pub struct Engine {
@@ -35,6 +40,11 @@ impl Engine {
 
 /// Start the engine for `root` and queue the first scan, which any later command waits for.
 pub async fn start(root: PathBuf, semantics: Arc<dyn SemanticSource>) -> Engine {
+    let leftovers_of = root.clone();
+    tokio::task::spawn_blocking(move || {
+        scanner::remove_leftover_writes(&leftovers_of, LEFTOVER_AGE);
+    });
+
     let registry = AdapterRegistry::new();
     registry.register(Arc::new(RustAdapter::new()));
 

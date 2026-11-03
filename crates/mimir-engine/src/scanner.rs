@@ -2,9 +2,12 @@
 
 use chrono::{DateTime, TimeZone, Utc};
 use ignore::WalkBuilder;
+use mimir_edit::is_temporary;
 use mimir_types::{ContentHash, Language};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tokio::fs;
+use tracing::warn;
 
 /// A file over this is generated, not written, and stays out of the graph.
 const MAX_FILE_BYTES: u64 = 500 * 1024;
@@ -57,6 +60,28 @@ pub fn visits(root: &Path, path: &Path) -> bool {
 pub fn takes(root: &Path, path: &Path) -> bool {
     std::fs::metadata(path).is_ok_and(|file| file.is_file() && file.len() <= MAX_FILE_BYTES)
         && visits(root, path)
+}
+
+/// Remove temporary files that a crash during a write left in the project. One younger than `age`
+/// may belong to a write still going on, so it stays.
+pub fn remove_leftover_writes(root: &Path, age: Duration) {
+    let mut walker = walker(root);
+    walker.hidden(false);
+    for entry in walker.build().flatten() {
+        let name = entry.file_name().to_string_lossy();
+        if !is_temporary(&name) {
+            continue;
+        }
+        let old_enough = entry
+            .metadata()
+            .ok()
+            .and_then(|file| file.modified().ok())
+            .and_then(|modified| modified.elapsed().ok())
+            .is_some_and(|elapsed| elapsed >= age);
+        if old_enough && let Err(e) = std::fs::remove_file(entry.path()) {
+            warn!("Could not remove {}: {e}", entry.path().display());
+        }
+    }
 }
 
 /// Directory scanner with gitignore support.
@@ -150,6 +175,28 @@ mod tests {
     use super::*;
     use std::io::Write;
     use tempfile::TempDir;
+
+    #[test]
+    fn test_only_old_temporary_files_are_removed() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        std::fs::create_dir(root.join("src")).unwrap();
+        for name in [
+            "src/.mimir-write-abc123",
+            "src/.mimir-write-long-name",
+            "src/kept.rs",
+        ] {
+            std::fs::write(root.join(name), "text").unwrap();
+        }
+
+        remove_leftover_writes(root, Duration::from_secs(3600));
+        assert!(root.join("src/.mimir-write-abc123").exists(), "too young");
+
+        remove_leftover_writes(root, Duration::ZERO);
+        assert!(!root.join("src/.mimir-write-abc123").exists());
+        assert!(root.join("src/.mimir-write-long-name").exists());
+        assert!(root.join("src/kept.rs").exists());
+    }
 
     #[test]
     fn test_visits_what_a_scan_visits() {
