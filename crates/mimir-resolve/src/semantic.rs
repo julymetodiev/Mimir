@@ -131,6 +131,22 @@ pub fn resolve(
                 if imports.iter().any(|i| i.start <= start && start < i.end) {
                     continue;
                 }
+                // A static in a function gets the same SCIP symbol as an item of that name, and is
+                // no symbol of the graph: what its function reads is not the item.
+                let defined_in_this_function = table
+                    .callable_holding(file.file_id, start)
+                    .is_some_and(|function| {
+                        occurrences.iter().any(|d| {
+                            let at = byte_offset(lines, d.line, d.column);
+                            d.roles & ROLE_DEFINITION != 0
+                                && d.symbol == o.symbol
+                                && function.span.start <= at
+                                && at <= function.span.end
+                        })
+                    });
+                if defined_in_this_function {
+                    continue;
+                }
                 if let Some(from) = table.any_at(file.file_id, start) {
                     constant_uses.push(ConstantUse {
                         from: from.id,

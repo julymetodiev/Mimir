@@ -172,6 +172,12 @@ pub fn local_constant() -> String {
     format!("{PLAIN}")
 }
 
+/// A static in a function is named like one elsewhere, and is not that one.
+pub fn reads_local_static() -> u32 {
+    static SHOWN: u32 = 5;
+    SHOWN
+}
+
 pub fn escaped_and_other_strings() -> String {
     format!("{{PLAIN}} {}", "{PLAIN}")
 }

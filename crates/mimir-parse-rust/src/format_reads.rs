@@ -101,7 +101,7 @@ fn passed_by_name(tokens: &[Node], name: &str, source: &[u8]) -> bool {
 
 /// Whether the name means something nearer than an item: a local, a local constant, or a generic
 /// constant parameter. Any such place leaves the capture out.
-fn means_something_nearer(tree: &Node, name: &str, source: &[u8]) -> bool {
+pub fn means_something_nearer(tree: &Node, name: &str, source: &[u8]) -> bool {
     let named = |node: Node| {
         node.child_by_field_name("name")
             .and_then(|n| n.utf8_text(source).ok())

@@ -220,6 +220,16 @@ fn constant_read(
     if !is_constant_name(name) {
         return None;
     }
+    // With no path the name may be a local, and a static in a function is no symbol of the graph.
+    let has_path = name_node
+        .parent()
+        .is_some_and(|parent| parent.kind() == "scoped_identifier")
+        || name_node
+            .prev_sibling()
+            .is_some_and(|before| before.kind() == "::");
+    if !has_path && format_reads::means_something_nearer(&name_node, name, source) {
+        return None;
+    }
     let mut reference = ExtractedReference::new(
         name.to_string(),
         ReferenceKind::Read,

@@ -289,7 +289,7 @@ impl SymbolTable {
             .map(|s| s.id)
     }
 
-    fn callable_holding(&self, file: FileId, offset: u32) -> Option<&Arc<Symbol>> {
+    pub fn callable_holding(&self, file: FileId, offset: u32) -> Option<&Arc<Symbol>> {
         self.by_file
             .get(&file)?
             .iter()

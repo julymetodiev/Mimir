@@ -40,7 +40,7 @@ Outside the project, use your usual tools: Mimir reads only the project's files.
   `impl` blocks and the fields of other types. A read and a write of a field are not told apart.
   A function's `callees` do not list the constants, types or fields it uses. When several share a
   name, pass `file` or a qualified name such as `Config::limit`.
-- A constant named only inside a format string, as in `format!("{NAME}")`, shows no reader.
+- A constant named only inside a format string shows a reader in macros known to take one, if it is an item of the same module or imported by a project path. An attribute such as `#[error("{NAME}")]`, a glob import or a renamed import shows none.
 - No caller does not prove a function is dead. It can be called from outside the project, from a
   test behind a `cfg`, or by name in an attribute, as in `#[serde(skip_serializing_if = "is_zero")]`.
   Search the text before deleting one.
