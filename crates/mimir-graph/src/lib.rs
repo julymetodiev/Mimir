@@ -5,10 +5,15 @@
 //! - Query methods: find_symbol, find_references, get_callers, get_callees
 //! - Trace functionality for call chain analysis
 
+pub mod relations;
+pub mod symbols;
+
 mod facade;
 mod query;
 mod trace;
 
 pub use facade::CodeGraph;
 pub use query::{QueryOptions, QueryResult};
+pub use relations::{EdgeData, EdgeKind, RelationGraph, RelationsHandle};
+pub use symbols::{SymbolTable, SymbolsHandle};
 pub use trace::{TraceNode, TraceOptions, TraceRelationship, TraceResult};

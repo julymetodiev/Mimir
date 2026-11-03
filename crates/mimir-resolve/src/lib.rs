@@ -15,8 +15,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use mimir_graph::CodeGraph;
+use mimir_graph::{EdgeData, EdgeKind};
 use mimir_parse_core::ExtractedReference;
-use mimir_relations::{EdgeData, EdgeKind};
 use mimir_types::{Confidence, FileId, Span, SymbolId, SymbolKind};
 
 pub use live::Analyzers;

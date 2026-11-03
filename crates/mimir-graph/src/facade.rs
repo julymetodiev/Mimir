@@ -1,7 +1,7 @@
 //! Code graph facade combining symbols and relations.
 
-use mimir_relations::{EdgeData, EdgeKind, RelationsHandle};
-use mimir_symbols::SymbolsHandle;
+use crate::relations::{EdgeData, EdgeKind, RelationsHandle};
+use crate::symbols::SymbolsHandle;
 use mimir_types::{Confidence, FileId, Span, Symbol, SymbolId, Visibility};
 use std::collections::HashSet;
 use std::sync::Arc;

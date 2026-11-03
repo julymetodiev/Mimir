@@ -5,10 +5,10 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use mimir_graph::EdgeKind;
 use mimir_graph::{CodeGraph, TraceOptions, TraceRelationship};
 use mimir_parse_core::LanguageAdapter;
 use mimir_parse_rust::RustAdapter;
-use mimir_relations::EdgeKind;
 use mimir_resolve::{Analyzers, ProjectFile, Refresh, ScipIndex, link, load_or_generate};
 use mimir_types::{FileId, IdGenerator, Symbol, SymbolId, SymbolKind};
 

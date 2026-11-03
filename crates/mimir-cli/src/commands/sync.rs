@@ -3,9 +3,9 @@
 use anyhow::{Context, Result};
 use mimir_files::Scanner;
 use mimir_graph::CodeGraph;
+use mimir_graph::{EdgeData, EdgeKind};
 use mimir_parse_core::AdapterRegistry;
 use mimir_parse_rust::RustAdapter;
-use mimir_relations::{EdgeData, EdgeKind};
 use mimir_resolve::{Analyzers, ProjectFile, Refresh, link, load_or_generate};
 use mimir_types::{FileId, IdGenerator, Language, Symbol};
 use std::collections::HashMap;

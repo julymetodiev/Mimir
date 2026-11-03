@@ -7,8 +7,8 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use mimir_graph::EdgeKind;
 use mimir_parse_core::extracted::CallForm;
-use mimir_relations::EdgeKind;
 use mimir_types::{Confidence, FileId, ReferenceKind, Symbol};
 
 use crate::lookup::{SymbolTable, implements_generic_trait, owner_of, trait_of, type_name};

@@ -3,7 +3,7 @@
 use mimir_types::{FileId, Symbol, SymbolId};
 use std::sync::Arc;
 
-use crate::table::{SymbolTable, SymbolTableStats};
+use crate::symbols::table::{SymbolTable, SymbolTableStats};
 
 /// A cheap, cloneable handle to the symbol table.
 ///

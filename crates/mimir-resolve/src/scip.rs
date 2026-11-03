@@ -11,7 +11,7 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use mimir_relations::EdgeKind;
+use mimir_graph::EdgeKind;
 use mimir_types::{Confidence, ContentHash, FileId, ReferenceKind, Span, Symbol};
 use tracing::{info, warn};
 

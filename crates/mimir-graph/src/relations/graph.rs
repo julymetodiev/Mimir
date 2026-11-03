@@ -8,7 +8,7 @@ use petgraph::visit::EdgeRef;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::edge::EdgeData;
+use crate::relations::edge::EdgeData;
 
 /// A graph of relationships between symbols.
 ///
@@ -175,7 +175,7 @@ impl RelationGraph {
 
     /// Get symbols that this symbol calls.
     pub fn callees(&self, symbol_id: SymbolId) -> Vec<SymbolId> {
-        use crate::edge::EdgeKind;
+        use crate::relations::edge::EdgeKind;
 
         self.outgoing(symbol_id)
             .into_iter()
@@ -186,7 +186,7 @@ impl RelationGraph {
 
     /// Get symbols that call this symbol.
     pub fn callers(&self, symbol_id: SymbolId) -> Vec<SymbolId> {
-        use crate::edge::EdgeKind;
+        use crate::relations::edge::EdgeKind;
 
         self.incoming(symbol_id)
             .into_iter()
@@ -231,7 +231,7 @@ impl RelationGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::edge::EdgeKind;
+    use crate::relations::edge::EdgeKind;
     use mimir_types::{Confidence, IdGenerator, Span};
 
     fn ids() -> IdGenerator {

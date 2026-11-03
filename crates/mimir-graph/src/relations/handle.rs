@@ -4,8 +4,8 @@ use mimir_types::SymbolId;
 use petgraph::stable_graph::NodeIndex;
 use std::sync::Arc;
 
-use crate::edge::EdgeData;
-use crate::graph::RelationGraph;
+use crate::relations::edge::EdgeData;
+use crate::relations::graph::RelationGraph;
 
 /// A cheap, cloneable handle to the relation graph.
 ///
@@ -116,7 +116,7 @@ impl RelationsHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::edge::EdgeKind;
+    use crate::relations::edge::EdgeKind;
     use mimir_types::{Confidence, IdGenerator, Span};
 
     fn ids() -> IdGenerator {

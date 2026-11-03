@@ -4,7 +4,7 @@ use dashmap::DashMap;
 use mimir_types::{FileId, Symbol, SymbolId};
 use std::sync::Arc;
 
-use crate::index::{FileIndex, NameIndex, QualifiedIndex};
+use crate::symbols::index::{FileIndex, NameIndex, QualifiedIndex};
 
 /// The main symbol storage and indexing structure.
 ///
