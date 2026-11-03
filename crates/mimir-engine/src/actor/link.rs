@@ -1,21 +1,29 @@
 //! Resolving edges between files, and bringing the tracked files up to date with the disk.
 
-use crate::actor::GraphActor;
+use crate::actor::{GraphActor, answer};
 use crate::error::GraphError;
 use crate::save;
 use crate::scanner::{ScannedFile, Scanner};
 use mimir_protocol::{LinkSummary, SyncResult};
-use mimir_resolve::{ProjectFile, Refresh, ScipIndex, link};
+use mimir_resolve::{LinkReport, ProjectFile, Refresh, ScipIndex, link};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
+use tokio::sync::oneshot;
 use tracing::{debug, info, warn};
 
 /// Semantic resolution running in the background, for a set of files.
 pub struct PendingLink {
-    indexes: tokio::task::JoinHandle<Vec<ScipIndex>>,
+    pub indexes: tokio::task::JoinHandle<Vec<ScipIndex>>,
     files: Vec<ProjectFile>,
     /// The graph already holds what syntax rules give for these files.
     linked_by_syntax: bool,
+}
+
+/// A sync whose answer waits for semantic resolution.
+pub struct WaitingSync {
+    reply: oneshot::Sender<Result<SyncResult, GraphError>>,
+    result: SyncResult,
+    started: Instant,
 }
 
 impl GraphActor {
@@ -50,15 +58,7 @@ impl GraphActor {
             self.query_wait
         };
         match tokio::time::timeout(wait, &mut pending.indexes).await {
-            Ok(indexes) => {
-                let indexes = indexes.unwrap_or_else(|e| {
-                    warn!("Semantic indexing failed: {}", e);
-                    Vec::new()
-                });
-                let report = link(&self.graph, &pending.files, &indexes);
-                debug!("Linked: {:?}", report);
-                self.pending = None;
-            }
+            Ok(indexes) => self.finish_link(indexes),
             Err(_) if pending.linked_by_syntax => {}
             Err(_) => {
                 let (root, scan) = (self.root.clone(), pending.files.clone());
@@ -81,27 +81,36 @@ impl GraphActor {
         }
     }
 
-    /// Scan, resolve every edge without settling for a provisional answer, and save the graph.
-    pub async fn handle_sync_complete(&mut self, full: bool) -> Result<SyncResult, GraphError> {
-        let mut result = self.scan_files().await?;
-        let started = Instant::now();
+    /// Take in what semantic resolution found, and answer the syncs that wait for it.
+    pub fn finish_link(&mut self, indexes: Result<Vec<ScipIndex>, tokio::task::JoinError>) {
+        let Some(pending) = self.pending.take() else {
+            return;
+        };
+        let failure = indexes.as_ref().err().map(ToString::to_string);
+        let indexes = indexes.unwrap_or_else(|e| {
+            warn!("Semantic indexing failed: {}", e);
+            Vec::new()
+        });
+        let report = link(&self.graph, &pending.files, &indexes);
+        debug!("Linked: {:?}", report);
 
-        // A link still running gives way: this one covers the same files or newer ones.
-        self.pending = None;
-        self.needs_link = false;
-        let files: Vec<ProjectFile> = self.sources.values().cloned().collect();
-        let (root, cache_dir, scan) = (self.root.clone(), self.graph_dir(), files.clone());
-        let semantics = self.semantics.clone();
-        let refresh = if full { Refresh::Full } else { Refresh::Edits };
-        let indexes =
-            tokio::task::spawn_blocking(move || semantics.load(&root, &cache_dir, &scan, refresh))
-                .await
-                .map_err(GraphError::Index)?;
-        let report = link(&self.graph, &files, &indexes);
+        for waiting in std::mem::take(&mut self.waiting_syncs) {
+            let answered = match &failure {
+                Some(reason) => Err(GraphError::Index(reason.clone())),
+                None => self.finished_sync(waiting.result, waiting.started, &report),
+            };
+            answer(waiting.reply, answered);
+        }
+    }
 
+    fn finished_sync(
+        &self,
+        mut result: SyncResult,
+        started: Instant,
+        report: &LinkReport,
+    ) -> Result<SyncResult, GraphError> {
         let graph_file = save::save(&self.graph, &self.file_paths, &self.graph_dir())
             .map_err(GraphError::Save)?;
-
         result.link = Some(LinkSummary {
             semantic_calls: report.semantic_calls,
             syntax_calls: report.syntax_calls,
@@ -118,6 +127,38 @@ impl GraphActor {
         result.saved_to = Some(graph_file);
         result.duration_ms += started.elapsed().as_millis() as u64;
         Ok(result)
+    }
+
+    /// Scan and start resolving every edge. The answer comes when that is done, without settling
+    /// for a provisional one; meanwhile the actor goes on answering from the graph it has.
+    pub async fn handle_sync_complete(
+        &mut self,
+        full: bool,
+        reply: oneshot::Sender<Result<SyncResult, GraphError>>,
+    ) {
+        let result = match self.scan_files().await {
+            Ok(result) => result,
+            Err(e) => return answer(reply, Err(e)),
+        };
+
+        // A link still running gives way: this one covers the same files or newer ones.
+        self.needs_link = false;
+        let files: Vec<ProjectFile> = self.sources.values().cloned().collect();
+        let (root, cache_dir, scan) = (self.root.clone(), self.graph_dir(), files.clone());
+        let semantics = self.semantics.clone();
+        let refresh = if full { Refresh::Full } else { Refresh::Edits };
+        let indexes =
+            tokio::task::spawn_blocking(move || semantics.load(&root, &cache_dir, &scan, refresh));
+        self.pending = Some(PendingLink {
+            indexes,
+            files,
+            linked_by_syntax: false,
+        });
+        self.waiting_syncs.push(WaitingSync {
+            reply,
+            result,
+            started: Instant::now(),
+        });
     }
 
     /// Scan for changes and resolve edges, settling for a provisional answer if that takes long.

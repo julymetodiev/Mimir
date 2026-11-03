@@ -63,7 +63,7 @@ pub enum GraphError {
     Scan(#[source] std::io::Error),
 
     #[error("Semantic indexing failed: {0}")]
-    Index(#[source] tokio::task::JoinError),
+    Index(String),
 
     #[error("Saving the graph failed: {0}")]
     Save(#[source] std::io::Error),

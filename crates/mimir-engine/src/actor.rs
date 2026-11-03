@@ -18,7 +18,7 @@ use crate::project_files;
 use mimir_graph::CodeGraph;
 use mimir_parse_core::AdapterRegistry;
 use mimir_protocol::SymbolInfo;
-use mimir_resolve::{ProjectFile, SemanticSource};
+use mimir_resolve::{ProjectFile, ScipIndex, SemanticSource};
 use mimir_types::{ContentHash, FileId, IdGenerator, Symbol};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -27,7 +27,7 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 use tracing::{debug, info};
 
-use crate::actor::link::PendingLink;
+use crate::actor::link::{PendingLink, WaitingSync};
 
 /// How many files a listing returns unless asked otherwise.
 const DEFAULT_FILES_LIMIT: u32 = 500;
@@ -67,6 +67,8 @@ pub struct GraphActor {
     /// What knows more than syntax about the files.
     semantics: Arc<dyn SemanticSource>,
     pending: Option<PendingLink>,
+    /// Syncs answered when `pending` ends.
+    waiting_syncs: Vec<WaitingSync>,
     query_wait: Duration,
 }
 
@@ -77,15 +79,31 @@ fn answer<T>(reply: oneshot::Sender<T>, value: T) {
     }
 }
 
-/// The next command. Waiting for it is also when idle analyzers stop.
-async fn next_command(
+/// What the actor does next.
+enum Next {
+    Command(Option<GraphCommand>),
+    /// The semantic resolution a sync waits for has ended.
+    LinkEnded(Result<Vec<ScipIndex>, tokio::task::JoinError>),
+}
+
+/// The next thing to do. Waiting for it is also when idle analyzers stop.
+async fn next(
     commands: &mut CommandReceiver,
     semantics: &dyn SemanticSource,
-) -> Option<GraphCommand> {
+    waited_for: Option<&mut PendingLink>,
+) -> Next {
     let mut tick = tokio::time::interval(Duration::from_secs(60));
+    let ended = async {
+        match waited_for {
+            Some(pending) => (&mut pending.indexes).await,
+            None => std::future::pending().await,
+        }
+    };
+    tokio::pin!(ended);
     loop {
         tokio::select! {
-            command = commands.recv() => return command,
+            command = commands.recv() => return Next::Command(command),
+            ended = &mut ended => return Next::LinkEnded(ended),
             _ = tick.tick() => semantics.stop_if_idle(ANALYZER_IDLE),
         }
     }
@@ -109,6 +127,7 @@ impl GraphActor {
             needs_link: false,
             semantics,
             pending: None,
+            waiting_syncs: Vec::new(),
             query_wait: QUERY_WAIT,
         }
     }
@@ -123,7 +142,19 @@ impl GraphActor {
     pub async fn run(mut self, mut commands: CommandReceiver) -> Result<(), GraphError> {
         info!("Graph actor starting for root: {}", self.root.display());
 
-        while let Some(cmd) = next_command(&mut commands, self.semantics.as_ref()).await {
+        loop {
+            let waited_for = self
+                .pending
+                .as_mut()
+                .filter(|_| !self.waiting_syncs.is_empty());
+            let cmd = match next(&mut commands, self.semantics.as_ref(), waited_for).await {
+                Next::Command(Some(cmd)) => cmd,
+                Next::Command(None) => break,
+                Next::LinkEnded(indexes) => {
+                    self.finish_link(indexes);
+                    continue;
+                }
+            };
             match cmd {
                 GraphCommand::AddFile {
                     path,
@@ -194,8 +225,7 @@ impl GraphActor {
                 }
 
                 GraphCommand::SyncComplete { full, reply } => {
-                    let result = self.handle_sync_complete(full).await;
-                    answer(reply, result);
+                    self.handle_sync_complete(full, reply).await;
                 }
 
                 GraphCommand::Edit {

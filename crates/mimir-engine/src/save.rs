@@ -54,6 +54,7 @@ pub fn save(
     let encoded = serde_json::to_string_pretty(&saved)?;
     let path = dir.join("graph.json");
     let unfinished = dir.join("graph.json.new");
+    fs::create_dir_all(dir)?;
     fs::write(&unfinished, encoded)?;
     fs::rename(&unfinished, &path)?;
     Ok(path)
