@@ -54,9 +54,75 @@ mimir edit --file src/lib.rs --mode text --old "a = 1" --content "a = 2"  # exac
 mimir sync                               # up to date, wait until nothing is provisional
 ```
 
-In Claude Code, with the plugin in [integrations/claude-code](integrations/claude-code/README.md),
-the same operations are tools the model can use: `trace`, `search`, `read`, `edit_symbols`,
-`insert_after`, `grep`, `files`, `read_file`, `edit_lines`, `replace_text`, `write_file`, `sync`, `status`. For any other MCP client, run `mimir mcp`.
+## Connect your agent
+
+Through MCP, the same operations are tools the model can use: `trace`, `search`, `read`,
+`edit_symbols`, `insert_after`, `grep`, `files`, `read_file`, `edit_lines`, `replace_text`,
+`write_file`, `sync`, `status`. The server is `mimir mcp`, and it serves the git repository of the
+directory it runs in. So for most agents, add it to the project's own settings. `mimir` must be on the
+`PATH` the agent sees.
+
+### Claude Code
+
+The plugin brings the server and a skill that tells the model when to use it instead of Grep, Glob,
+Read, Edit and Write:
+
+```
+/plugin marketplace add julymetodiev/Mimir
+/plugin install mimir@mimir
+```
+
+Or only the server, without the skill:
+
+```bash
+claude mcp add --scope user mimir -- mimir mcp
+```
+
+### Other agents
+
+There is no plugin for these yet: add the server to the file shown. Claude Code is the one agent
+Mimir has been used with so far, so these come from each agent's configuration format and are untested.
+If one does not work, please [open an issue](https://github.com/julymetodiev/Mimir/issues).
+
+| Agent | File in the project |
+|---|---|
+| Cursor | `.cursor/mcp.json` |
+| Gemini CLI | `.gemini/settings.json` |
+| Roo Code | `.roo/mcp.json` |
+
+```json
+{ "mcpServers": { "mimir": { "command": "mimir", "args": ["mcp"] } } }
+```
+
+Codex, in `.codex/config.toml`:
+
+```toml
+[mcp_servers.mimir]
+command = "mimir"
+args = ["mcp"]
+```
+
+VS Code, in `.vscode/mcp.json`:
+
+```json
+{ "servers": { "mimir": { "type": "stdio", "command": "mimir", "args": ["mcp"] } } }
+```
+
+Zed, in `.zed/settings.json`:
+
+```json
+{ "context_servers": { "mimir": { "command": "mimir", "args": ["mcp"] } } }
+```
+
+OpenCode, in `opencode.json`:
+
+```json
+{ "mcp": { "mimir": { "type": "local", "command": ["mimir", "mcp"], "enabled": true } } }
+```
+
+Any other MCP client: run `mimir mcp` over stdio in the project's directory. To teach an agent when to
+use the tools, put [the skill's text](integrations/claude-code/skills/mimir-code/SKILL.md) in its
+instructions, such as `AGENTS.md`.
 
 ## What an answer means
 
