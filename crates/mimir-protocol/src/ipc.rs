@@ -166,21 +166,29 @@ pub fn build_identity() -> String {
     }
 }
 
-/// The daemon's socket for a project. It lives outside the project, in a directory only this user
-/// can enter: a Unix socket's path is limited to about 100 characters, and a project's can be longer.
-pub fn socket_path(root: &Path) -> io::Result<PathBuf> {
-    let owner = fs::metadata(root)?.uid();
-    let dir = std::env::temp_dir().join(format!("mimir-{owner}"));
-    if !dir.exists() {
-        fs::DirBuilder::new().mode(0o700).create(&dir)?;
+/// Make a directory only `owner` can enter. Several clients can start at once, so one may find it
+/// made by another.
+fn ensure_private_dir(dir: &Path, owner: u32) -> io::Result<()> {
+    match fs::DirBuilder::new().mode(0o700).create(dir) {
+        Err(e) if e.kind() != io::ErrorKind::AlreadyExists => return Err(e),
+        _ => {}
     }
-    let found = fs::metadata(&dir)?;
+    let found = fs::metadata(dir)?;
     if found.uid() != owner || found.mode() & 0o077 != 0 {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
             format!("{} is open to other users", dir.display()),
         ));
     }
+    Ok(())
+}
+
+/// The daemon's socket for a project. It lives outside the project, in a directory only this user
+/// can enter: a Unix socket's path is limited to about 100 characters, and a project's can be longer.
+pub fn socket_path(root: &Path) -> io::Result<PathBuf> {
+    let owner = fs::metadata(root)?.uid();
+    let dir = std::env::temp_dir().join(format!("mimir-{owner}"));
+    ensure_private_dir(&dir, owner)?;
     let hash = ContentHash::compute(root.as_os_str().as_encoded_bytes()).to_hex();
     Ok(dir.join(format!("{}.sock", &hash[..16])))
 }
@@ -250,5 +258,32 @@ mod tests {
         let dir = socket.parent().unwrap();
         assert_eq!(fs::metadata(dir).unwrap().mode() & 0o077, 0);
         assert_eq!(socket, socket_path(&root).unwrap());
+    }
+
+    #[test]
+    fn test_clients_starting_at_once_all_get_the_directory() {
+        let parent = tempfile::tempdir().unwrap();
+        let owner = fs::metadata(parent.path()).unwrap().uid();
+        let dir = parent.path().join("sockets");
+        std::thread::scope(|threads| {
+            let running: Vec<_> = (0..32)
+                .map(|_| threads.spawn(|| ensure_private_dir(&dir, owner)))
+                .collect();
+            for thread in running {
+                thread.join().unwrap().unwrap();
+            }
+        });
+    }
+
+    #[test]
+    fn test_a_directory_open_to_others_is_refused() {
+        let parent = tempfile::tempdir().unwrap();
+        let owner = fs::metadata(parent.path()).unwrap().uid();
+        fs::set_permissions(
+            parent.path(),
+            std::os::unix::fs::PermissionsExt::from_mode(0o755),
+        )
+        .unwrap();
+        assert!(ensure_private_dir(parent.path(), owner).is_err());
     }
 }

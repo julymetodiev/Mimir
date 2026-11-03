@@ -853,6 +853,7 @@ dependencies = [
  "mimir-types",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
 ]
 
