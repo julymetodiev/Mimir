@@ -71,7 +71,7 @@ fn extract_from_node(
                 symbols.push(sym);
                 // Recurse into module body
                 if let Some(body) = node.child_by_field_name("body") {
-                    for i in 0..body.named_child_count() {
+                    for i in 0..body.named_child_count() as u32 {
                         if let Some(child) = body.named_child(i) {
                             extract_from_node(&child, source, symbols, Some(&name));
                         }
@@ -84,7 +84,7 @@ fn extract_from_node(
 
     // Recurse into children for top-level items
     if node.kind() == "source_file" {
-        for i in 0..node.named_child_count() {
+        for i in 0..node.named_child_count() as u32 {
             if let Some(child) = node.named_child(i) {
                 extract_from_node(&child, source, symbols, parent);
             }
@@ -99,7 +99,7 @@ fn extract_nested_items(function: &Node, source: &[u8], symbols: &mut Vec<Extrac
     };
     let mut stack = vec![body];
     while let Some(node) = stack.pop() {
-        for i in (0..node.named_child_count()).rev() {
+        for i in (0..node.named_child_count() as u32).rev() {
             let Some(child) = node.named_child(i) else {
                 continue;
             };
@@ -124,7 +124,7 @@ fn extract_trait_methods(
     let Some(body) = node.child_by_field_name("body") else {
         return;
     };
-    for i in 0..body.named_child_count() {
+    for i in 0..body.named_child_count() as u32 {
         let Some(child) = body.named_child(i) else {
             continue;
         };
@@ -221,7 +221,7 @@ fn extract_struct_fields(
     struct_name: &str,
 ) {
     if let Some(body) = node.child_by_field_name("body") {
-        for i in 0..body.named_child_count() {
+        for i in 0..body.named_child_count() as u32 {
             if let Some(field) = body.named_child(i)
                 && field.kind() == "field_declaration"
                 && let Some(name_node) = field.child_by_field_name("name")
@@ -278,7 +278,7 @@ fn extract_enum_variants(
     enum_name: &str,
 ) {
     if let Some(body) = node.child_by_field_name("body") {
-        for i in 0..body.named_child_count() {
+        for i in 0..body.named_child_count() as u32 {
             if let Some(variant) = body.named_child(i)
                 && variant.kind() == "enum_variant"
                 && let Some(name_node) = variant.child_by_field_name("name")
@@ -370,7 +370,7 @@ fn extract_impl_methods(
     impl_name: &str,
 ) {
     if let Some(body) = node.child_by_field_name("body") {
-        for i in 0..body.named_child_count() {
+        for i in 0..body.named_child_count() as u32 {
             if let Some(child) = body.named_child(i)
                 && child.kind() == "function_item"
             {

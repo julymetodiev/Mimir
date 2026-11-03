@@ -12,8 +12,6 @@ repository.workspace = true
 mimir-types.workspace = true
 mimir-graph.workspace = true
 mimir-parse-core.workspace = true
-tracing.workspace = true
-serde_json.workspace = true
 
 [dev-dependencies]
 mimir-parse-rust.workspace = true

@@ -65,7 +65,7 @@ fn extract_from_node(
         _ => {}
     }
 
-    for i in 0..node.named_child_count() {
+    for i in 0..node.named_child_count() as u32 {
         if let Some(child) = node.named_child(i) {
             extract_from_node(&child, source, references, container, bound);
         }
@@ -254,7 +254,7 @@ fn bound_names(function: &Node, source: &[u8]) -> HashSet<String> {
         {
             names.insert(name.to_string());
         }
-        for i in 0..node.named_child_count() {
+        for i in 0..node.named_child_count() as u32 {
             if let Some(child) = node.named_child(i) {
                 collect(&child, source, names);
             }
@@ -266,7 +266,7 @@ fn bound_names(function: &Node, source: &[u8]) -> HashSet<String> {
         } else if let Some(pattern) = node.child_by_field_name("pattern") {
             collect(&pattern, source, names);
         }
-        for i in 0..node.named_child_count() {
+        for i in 0..node.named_child_count() as u32 {
             if let Some(child) = node.named_child(i).filter(|c| c.kind() != "function_item") {
                 walk(&child, source, names);
             }
@@ -424,7 +424,7 @@ fn extract_use_path(
             }
         }
         "use_list" => {
-            for i in 0..node.named_child_count() {
+            for i in 0..node.named_child_count() as u32 {
                 if let Some(child) = node.named_child(i) {
                     extract_use_path(&child, source, references, container, path_prefix);
                 }

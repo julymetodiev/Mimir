@@ -51,47 +51,47 @@ rmcp = { version = "3.8", features = ["server", "macros", "transport-io"] }
 schemars = "1.0"
 
 # Error handling
-thiserror = "2.0"
-anyhow = "1.0"
+thiserror = "2.0.21"
+anyhow = "1.0.104"
 
 # Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 
 # Hashing
-blake3 = "1.8"
+blake3 = "1.8.7"
 
 # Concurrency
-dashmap = "6.1"
-tokio = { version = "1.48", features = ["full"] }
-arc-swap = "1.7"
+dashmap = "6.2.1"
+tokio = { version = "1.54.1", features = ["full"] }
+arc-swap = "1.9.3"
 
 # Graph
-petgraph = "0.6"
+petgraph = "0.8.3"
 
 # Regex
-regex = "1.10"
+regex = "1.13.1"
 
 # Parsing
-tree-sitter = "0.24"
-tree-sitter-rust = "0.23"
+tree-sitter = "0.27.1"
+tree-sitter-rust = "0.24.2"
 
 # CLI
-clap = { version = "4.5", features = ["derive"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4.6.7", features = ["derive"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 # Utilities
-chrono = { version = "0.4", features = ["serde"] }
-hex = "0.4"
-ignore = "0.4"
-tempfile = "3.14"
-notify = { version = "7.0", default-features = false, features = ["macos_fsevent"] }
-notify-debouncer-mini = "0.5"
+chrono = { version = "0.4.45", features = ["serde"] }
+hex = "0.4.3"
+ignore = "0.4.34"
+tempfile = "3.27.0"
+notify = { version = "8.2.1", default-features = false, features = ["macos_fsevent"] }
+notify-debouncer-mini = "0.7.0"
 
 # Testing
-assert_cmd = "2.0"
-predicates = "3.1"
+assert_cmd = "2.2.2"
+predicates = "3.1.4"
 
 [profile.release]
 lto = true
