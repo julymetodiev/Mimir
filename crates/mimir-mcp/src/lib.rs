@@ -1,5 +1,5 @@
 //! The MCP server: each tool parses its arguments, makes one client call and returns the answer as
-//! compact JSON (see [`view`]). The client finds the project from the directory the server runs in, and starts the daemon.
+//! compact JSON (see `view`). The client finds the project from the directory the server runs in, and starts the daemon.
 
 mod view;
 

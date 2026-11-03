@@ -1,17 +1,44 @@
-# Mimir
+<p align="center">
+  <img src="design/icon.svg" width="128" height="128" alt="Mimir">
+</p>
 
-The call graph of your project for coding agents: who calls a function and what it calls, and edits
-by symbol. `x.get()` links to the `get` of `x`'s type, because `rust-analyzer` resolves it. Rust only
-for now.
+<h1 align="center">Mimir</h1>
+
+<p align="center"><strong>The call graph of your project for coding agents</strong></p>
+
+<p align="center">
+  <a href="https://github.com/julymetodiev/Mimir/actions/workflows/ci.yml"><img src="https://github.com/julymetodiev/Mimir/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/julymetodiev/Mimir/releases/latest"><img src="https://img.shields.io/github/v/release/julymetodiev/Mimir" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
+</p>
+
+Who calls a function, what it calls, who uses a type or a field, and edits by symbol. `x.get()` links
+to the `get` of `x`'s type, because `rust-analyzer` resolves it, where a text search finds every `get`.
+It also has the tools an agent needs instead of Grep, Glob, Read, Edit and Write, so the graph stays up
+to date as the agent works.
+
+Rust only for now, on macOS and Linux.
+
+## Install
+
+Download an archive for your platform from the
+[latest release](https://github.com/julymetodiev/Mimir/releases/latest) and put `mimir` on your `PATH`.
+Or build it, with Rust 1.95 or newer:
+
+```bash
+cargo install --git https://github.com/julymetodiev/Mimir mimir-cli
+```
+
+For exact answers, Mimir needs `rust-analyzer`:
+
+```bash
+rustup component add rust-analyzer rust-src
+```
 
 ## Use it
 
-```bash
-cargo install --path crates/mimir-cli
-```
-
 In a git repository, nothing else is needed. The first command starts a daemon, which stops after 30
-idle minutes.
+idle minutes or when the project is gone.
 
 ```bash
 mimir trace -s process_data              # who calls it, what it calls
@@ -46,16 +73,16 @@ calls, and `mimir sync` says how many files that covers.
 
 ## How fast
 
-On a copy of a project with 1311 Rust files and 20 168 symbols:
+On a copy of a project with 1311 Rust files and 20 260 symbols, on a laptop:
 
 | | |
 |---|---|
 | A query with nothing changed | 0.01 to 0.02 s |
-| A first answer after an edit | under 1 s, marked partial until complete |
-| A complete answer after the first edit | about 22 s, then under 1 s |
-| From no daemon to a first answer | 2.5 s, with the index already written |
-| A first index | 1 to 2 minutes |
-| Memory | daemon about 200 to 340 MB; `rust-analyzer` 3.7 GB while in use, stopped after 10 idle minutes |
+| A first answer after an edit | about 1 s (0.8 to 1.1 s), marked partial until complete |
+| A complete answer after the first edit | 8 to 12 s, then under 1 s |
+| From no daemon to a first answer | 3.2 to 3.8 s, with the index already written |
+| A first index | 1 to 2 minutes, at a peak of about 6 GB |
+| Memory | daemon about 270 MB idle; `rust-analyzer` about 2.2 GB while in use, stopped after 10 idle minutes |
 
 ## Accuracy
 
@@ -66,15 +93,32 @@ different test binaries one symbol. Every entry of a hand-written list of traps 
 names across types and crates, calls inside macros, trait methods. Scripts behind these numbers are in
 [scripts/bench](scripts/bench/README.md).
 
+Who uses what, against `rust-analyzer`'s find-references on the project above:
+
+| | Compared | Both agree | Only Mimir | Only the server |
+|---|---|---|---|---|
+| Constants and statics | all 944 | 1814 | 46 | 13 |
+| Types and traits | a sample of 40 | 420 | 0 | 0 |
+| Variants | a sample of 40 | 295 | 0 | 0 |
+| Fields | a sample of 40 | 157 | 0 | 0 |
+
+"Only Mimir" is mostly code a server on this machine does not compile, as behind `#[cfg(...)]` or a
+feature. A graph kept up to date through edits had 0 differences from a new index, on edits of comment
+lines in 3 files. These are measurements of one project, not a guarantee for yours.
+
 Known limits: only Rust. A proc macro that fails silently while the index is written loses its calls;
 one that says so is handled. A read and a write of a field are not told apart. A constant inside a format string has a read only in macros known to take one, and only if it is an item of the same module or imported by a project path: an attribute such as `#[error("{NAME}")]`, a glob import or a renamed import leaves it out. A function named in an attribute, as in `#[serde(skip_serializing_if = "name")]`, has no call. Replacing a file by renaming breaks a hard link to it.
 
-Left out on purpose, by the owner's decision of 2026-11-03: telling a read of a field from a write, which nothing asks for yet; languages other than Rust, a task of its own that changes the project's scope; keeping hard links when a file is written.
+Left out on purpose for now: telling a read of a field from a write; languages other than Rust; keeping hard links when a file is written.
 
 ## Develop
 
-Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), the specification. `scripts/check.sh` runs every check.
+Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), the specification, and
+[CONTRIBUTING.md](CONTRIBUTING.md). `scripts/check.sh` runs every check.
+
+Security: [SECURITY.md](SECURITY.md). Changes: [CHANGELOG.md](CHANGELOG.md). Releases:
+[RELEASING.md](RELEASING.md).
 
 ## License
 
-MIT
+[MIT](LICENSE)

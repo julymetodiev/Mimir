@@ -1,0 +1,20 @@
+# cargo-deny: what the dependency graph may hold. Run by CI.
+
+[graph]
+all-features = true
+
+[advisories]
+# A vulnerability or an unmaintained crate fails the check, unless it is listed here with its reason.
+ignore = []
+
+[licenses]
+allow = ["MIT", "Apache-2.0", "Zlib", "ISC", "Unicode-3.0", "CC0-1.0"]
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

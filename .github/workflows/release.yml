@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify:
+    name: Tag, version and changelog agree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: scripts/check-version.sh "${GITHUB_REF_NAME#v}"
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - { os: macos-latest, target: aarch64-apple-darwin, runs: true }
+          - { os: macos-latest, target: x86_64-apple-darwin, runs: false }
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, runs: true }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, runs: true }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release --locked -p mimir-cli --target ${{ matrix.target }}
+      - name: The binary runs
+        if: matrix.runs
+        run: target/${{ matrix.target }}/release/mimir --version
+      - name: Package
+        run: |
+          name="mimir-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          mkdir -p "dist/$name"
+          cp "target/${{ matrix.target }}/release/mimir" LICENSE README.md CHANGELOG.md "dist/$name/"
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mimir-${{ matrix.target }}
+          path: dist/*.tar.gz
+
+  release:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Checksums
+        run: cd artifacts && sha256sum *.tar.gz > SHA256SUMS && cat SHA256SUMS
+      - name: Notes from the changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v head="## [$version] - " 'index($0, head) == 1 {on=1; next} /^## \[/ {on=0} on' CHANGELOG.md > notes.md
+          test -s notes.md
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" artifacts/* --title "Mimir $GITHUB_REF_NAME" --notes-file notes.md --verify-tag

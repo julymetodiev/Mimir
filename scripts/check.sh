@@ -12,6 +12,7 @@ run() { # name, command...
 run architecture scripts/check-architecture.sh
 run new scripts/check-architecture.sh --new HEAD
 run file-size scripts/check-file-size.sh
+run version scripts/check-version.sh
 run deps scripts/check-deps.py
 run fmt cargo fmt --all -- --check
 run clippy cargo clippy --workspace --all-targets --all-features -- -D warnings

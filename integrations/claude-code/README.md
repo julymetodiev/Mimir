@@ -7,11 +7,7 @@ Connects Claude Code to [Mimir](../../README.md), the call graph of a project. I
 
 ## Install
 
-The `mimir` binary must be on your `PATH`:
-
-```bash
-cargo install --path crates/mimir-cli
-```
+The `mimir` binary must be on your `PATH`: see [how to install it](../../README.md#install).
 
 Then in Claude Code:
 

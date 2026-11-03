@@ -9,5 +9,6 @@
   },
   "repository": "https://github.com/julymetodiev/Mimir",
   "license": "MIT",
-  "keywords": ["mcp", "call-graph", "rust", "rust-analyzer", "code-intelligence"]
+  "keywords": ["mcp", "call-graph", "rust", "rust-analyzer", "code-intelligence"],
+  "icon": ".claude-plugin/icon.png"
 }
