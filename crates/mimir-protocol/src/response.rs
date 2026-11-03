@@ -54,6 +54,19 @@ impl FindResponse {
     }
 }
 
+/// A symbol's source, with any lines of context around it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SymbolSource {
+    /// The symbol.
+    pub symbol: SymbolInfo,
+    /// The number of the first of `lines`, 1-indexed.
+    pub first_line: u32,
+    /// The lines.
+    pub lines: Vec<String>,
+    /// The symbol has lines beyond these.
+    pub truncated: bool,
+}
+
 /// A node in a trace result.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraceNode {
@@ -103,6 +116,9 @@ pub struct TraceResponse {
     /// which leave out what they cannot be sure of.
     #[serde(default)]
     pub provisional: bool,
+    /// How many symbols have the name that was traced; this is the first of them.
+    #[serde(default)]
+    pub matches: usize,
 }
 
 impl TraceResponse {
@@ -115,6 +131,7 @@ impl TraceResponse {
             max_depth_reached: 0,
             total_symbols: 1,
             provisional: false,
+            matches: 1,
         }
     }
 

@@ -6,9 +6,7 @@ use mimir_protocol::{FindOptions, SymbolInfo};
 use mimir_types::{Span, SymbolKind};
 use std::path::PathBuf;
 
-use crate::app::{Config, find_project_root};
-use crate::commands::sync::sync_project;
-use crate::daemon::{DaemonClient, check_daemon_running};
+use mimir_client::Client;
 
 /// Edit mode specifying the type of edit operation.
 #[derive(Debug, Clone, Copy)]
@@ -74,13 +72,8 @@ pub async fn execute(request: EditRequest<'_>) -> Result<()> {
         preview,
         backup,
     } = request;
-    // Verify we're in a mimir project
-    let root = find_project_root().context("Not in a Mimir project. Run 'mimir init' first.")?;
-    let config = Config::new(&root);
-
-    if !config.is_initialized() {
-        anyhow::bail!("Project not initialized. Run 'mimir init' first.");
-    }
+    let mut client = Client::open(&std::env::current_dir()?).await?;
+    let root = client.root().to_path_buf();
 
     // For symbol mode, we need a symbol
     if matches!(mode, EditMode::Symbol) && symbol.is_none() {
@@ -89,13 +82,6 @@ pub async fn execute(request: EditRequest<'_>) -> Result<()> {
 
     // Resolve symbol location if provided
     let symbol_loc = if let Some(sym_name) = symbol {
-        if !check_daemon_running(&config.agent_dir) {
-            anyhow::bail!(
-                "Daemon not running. Start with 'mimir daemon start' for symbol-based editing."
-            );
-        }
-
-        let mut client = DaemonClient::connect(&config.agent_dir).await?;
         let options = FindOptions::default();
         let result = client.find_symbol(sym_name, options).await?;
 
@@ -207,11 +193,11 @@ pub async fn execute(request: EditRequest<'_>) -> Result<()> {
             result.lines_modified, result.lines_changed
         );
 
-        // Auto-sync after edit if enabled (default: true)
-        if config.sync.sync_on_edit {
-            let (_graph, _ids, _file_ids, stats) = sync_project(&config, false).await?;
-            println!("  Graph synced: {} symbols", stats.symbols_count);
-        }
+        client.sync(false).await?;
+        println!(
+            "  Graph synced: {} symbols",
+            client.stats().await?.symbols_count
+        );
     }
 
     Ok(())
@@ -273,19 +259,8 @@ pub async fn execute_batch_symbols(json_input: &str, preview: bool, backup: bool
         anyhow::bail!("No symbol edits provided");
     }
 
-    // Find project root
-    let root = find_project_root().context("Not in a Mimir project. Run 'mimir init' first.")?;
-    let config = Config::new(&root);
-
-    if !config.is_initialized() {
-        anyhow::bail!("Project not initialized. Run 'mimir init' first.");
-    }
-
-    if !check_daemon_running(&config.agent_dir) {
-        anyhow::bail!("Daemon not running. Start with 'mimir daemon start'.");
-    }
-
-    let mut client = DaemonClient::connect(&config.agent_dir).await?;
+    let mut client = Client::open(&std::env::current_dir()?).await?;
+    let root = client.root().to_path_buf();
     let options = FindOptions::default();
 
     // Resolve all symbols and build edit operations
@@ -346,11 +321,11 @@ pub async fn execute_batch_symbols(json_input: &str, preview: bool, backup: bool
             );
         }
 
-        // Auto-sync
-        if config.sync.sync_on_edit {
-            let (_graph, _ids, _file_ids, stats) = sync_project(&config, false).await?;
-            println!("\n  Graph synced: {} symbols", stats.symbols_count);
-        }
+        client.sync(false).await?;
+        println!(
+            "\n  Graph synced: {} symbols",
+            client.stats().await?.symbols_count
+        );
     }
 
     Ok(())

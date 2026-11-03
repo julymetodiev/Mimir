@@ -19,9 +19,10 @@ mimir-resolve.workspace = true
 chrono.workspace = true
 ignore.workspace = true
 
-tokio = { workspace = true, features = ["sync", "rt", "time", "macros", "fs"] }
+tokio = { workspace = true, features = ["sync", "rt", "time", "macros", "fs", "rt-multi-thread"] }
 tracing.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 notify.workspace = true
 notify-debouncer-mini.workspace = true
 regex.workspace = true

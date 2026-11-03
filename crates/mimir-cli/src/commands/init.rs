@@ -1,28 +1,10 @@
-//! Init command implementation.
+//! Init command: make the current directory a project, when no `.git` already says so.
 
-use crate::app::App;
-use anyhow::{Result, bail};
+use anyhow::Result;
 
 /// Execute the init command.
-pub async fn execute(force: bool) -> Result<()> {
-    let app = App::new()?;
-    let config = &app.config;
-
-    if config.is_initialized() && !force {
-        bail!(
-            "Mimir is already initialized in this directory.\n\
-             Use --force to re-initialize."
-        );
-    }
-
-    println!("Initializing Mimir in {}...", config.root.display());
-    config.create_directories().await?;
-    println!(
-        "Created {}/ and {}/",
-        config.agent_dir.display(),
-        config.graph_dir.display()
-    );
-    println!("Mimir initialized. Run 'mimir sync' to build the code graph.");
-
+pub fn execute() -> Result<()> {
+    let dir = mimir_client::init(&std::env::current_dir()?)?;
+    println!("Initialized {}", dir.display());
     Ok(())
 }

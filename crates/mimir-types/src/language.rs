@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Supported programming languages.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Language {
     Rust,
@@ -16,6 +16,7 @@ pub enum Language {
     Kotlin,
     C,
     Cpp,
+    #[default]
     Unknown,
 }
 
@@ -102,12 +103,6 @@ impl Language {
 impl std::fmt::Display for Language {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.display_name())
-    }
-}
-
-impl Default for Language {
-    fn default() -> Self {
-        Self::Unknown
     }
 }
 

@@ -66,7 +66,10 @@ mod channel;
 mod command;
 mod event;
 mod handle;
+mod save;
 mod scanner;
+mod source;
+mod start;
 mod watcher;
 
 pub use actor::GraphActor;
@@ -78,4 +81,5 @@ pub use command::GraphCommand;
 pub use event::{FileEvent, GraphEvent};
 pub use handle::GraphHandle;
 pub use scanner::{ScannedFile, Scanner};
+pub use start::{Engine, start};
 pub use watcher::{FileWatcher, WatcherConfig, WatcherHandle};

@@ -3,12 +3,15 @@
 //! This module defines serializable request/response types for
 //! communicating with the Mimir daemon over Unix sockets.
 
-use mimir_types::{FileId, Language, SymbolId};
+use mimir_types::{ContentHash, SymbolId};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::fs;
+use std::io;
+use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+use std::path::{Path, PathBuf};
 
 use crate::command::{FindOptions, SearchOptions, SyncResult, TraceOptions};
-use crate::response::{FindResponse, SearchResponse, StatsResponse, TraceResponse};
+use crate::response::{FindResponse, SearchResponse, StatsResponse, SymbolSource, TraceResponse};
 
 /// Request ID for correlating responses.
 pub type RequestId = u64;
@@ -35,34 +38,31 @@ pub enum IpcCommand {
     /// Ping the daemon to check if it's alive.
     Ping,
 
-    /// Add or update a file in the graph.
-    AddFile {
-        path: PathBuf,
-        content: String,
-        language: Language,
-    },
-
-    /// Remove a file from the graph.
-    RemoveFile { file_id: FileId },
-
     /// Find symbols by name.
     FindSymbol { name: String, options: FindOptions },
-
-    /// Trace a symbol's callers and callees.
-    Trace {
-        symbol_id: SymbolId,
-        options: TraceOptions,
-    },
 
     /// Find and trace a symbol by name.
     TraceByName { name: String, options: TraceOptions },
 
+    /// The source of the symbol a name most likely means, with lines of context around it.
+    Read {
+        name: String,
+        before: u32,
+        after: u32,
+    },
+
+    /// The first `lines` lines of a symbol, or all of them.
+    Source {
+        symbol_id: SymbolId,
+        lines: Option<u32>,
+    },
+
     /// Get graph statistics.
     Stats,
 
-    /// Trigger a sync operation.
-    /// Trigger a sync operation.
-    Sync,
+    /// Bring the graph up to date and wait until nothing about it is provisional. `full` writes
+    /// a new semantic index.
+    Sync { full: bool },
 
     /// Search for symbols by pattern.
     Search { options: SearchOptions },
@@ -121,14 +121,11 @@ impl IpcResult {
 /// Data returned from IPC commands.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IpcData {
-    /// Pong response.
-    Pong,
+    /// Pong response, with the daemon's version.
+    Pong { version: String },
 
-    /// File was added.
-    FileAdded { file_id: FileId },
-
-    /// File was removed.
-    FileRemoved { removed: bool },
+    /// The source of a symbol.
+    Source(SymbolSource),
 
     /// Find symbol results.
     FindResult(FindResponse),
@@ -140,7 +137,6 @@ pub enum IpcData {
     Stats(StatsResponse),
 
     /// Sync completed.
-    /// Sync completed.
     SyncResult(SyncResult),
 
     /// Search results.
@@ -150,27 +146,26 @@ pub enum IpcData {
     ShutdownAck,
 }
 
-/// Daemon status information.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DaemonStatus {
-    /// Process ID of the daemon.
-    pub pid: u32,
-    /// Project root the daemon is watching.
-    pub project_root: PathBuf,
-    /// Number of files indexed.
-    pub files_count: usize,
-    /// Number of symbols indexed.
-    pub symbols_count: usize,
-    /// Uptime in seconds.
-    pub uptime_secs: u64,
-}
+/// The version a client and a daemon must share to understand each other.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Default socket path within the project.
-pub const SOCKET_NAME: &str = "daemon.sock";
-
-/// Get the socket path for a project.
-pub fn socket_path(agent_dir: &std::path::Path) -> PathBuf {
-    agent_dir.join(SOCKET_NAME)
+/// The daemon's socket for a project. It lives outside the project, in a directory only this user
+/// can enter: a Unix socket's path is limited to about 100 characters, and a project's can be longer.
+pub fn socket_path(root: &Path) -> io::Result<PathBuf> {
+    let owner = fs::metadata(root)?.uid();
+    let dir = std::env::temp_dir().join(format!("mimir-{owner}"));
+    if !dir.exists() {
+        fs::DirBuilder::new().mode(0o700).create(&dir)?;
+    }
+    let found = fs::metadata(&dir)?;
+    if found.uid() != owner || found.mode() & 0o077 != 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("{} is open to other users", dir.display()),
+        ));
+    }
+    let hash = ContentHash::compute(root.as_os_str().as_encoded_bytes()).to_hex();
+    Ok(dir.join(format!("{}.sock", &hash[..16])))
 }
 
 #[cfg(test)]
@@ -188,7 +183,12 @@ mod tests {
 
     #[test]
     fn test_response_serialization() {
-        let resp = IpcResponse::ok(1, IpcData::Pong);
+        let resp = IpcResponse::ok(
+            1,
+            IpcData::Pong {
+                version: VERSION.to_string(),
+            },
+        );
         let json = serde_json::to_string(&resp).unwrap();
         let parsed: IpcResponse = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.id, 1);
@@ -224,5 +224,15 @@ mod tests {
             IpcCommand::TraceByName { name, .. } => assert_eq!(name, "my_function"),
             _ => panic!("Wrong command type"),
         }
+    }
+
+    #[test]
+    fn test_socket_path_is_short_and_private() {
+        let root = std::env::current_dir().unwrap();
+        let socket = socket_path(&root).unwrap();
+        assert!(socket.as_os_str().len() < 100, "{}", socket.display());
+        let dir = socket.parent().unwrap();
+        assert_eq!(fs::metadata(dir).unwrap().mode() & 0o077, 0);
+        assert_eq!(socket, socket_path(&root).unwrap());
     }
 }

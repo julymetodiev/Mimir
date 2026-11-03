@@ -1,8 +1,6 @@
 //! CLI for the Mimir semantic code intelligence engine.
 
-mod app;
 mod commands;
-mod daemon;
 
 use clap::Parser;
 
@@ -23,21 +21,31 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     // Initialize tracing
-    let filter = if cli.verbose { "debug" } else { "info" };
+    let serving = matches!(
+        cli.command,
+        commands::Commands::Daemon {
+            command: commands::DaemonCommands::Run
+        }
+    );
+    let filter = match (cli.verbose, serving) {
+        (true, _) => "debug",
+        (false, true) => "info",
+        (false, false) => "warn",
+    };
     tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_target(false)
+        .with_writer(std::io::stderr)
         .init();
 
     match cli.command {
         commands::Commands::Daemon { command } => match command {
-            commands::DaemonCommands::Start { foreground } => {
-                commands::daemon::execute_start(foreground).await?
-            }
-            commands::DaemonCommands::Stop => commands::daemon::execute_stop().await?,
-            commands::DaemonCommands::Status => commands::daemon::execute_status().await?,
+            commands::DaemonCommands::Start => commands::daemon::start().await?,
+            commands::DaemonCommands::Run => commands::daemon::run().await?,
+            commands::DaemonCommands::Stop => commands::daemon::stop().await?,
+            commands::DaemonCommands::Status => commands::daemon::status().await?,
         },
-        commands::Commands::Init { force } => commands::init::execute(force).await?,
+        commands::Commands::Init => commands::init::execute()?,
         commands::Commands::Status => commands::status::execute().await?,
         commands::Commands::Sync { full } => commands::sync::execute(full).await?,
         commands::Commands::Trace {
@@ -49,15 +57,15 @@ async fn main() -> anyhow::Result<()> {
             callers,
             callees,
         } => {
-            commands::trace::execute(
-                file.as_deref(),
-                &symbol,
+            commands::trace::execute(commands::trace::TraceRequest {
+                file: file.as_deref(),
+                symbol: &symbol,
                 depth,
                 json,
-                code,
-                callers,
-                callees,
-            )
+                show_code: code,
+                callers_only: callers,
+                callees_only: callees,
+            })
             .await?
         }
         commands::Commands::Edit {

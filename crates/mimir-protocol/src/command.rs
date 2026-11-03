@@ -2,6 +2,7 @@
 
 use mimir_types::Language;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 /// Options for finding symbols.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -27,6 +28,9 @@ pub struct TraceOptions {
     pub callees_only: bool,
     /// Include cross-language references.
     pub cross_language: bool,
+    /// Only a symbol in this file, by absolute path.
+    #[serde(default)]
+    pub file: Option<PathBuf>,
 }
 
 /// Options for searching symbols by pattern.
@@ -55,6 +59,33 @@ pub struct SyncResult {
     pub symbols_removed: usize,
     /// Duration in milliseconds.
     pub duration_ms: u64,
+    /// How edges were resolved, when the sync waited for that.
+    #[serde(default)]
+    pub link: Option<LinkSummary>,
+    /// Where the graph was saved, when it was.
+    #[serde(default)]
+    pub saved_to: Option<PathBuf>,
+}
+
+/// How edges were resolved.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+pub struct LinkSummary {
+    /// Call edges from a semantic index.
+    pub semantic_calls: usize,
+    /// Call edges from syntax rules.
+    pub syntax_calls: usize,
+    /// Edges from a method of an impl to the method of its trait.
+    pub implementations: usize,
+    /// Edges from a symbol to a function it names without calling.
+    pub function_values: usize,
+    /// Import edges.
+    pub imports: usize,
+    /// Files covered by a semantic index.
+    pub semantic_files: usize,
+    /// Of those, files edited since the index, resolved by a running analyzer.
+    pub live_files: usize,
+    /// Files resolved by syntax rules only.
+    pub syntax_files: usize,
 }
 
 impl SyncResult {
@@ -67,6 +98,8 @@ impl SyncResult {
             symbols_added: 0,
             symbols_removed: 0,
             duration_ms: 0,
+            link: None,
+            saved_to: None,
         }
     }
 

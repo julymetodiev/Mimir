@@ -1,0 +1,16 @@
+[package]
+name = "mimir-client"
+description = "The client of the Mimir daemon: connect, start it when needed, one call per operation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+mimir-types.workspace = true
+mimir-protocol.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true

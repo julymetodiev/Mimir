@@ -35,6 +35,27 @@ pub enum EdgeKind {
     MutablyBorrows,
 }
 
+impl EdgeKind {
+    /// The kind's name in a saved graph.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            EdgeKind::Calls => "Calls",
+            EdgeKind::UsesAsValue => "UsesAsValue",
+            EdgeKind::Imports => "Imports",
+            EdgeKind::UsesType => "UsesType",
+            EdgeKind::Instantiates => "Instantiates",
+            EdgeKind::AccessesField => "AccessesField",
+            EdgeKind::Extends => "Extends",
+            EdgeKind::Implements => "Implements",
+            EdgeKind::Contains => "Contains",
+            EdgeKind::Reads => "Reads",
+            EdgeKind::Writes => "Writes",
+            EdgeKind::Borrows => "Borrows",
+            EdgeKind::MutablyBorrows => "MutablyBorrows",
+        }
+    }
+}
+
 impl From<ReferenceKind> for EdgeKind {
     fn from(kind: ReferenceKind) -> Self {
         match kind {

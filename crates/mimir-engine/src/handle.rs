@@ -2,12 +2,13 @@
 
 use mimir_error::GraphError;
 use mimir_protocol::{
-    FindOptions, FindResponse, SearchOptions, SearchResponse, StatsResponse, SyncResult,
-    TraceOptions, TraceResponse,
+    FindOptions, FindResponse, SearchOptions, SearchResponse, StatsResponse, SymbolSource,
+    SyncResult, TraceOptions, TraceResponse,
 };
 use mimir_types::{FileId, Language, SymbolId};
 use std::path::PathBuf;
 use tokio::sync::oneshot;
+use tracing::{info, warn};
 
 use crate::channel::{CommandSender, EventReceiver, EventSender};
 use crate::command::GraphCommand;
@@ -164,6 +165,112 @@ impl GraphHandle {
         })?
     }
 
+    /// Find a symbol by name and trace it.
+    pub async fn trace_by_name(
+        &self,
+        name: String,
+        options: TraceOptions,
+    ) -> Result<TraceResponse, GraphError> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(GraphCommand::TraceByName {
+                name,
+                options,
+                reply,
+            })
+            .await
+            .map_err(|_| GraphError::SymbolNotFound {
+                name: "channel closed".to_string(),
+            })?;
+        answer.await.map_err(|_| GraphError::SymbolNotFound {
+            name: "reply channel closed".to_string(),
+        })?
+    }
+
+    /// The source of the symbol a name most likely means, with lines of context around it.
+    pub async fn read(
+        &self,
+        name: String,
+        before: u32,
+        after: u32,
+    ) -> Result<SymbolSource, GraphError> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(GraphCommand::Read {
+                name,
+                before,
+                after,
+                reply,
+            })
+            .await
+            .map_err(|_| GraphError::SymbolNotFound {
+                name: "channel closed".to_string(),
+            })?;
+        answer.await.map_err(|_| GraphError::SymbolNotFound {
+            name: "reply channel closed".to_string(),
+        })?
+    }
+
+    /// The first `lines` lines of a symbol, or all of them.
+    pub async fn source(
+        &self,
+        symbol_id: SymbolId,
+        lines: Option<u32>,
+    ) -> Result<SymbolSource, GraphError> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(GraphCommand::Source {
+                symbol_id,
+                lines,
+                reply,
+            })
+            .await
+            .map_err(|_| GraphError::SymbolNotFound {
+                name: "channel closed".to_string(),
+            })?;
+        answer.await.map_err(|_| GraphError::SymbolNotFound {
+            name: "reply channel closed".to_string(),
+        })?
+    }
+
+    /// Scan for changes, wait until no edge is provisional, and save the graph.
+    pub async fn sync_complete(&self, full: bool) -> Result<SyncResult, GraphError> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(GraphCommand::SyncComplete { full, reply })
+            .await
+            .map_err(|_| GraphError::SymbolNotFound {
+                name: "channel closed".to_string(),
+            })?;
+        answer.await.map_err(|_| GraphError::SymbolNotFound {
+            name: "reply channel closed".to_string(),
+        })?
+    }
+
+    /// Queue a scan without waiting for it. Commands sent after this one wait for it in the actor.
+    pub async fn queue_first_scan(&self) {
+        let (reply, answer) = oneshot::channel();
+        if self
+            .commands
+            .send(GraphCommand::Sync { reply })
+            .await
+            .is_err()
+        {
+            warn!("The graph actor stopped before the first scan");
+            return;
+        }
+        tokio::spawn(async move {
+            match answer.await {
+                Ok(Ok(result)) => info!(
+                    "First scan: {} files, {} symbols",
+                    result.files_added, result.symbols_added
+                ),
+                Ok(Err(e)) => warn!("First scan failed: {e}"),
+                Err(_) => warn!("The graph actor stopped during the first scan"),
+            }
+        });
+    }
+
     /// Search for symbols by pattern.
     pub async fn search(&self, options: SearchOptions) -> Result<SearchResponse, GraphError> {
         let (reply_tx, reply_rx) = oneshot::channel();
@@ -180,7 +287,7 @@ impl GraphHandle {
 
         reply_rx.await.map_err(|_| GraphError::SymbolNotFound {
             name: "reply channel closed".to_string(),
-        })
+        })?
     }
 
     /// Request shutdown.

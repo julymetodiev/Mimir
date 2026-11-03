@@ -4,8 +4,8 @@ use mimir_error::GraphError;
 use mimir_graph::{CodeGraph, TraceOptions as GraphTraceOptions, TraceRelationship};
 use mimir_parse_core::AdapterRegistry;
 use mimir_protocol::{
-    FindResponse, SearchOptions, SearchResponse, StatsResponse, SymbolInfo, SyncResult, TraceNode,
-    TraceRelation, TraceResponse,
+    FindResponse, LinkSummary, SearchOptions, SearchResponse, StatsResponse, SymbolInfo,
+    SymbolSource, SyncResult, TraceNode, TraceRelation, TraceResponse,
 };
 use mimir_resolve::{Analyzers, ProjectFile, Refresh, ScipIndex, link, load_or_generate};
 use mimir_types::{ContentHash, FileId, IdGenerator, Language, Symbol, SymbolId, SymbolKind};
@@ -13,12 +13,14 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use tokio::sync::oneshot;
 use tracing::{debug, info, warn};
 
 use crate::channel::{CommandReceiver, EventSender};
 use crate::command::GraphCommand;
 use crate::event::GraphEvent;
 use crate::scanner::{ScannedFile, Scanner};
+use crate::{save, source};
 
 /// How long a running analyzer, which holds gigabytes, is kept for the next edit.
 const ANALYZER_IDLE: Duration = Duration::from_secs(600);
@@ -66,6 +68,13 @@ pub struct GraphActor {
     analyzers: Arc<Mutex<Analyzers>>,
     pending: Option<PendingLink>,
     query_wait: Duration,
+}
+
+/// Send a reply. An asker that went away no longer wants it, which is no failure.
+fn answer<T>(reply: oneshot::Sender<T>, value: T) {
+    if reply.send(value).is_err() {
+        debug!("The asker left before the answer");
+    }
 }
 
 /// The next command. Waiting for it is also when idle analyzers stop.
@@ -144,12 +153,12 @@ impl GraphActor {
                     reply,
                 } => {
                     let result = self.handle_add_file(path.clone(), content, language, &events);
-                    let _ = reply.send(result);
+                    answer(reply, result);
                 }
 
                 GraphCommand::RemoveFile { file_id, reply } => {
                     let result = self.handle_remove_file(file_id, &events);
-                    let _ = reply.send(result);
+                    answer(reply, result);
                 }
 
                 GraphCommand::FindSymbol {
@@ -158,7 +167,7 @@ impl GraphActor {
                     reply,
                 } => {
                     let response = self.handle_find_symbol(&name, &options);
-                    let _ = reply.send(response);
+                    answer(reply, response);
                 }
 
                 GraphCommand::Trace {
@@ -168,23 +177,57 @@ impl GraphActor {
                 } => {
                     self.ensure_linked().await;
                     let response = self.handle_trace(symbol_id, &options);
-                    let _ = reply.send(response);
+                    answer(reply, response);
+                }
+
+                GraphCommand::TraceByName {
+                    name,
+                    options,
+                    reply,
+                } => {
+                    self.ensure_linked().await;
+                    let response = self.handle_trace_by_name(&name, &options);
+                    answer(reply, response);
+                }
+
+                GraphCommand::Read {
+                    name,
+                    before,
+                    after,
+                    reply,
+                } => {
+                    let response = self.handle_read(&name, before, after);
+                    answer(reply, response);
+                }
+
+                GraphCommand::Source {
+                    symbol_id,
+                    lines,
+                    reply,
+                } => {
+                    let response = self.handle_source(symbol_id, lines);
+                    answer(reply, response);
+                }
+
+                GraphCommand::SyncComplete { full, reply } => {
+                    let result = self.handle_sync_complete(full, &events).await;
+                    answer(reply, result);
                 }
 
                 GraphCommand::Stats { reply } => {
                     self.ensure_linked().await;
                     let response = self.handle_stats();
-                    let _ = reply.send(response);
+                    answer(reply, response);
                 }
 
                 GraphCommand::Sync { reply } => {
                     let result = self.handle_sync(&events).await;
-                    let _ = reply.send(result);
+                    answer(reply, result);
                 }
 
                 GraphCommand::Search { options, reply } => {
                     let response = self.handle_search(&options);
-                    let _ = reply.send(response);
+                    answer(reply, response);
                 }
 
                 GraphCommand::Shutdown => {
@@ -368,6 +411,53 @@ impl GraphActor {
         }
     }
 
+    /// Scan, resolve every edge without settling for a provisional answer, and save the graph.
+    async fn handle_sync_complete(
+        &mut self,
+        full: bool,
+        events: &EventSender,
+    ) -> Result<SyncResult, GraphError> {
+        let mut result = self.scan_files(events).await?;
+        let started = Instant::now();
+
+        // A link still running gives way: this one covers the same files or newer ones.
+        self.pending = None;
+        self.needs_link = false;
+        let files: Vec<ProjectFile> = self.sources.values().cloned().collect();
+        let (root, cache_dir, scan) = (self.root.clone(), self.graph_dir(), files.clone());
+        let analyzers = self.analyzers.clone();
+        let refresh = if full { Refresh::Full } else { Refresh::Edits };
+        let indexes = tokio::task::spawn_blocking(move || {
+            let mut analyzers = analyzers.lock().unwrap_or_else(|e| e.into_inner());
+            load_or_generate(&root, &cache_dir, &scan, &mut analyzers, refresh)
+        })
+        .await
+        .map_err(|e| GraphError::WatcherError(format!("Semantic indexing failed: {e}")))?;
+        let report = link(&self.graph, &files, &indexes);
+
+        let graph_file = save::save(&self.graph, &self.file_paths, &self.graph_dir())
+            .map_err(|e| GraphError::WatcherError(format!("Saving the graph failed: {e}")))?;
+
+        result.link = Some(LinkSummary {
+            semantic_calls: report.semantic_calls,
+            syntax_calls: report.syntax_calls,
+            implementations: report.implementations,
+            function_values: report.function_values,
+            imports: report.imports,
+            semantic_files: report.semantic_files,
+            live_files: report.live_files,
+            syntax_files: report.syntax_files,
+        });
+        result.saved_to = Some(graph_file);
+        result.duration_ms += started.elapsed().as_millis() as u64;
+        Ok(result)
+    }
+
+    /// Where the index cache and the saved graph live.
+    fn graph_dir(&self) -> PathBuf {
+        self.root.join(".mimir").join("graph")
+    }
+
     /// Handle removing a file from the graph.
     fn handle_remove_file(
         &mut self,
@@ -494,6 +584,7 @@ impl GraphActor {
                 max_depth_reached: 0,
                 total_symbols: 0,
                 provisional: self.pending.is_some(),
+                matches: 0,
             };
         };
 
@@ -518,6 +609,7 @@ impl GraphActor {
             max_depth_reached: trace.max_depth_reached as u32,
             total_symbols: total,
             provisional: self.pending.is_some(),
+            matches: 1,
         }
     }
 
@@ -540,6 +632,89 @@ impl GraphActor {
             .collect()
     }
 
+    /// Trace the first symbol with this name, in `options.file` if given.
+    fn handle_trace_by_name(
+        &self,
+        name: &str,
+        options: &mimir_protocol::TraceOptions,
+    ) -> Result<TraceResponse, GraphError> {
+        let mut found = self.graph.find_symbol(name);
+        if let Some(file) = &options.file {
+            let relative = file.strip_prefix(&self.root).unwrap_or(file);
+            if !self.file_paths.values().any(|path| path == relative) {
+                return Err(GraphError::FileNotFound { path: file.clone() });
+            }
+            found.retain(|symbol| {
+                self.file_paths
+                    .get(&symbol.file_id)
+                    .is_some_and(|path| path == relative)
+            });
+        }
+        let first = found.first().ok_or_else(|| GraphError::SymbolNotFound {
+            name: name.to_string(),
+        })?;
+        let mut trace = self.handle_trace(first.id, options);
+        trace.matches = found.len();
+        Ok(trace)
+    }
+
+    /// The source of the symbol a name most likely means, with lines of context around it.
+    fn handle_read(&self, name: &str, before: u32, after: u32) -> Result<SymbolSource, GraphError> {
+        let found = self.graph.find_symbol(name);
+        let best = source::most_likely(&found, name).ok_or_else(|| GraphError::SymbolNotFound {
+            name: name.to_string(),
+        })?;
+        self.source_lines(best, before, after, None)
+    }
+
+    /// The first `lines` lines of a symbol, or all of them.
+    fn handle_source(
+        &self,
+        symbol_id: SymbolId,
+        lines: Option<u32>,
+    ) -> Result<SymbolSource, GraphError> {
+        let symbol =
+            self.graph
+                .get_symbol(symbol_id)
+                .ok_or_else(|| GraphError::SymbolNotFound {
+                    name: symbol_id.to_string(),
+                })?;
+        self.source_lines(&symbol, 0, 0, lines)
+    }
+
+    fn source_lines(
+        &self,
+        symbol: &Symbol,
+        before: u32,
+        after: u32,
+        limit: Option<u32>,
+    ) -> Result<SymbolSource, GraphError> {
+        let file = self
+            .sources
+            .get(&symbol.file_id)
+            .ok_or_else(|| GraphError::FileNotFound {
+                path: self
+                    .file_paths
+                    .get(&symbol.file_id)
+                    .cloned()
+                    .unwrap_or_default(),
+            })?;
+        let (first_line, lines, truncated) = source::cut(
+            &file.source,
+            symbol.range.start_line,
+            symbol.range.end_line,
+            before,
+            after,
+            limit,
+        );
+        Ok(SymbolSource {
+            symbol: self.symbol_to_info(symbol),
+            first_line,
+            lines,
+            truncated,
+        })
+    }
+
     /// Handle getting statistics.
     fn handle_stats(&self) -> StatsResponse {
         StatsResponse {
@@ -552,19 +727,12 @@ impl GraphActor {
     }
 
     /// Handle searching for symbols by pattern.
-    fn handle_search(&self, options: &SearchOptions) -> SearchResponse {
+    fn handle_search(&self, options: &SearchOptions) -> Result<SearchResponse, GraphError> {
         use regex::Regex;
 
-        let pattern = match Regex::new(&options.pattern) {
-            Ok(p) => p,
-            Err(_) => {
-                return SearchResponse {
-                    symbols: Vec::new(),
-                    total_count: 0,
-                    truncated: false,
-                };
-            }
-        };
+        let pattern = Regex::new(&options.pattern).map_err(|e| {
+            GraphError::WatcherError(format!("Invalid pattern '{}': {e}", options.pattern))
+        })?;
 
         let limit = options.limit.unwrap_or(20) as usize;
         let mut matches = Vec::new();
@@ -593,15 +761,22 @@ impl GraphActor {
         let truncated = matches.len() >= limit;
         let total_count = matches.len();
 
-        SearchResponse {
+        Ok(SearchResponse {
             symbols: matches,
             total_count,
             truncated,
-        }
+        })
     }
 
-    /// Handle a sync operation.
+    /// Scan for changes and resolve edges, settling for a provisional answer if that takes long.
     async fn handle_sync(&mut self, events: &EventSender) -> Result<SyncResult, GraphError> {
+        let result = self.scan_files(events).await?;
+        self.ensure_linked().await;
+        Ok(result)
+    }
+
+    /// Bring the tracked files and their symbols up to date with the disk.
+    async fn scan_files(&mut self, events: &EventSender) -> Result<SyncResult, GraphError> {
         let start = Instant::now();
 
         let _ = events.send(GraphEvent::SyncStarted);
@@ -686,7 +861,6 @@ impl GraphActor {
 
         // Calls can point at any file, so edges are resolved once all files are in
         self.needs_link |= files_added + files_updated + files_removed > 0;
-        self.ensure_linked().await;
 
         let duration_ms = start.elapsed().as_millis() as u64;
 
@@ -697,6 +871,8 @@ impl GraphActor {
             symbols_added,
             symbols_removed,
             duration_ms,
+            link: None,
+            saved_to: None,
         };
 
         info!(
@@ -763,7 +939,6 @@ mod tests {
     use super::*;
     use crate::channel::{command_channel, event_channel};
     use mimir_parse_rust::RustAdapter;
-    use tokio::sync::oneshot;
 
     fn create_test_registry() -> Arc<AdapterRegistry> {
         let registry = AdapterRegistry::new();

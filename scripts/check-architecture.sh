@@ -101,7 +101,7 @@ CHECKS='allow_attrs anyhow_libs debug_names domain_io env_below_root path_attrs 
 
 if [ "${1:-}" = "--new" ]; then
   base=${2:-HEAD}
-  re='pub\(super\)|pub\(crate\)|pub\(in |#\[path|(^|[^a-z_*])super::|#!?\[allow\(|\.unwrap\(\)|\.expect\(|let _ = |\.ok\(\);|format!\("\{:\?\}"|to_string\(\)\.contains\(|err_str|anyhow::'
+  re='pub\(super\)|pub\(crate\)|pub\(in |#\[path|(^|[^a-z_*])super::|#!?\[allow\(|\.unwrap\(\)|\.expect\(|let _ = |\.ok\(\);|format!\("\{:\?\}"|to_string\(\)\.contains\(|err_str'
   approved=$(grep -v -E '^[[:space:]]*(#|$)' scripts/approved-crate-items.txt | awk '{print $1 " " $2}' || true)
   added() { # $1 = file; prints added lines before its inline test module
     local f=$1 cut
@@ -121,7 +121,7 @@ if [ "${1:-}" = "--new" ]; then
   hits=$( { for f in $( { git diff --name-only "$base" -- 'crates/*.rs'; git ls-files --others --exclude-standard -- 'crates/*.rs'; } | sort -u | grep -v -E "$TEST_FILES" || true); do
               [ -f "$f" ] && added "$f"
             done
-          } | grep -E "$re" | grep -v -E ': *use super::\*;' | grep -v -E ': *//' || true)
+          } | { grep -E "$re|anyhow" || true; } | { grep -v -E '^crates/mimir-cli/.*anyhow' || true; } | { grep -v -E ': *use super::\*;' || true; } | { grep -v -E ': *//' || true; })
   if [ -n "$approved" ] && [ -n "$hits" ]; then
     while read -r file item; do
       hits=$(grep -v -E "^$file: .*pub\(crate\).*\b$item\b" <<<"$hits" || true)

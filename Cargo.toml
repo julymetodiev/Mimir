@@ -12,6 +12,8 @@ members = [
     "crates/mimir-edit",
     "crates/mimir-protocol",
     "crates/mimir-engine",
+    "crates/mimir-daemon",
+    "crates/mimir-client",
     # CLI
     "crates/mimir-cli",
 ]
@@ -39,6 +41,8 @@ mimir-resolve = { path = "crates/mimir-resolve" }
 mimir-edit = { path = "crates/mimir-edit" }
 mimir-protocol = { path = "crates/mimir-protocol" }
 mimir-engine = { path = "crates/mimir-engine" }
+mimir-daemon = { path = "crates/mimir-daemon" }
+mimir-client = { path = "crates/mimir-client" }
 
 # Error handling
 thiserror = "2.0"

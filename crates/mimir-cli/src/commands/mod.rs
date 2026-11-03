@@ -15,12 +15,11 @@ use std::path::PathBuf;
 /// Daemon subcommands.
 #[derive(Subcommand)]
 pub enum DaemonCommands {
-    /// Start the daemon.
-    Start {
-        /// Run in foreground (don't daemonize).
-        #[arg(short, long)]
-        foreground: bool,
-    },
+    /// Start the daemon. Any command does this when needed.
+    Start,
+    /// Serve this project in this process. A client starts this.
+    #[command(hide = true)]
+    Run,
     /// Stop the daemon.
     Stop,
     /// Show daemon status.
@@ -30,18 +29,14 @@ pub enum DaemonCommands {
 /// Available commands.
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Manage the Mimir daemon (background graph service).
+    /// Manage the Mimir daemon, which any command starts when needed.
     Daemon {
         #[command(subcommand)]
         command: DaemonCommands,
     },
 
     /// Initialize Mimir in the current directory.
-    Init {
-        /// Force re-initialization even if already initialized.
-        #[arg(short, long)]
-        force: bool,
-    },
+    Init,
 
     /// Show project status.
     Status,
@@ -55,7 +50,7 @@ pub enum Commands {
 
     /// Trace call chains for a symbol.
     Trace {
-        /// Source file to analyze (optional if graph is synced).
+        /// Only a symbol in this file.
         #[arg(short, long)]
         file: Option<PathBuf>,
 

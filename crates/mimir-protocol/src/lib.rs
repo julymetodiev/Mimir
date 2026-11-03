@@ -5,14 +5,13 @@ mod command;
 pub mod ipc;
 mod response;
 
-pub use command::{FindOptions, SearchOptions, SyncResult, TraceOptions};
+pub use command::{FindOptions, LinkSummary, SearchOptions, SyncResult, TraceOptions};
 
 pub use response::{
-    FindResponse, SearchResponse, StatsResponse, SymbolInfo, TraceNode, TraceRelation,
-    TraceResponse,
+    FindResponse, SearchResponse, StatsResponse, SymbolInfo, SymbolSource, TraceNode,
+    TraceRelation, TraceResponse,
 };
 
 pub use ipc::{
-    DaemonStatus, IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult, RequestId, SOCKET_NAME,
-    socket_path,
+    IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult, RequestId, VERSION, socket_path,
 };
