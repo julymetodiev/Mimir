@@ -53,13 +53,16 @@ On a copy of a project with 1311 Rust files and 20 168 symbols:
 
 ## Accuracy
 
-Mimir's call edges match the SCIP index they come from, and every entry of a hand-written list of
-traps in [crates/mimir-resolve-ra/tests/fixture.rs](crates/mimir-resolve-ra/tests/fixture.rs) holds:
-same names across types and crates, calls inside macros, trait methods. Scripts behind these numbers
-are in [scripts/bench](scripts/bench/README.md).
+On Mimir's own code, 1326 of 1326 calls between its functions match what `rust-analyzer` reports. The
+measurement says 1325, and the one difference is the measurement's: SCIP gives two functions in
+different test binaries one symbol. Every entry of a hand-written list of traps in
+[crates/mimir-resolve-ra/tests/fixture.rs](crates/mimir-resolve-ra/tests/fixture.rs) holds too: same
+names across types and crates, calls inside macros, trait methods. Scripts behind these numbers are in
+[scripts/bench](scripts/bench/README.md).
 
 Known limits: only Rust. A proc macro that fails silently while the index is written loses its calls;
-one that says so is handled.
+one that says so is handled. A plain constant has no callers in `trace`; only one holding a function
+does. A function named in an attribute, as in `#[serde(skip_serializing_if = "name")]`, has no call.
 
 ## Develop
 

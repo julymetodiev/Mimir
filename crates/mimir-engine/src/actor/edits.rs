@@ -1,5 +1,8 @@
 //! Applying edits to files, and taking the edited files into the graph at once.
 
+use mimir_types::Symbol;
+use std::sync::Arc;
+
 use crate::actor::GraphActor;
 use crate::error::GraphError;
 use crate::{edit, source};
@@ -87,13 +90,9 @@ impl GraphActor {
                 }
                 edit::on_file(&inside, &edit.change)
             }
-            EditTarget::Symbol(name) => {
-                let found = self.graph.find_symbol(name);
-                let symbol = source::most_likely(&found, name).ok_or_else(|| {
-                    GraphError::SymbolNotFound {
-                        name: name.to_string(),
-                    }
-                })?;
+            EditTarget::Symbol { name, file } => {
+                let found = self.named(name, file.as_deref())?;
+                let symbol = self.the_one_meant(&found, name)?;
                 let path = self
                     .root
                     .join(self.file_paths.get(&symbol.file_id).ok_or_else(|| {
@@ -108,6 +107,36 @@ impl GraphActor {
                     .ok_or_else(|| GraphError::FileNotFound { path: path.clone() })?;
                 edit::on_symbol(&path, symbol, hash, &edit.change)
             }
+        }
+    }
+
+    /// The symbol an edit means. Unlike a question, an edit does not settle for the likeliest: among
+    /// equals it would change the wrong code, so it asks which.
+    fn the_one_meant<'a>(
+        &self,
+        found: &'a [Arc<Symbol>],
+        name: &str,
+    ) -> Result<&'a Arc<Symbol>, GraphError> {
+        match source::likeliest(found, name).as_slice() {
+            [] => Err(GraphError::SymbolNotFound {
+                name: name.to_string(),
+            }),
+            [one] => Ok(one),
+            many => Err(GraphError::AmbiguousSymbol {
+                name: name.to_string(),
+                places: many
+                    .iter()
+                    .map(|symbol| {
+                        let path = self.file_paths.get(&symbol.file_id).cloned();
+                        format!(
+                            "{}:{}",
+                            path.unwrap_or_default().display(),
+                            symbol.range.start_line
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            }),
         }
     }
 

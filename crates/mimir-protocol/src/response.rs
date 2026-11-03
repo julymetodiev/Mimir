@@ -65,6 +65,8 @@ pub struct SymbolSource {
     pub lines: Vec<String>,
     /// The symbol has lines beyond these.
     pub truncated: bool,
+    /// How many symbols have the name that was asked for; this is the one it most likely means.
+    pub matches: usize,
 }
 
 /// A node in a trace result.

@@ -47,8 +47,8 @@ pub struct SearchOptions {
 pub enum EditTarget {
     /// A file, by absolute path or relative to the project.
     File(PathBuf),
-    /// The symbol a name most likely means.
-    Symbol(String),
+    /// The symbol a name means; `file` chooses among several with that name.
+    Symbol { name: String, file: Option<PathBuf> },
 }
 
 /// What an edit changes.

@@ -52,9 +52,13 @@ pub struct EditRequest<'a> {
 
 /// Execute the edit command.
 pub async fn execute(request: EditRequest<'_>) -> Result<()> {
-    let target = match (request.symbol, request.file) {
-        (Some(symbol), _) => EditTarget::Symbol(symbol.to_string()),
-        (None, Some(file)) => EditTarget::File(std::path::absolute(file)?),
+    let file = request.file.map(std::path::absolute).transpose()?;
+    let target = match (request.symbol, file) {
+        (Some(symbol), file) => EditTarget::Symbol {
+            name: symbol.to_string(),
+            file,
+        },
+        (None, Some(file)) => EditTarget::File(file),
         (None, None) => anyhow::bail!("Either --file or --symbol must be provided"),
     };
     let start = || request.start.context("This mode requires --start");
@@ -100,10 +104,12 @@ pub async fn execute(request: EditRequest<'_>) -> Result<()> {
 #[derive(Deserialize)]
 struct SymbolEdit {
     symbol: String,
+    file: Option<PathBuf>,
     content: String,
 }
 
-/// Replace several whole symbols together, from JSON: `[{"symbol": "name", "content": "code"}]`.
+/// Replace several whole symbols together, from JSON:
+/// `[{"symbol": "name", "file": "optional/path.rs", "content": "code"}]`.
 pub async fn execute_symbols(json: &str, preview: bool, backup: bool) -> Result<()> {
     let edits: Vec<SymbolEdit> =
         serde_json::from_str(json).context("Failed to parse JSON symbol edits")?;
@@ -113,7 +119,10 @@ pub async fn execute_symbols(json: &str, preview: bool, backup: bool) -> Result<
     let edits = edits
         .into_iter()
         .map(|edit| Edit {
-            target: EditTarget::Symbol(edit.symbol),
+            target: EditTarget::Symbol {
+                name: edit.symbol,
+                file: edit.file,
+            },
             change: EditChange::WholeSymbol {
                 content: edit.content,
             },

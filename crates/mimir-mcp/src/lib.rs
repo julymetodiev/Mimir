@@ -61,7 +61,7 @@ enum Direction {
 struct TraceArguments {
     /// The symbol's name.
     symbol: String,
-    /// Only a symbol in this file, by absolute path, when several share the name.
+    /// Only a symbol in this file, when several share the name.
     file: Option<PathBuf>,
     /// How many levels to follow. The default is 1.
     depth: Option<u32>,
@@ -84,6 +84,8 @@ struct SearchArguments {
 struct ReadArguments {
     /// The symbol's name.
     symbol: String,
+    /// Only a symbol in this file, when several share the name.
+    file: Option<PathBuf>,
     /// Lines of context before it.
     #[serde(default)]
     before: u32,
@@ -96,6 +98,8 @@ struct ReadArguments {
 struct SymbolEdit {
     /// The symbol's name.
     symbol: String,
+    /// The file it is in. Needed when several symbols share the name: the edit fails otherwise.
+    file: Option<PathBuf>,
     /// Its whole new source. Doc comments and attributes above it are not part of the symbol.
     content: String,
 }
@@ -206,7 +210,12 @@ impl MimirServer {
     ) -> Result<String, String> {
         self.with_client(async |client| {
             let source = client
-                .read(&arguments.symbol, arguments.before, arguments.after)
+                .read(
+                    &arguments.symbol,
+                    arguments.file,
+                    arguments.before,
+                    arguments.after,
+                )
                 .await?;
             Ok(view::Source::from(source))
         })
@@ -224,7 +233,10 @@ impl MimirServer {
             .edits
             .into_iter()
             .map(|edit| Edit {
-                target: EditTarget::Symbol(edit.symbol),
+                target: EditTarget::Symbol {
+                    name: edit.symbol,
+                    file: edit.file,
+                },
                 change: EditChange::WholeSymbol {
                     content: edit.content,
                 },

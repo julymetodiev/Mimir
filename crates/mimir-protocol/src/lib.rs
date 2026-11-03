@@ -16,5 +16,5 @@ pub use response::{
 };
 
 pub use ipc::{
-    IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult, RequestId, VERSION, socket_path,
+    IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult, RequestId, build_identity, socket_path,
 };

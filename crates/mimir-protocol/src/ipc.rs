@@ -9,6 +9,7 @@ use std::fs;
 use std::io;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt};
 use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 use crate::command::{Edit, EditReport, FindOptions, SearchOptions, SyncResult, TraceOptions};
 use crate::response::{FindResponse, SearchResponse, StatsResponse, SymbolSource, TraceResponse};
@@ -47,6 +48,7 @@ pub enum IpcCommand {
     /// The source of the symbol a name most likely means, with lines of context around it.
     Read {
         name: String,
+        file: Option<PathBuf>,
         before: u32,
         after: u32,
     },
@@ -146,8 +148,23 @@ pub enum IpcData {
     ShutdownAck,
 }
 
-/// The version a client and a daemon must share to understand each other.
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// What a client and a daemon must share to understand each other: the version and, because a
+/// rebuild keeps the version, when this binary was built. A daemon reads it once, as it starts.
+pub fn build_identity() -> String {
+    let version = env!("CARGO_PKG_VERSION");
+    let built = std::env::current_exe()
+        .and_then(fs::metadata)
+        .and_then(|found| found.modified())
+        .map(|time| {
+            time.duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        });
+    match built {
+        Ok(built) => format!("{version}+{built}"),
+        Err(_) => version.to_string(),
+    }
+}
 
 /// The daemon's socket for a project. It lives outside the project, in a directory only this user
 /// can enter: a Unix socket's path is limited to about 100 characters, and a project's can be longer.
@@ -186,7 +203,7 @@ mod tests {
         let resp = IpcResponse::ok(
             1,
             IpcData::Pong {
-                version: VERSION.to_string(),
+                version: build_identity(),
             },
         );
         let json = serde_json::to_string(&resp).unwrap();

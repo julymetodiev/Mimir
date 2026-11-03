@@ -162,6 +162,7 @@ impl GraphHandle {
     pub async fn read(
         &self,
         name: String,
+        file: Option<PathBuf>,
         before: u32,
         after: u32,
     ) -> Result<SymbolSource, GraphError> {
@@ -169,6 +170,7 @@ impl GraphHandle {
         self.commands
             .send(GraphCommand::Read {
                 name,
+                file,
                 before,
                 after,
                 reply,

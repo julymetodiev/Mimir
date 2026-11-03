@@ -50,6 +50,7 @@ pub enum GraphCommand {
     /// The source of the symbol a name most likely means, with context.
     Read {
         name: String,
+        file: Option<PathBuf>,
         before: u32,
         after: u32,
         reply: oneshot::Sender<Result<SymbolSource, GraphError>>,

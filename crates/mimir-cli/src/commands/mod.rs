@@ -170,6 +170,10 @@ pub enum Commands {
         #[arg(short, long)]
         symbol: String,
 
+        /// Only a symbol in this file, when several share the name.
+        #[arg(short, long)]
+        file: Option<PathBuf>,
+
         /// Lines of context before the symbol.
         #[arg(short = 'B', long, default_value = "0")]
         before: usize,

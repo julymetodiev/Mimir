@@ -350,6 +350,7 @@ report["audit_truth_sample"] = [{"edge": fmt(e), "site": sites[e][0]} for e in s
 report["audit_only_hierarchy"] = [fmt(e) for e in sample(H - T, 10)]
 report["audit_only_scip"] = [{"edge": fmt(e), "site": sites[e][0]} for e in sample(T - H, 10)]
 report["audit_mimir_fp"] = [fmt(e) for e in sample(M - T, 12)]
+report["audit_mimir_fn"] = [fmt(e) for e in sample(T - M, 12)]
 report["audit_ts_guess_fp"] = [fmt(e) for e in sample(R_guess - T, 12)]
 report["check"] = {t: sorted(fmt(e) for e in T if e[1][2] == t) for t in ("apply_batch", "find_by_name", "handle_trace")}
 

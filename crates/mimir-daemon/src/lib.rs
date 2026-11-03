@@ -2,7 +2,7 @@
 //! call. It stops when no request has come for a while; the next client starts it again.
 
 use mimir_engine::GraphHandle;
-use mimir_protocol::{IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult, VERSION};
+use mimir_protocol::{IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult};
 use mimir_resolve::SemanticSource;
 use std::fs::{self, File, TryLockError};
 use std::path::{Path, PathBuf};
@@ -14,6 +14,9 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
+
+/// How long a daemon that was told to go gets to let go of the project.
+const LOCK_WAIT: Duration = Duration::from_secs(10);
 
 /// Why the daemon could not run.
 #[derive(Debug, Error)]
@@ -62,8 +65,8 @@ impl LastUsed {
     }
 }
 
-/// Serve `root` until told to stop or idle for `idle`. If another daemon holds the project's lock,
-/// return at once: that one serves it.
+/// Serve `root` until told to stop or idle for `idle`. If another daemon serves the project, return:
+/// a project has one.
 pub async fn run(
     root: PathBuf,
     idle: Duration,
@@ -74,16 +77,25 @@ pub async fn run(
 
     let lock_path = agent_dir.join("daemon.lock");
     let lock = File::create(&lock_path).map_err(io_error("create", &lock_path))?;
-    match lock.try_lock() {
-        Ok(()) => {}
-        Err(TryLockError::WouldBlock) => {
-            info!("Another daemon serves {}", root.display());
-            return Ok(());
+    let socket = mimir_protocol::socket_path(&root).map_err(io_error("prepare socket", &root))?;
+    let started = Instant::now();
+    loop {
+        match lock.try_lock() {
+            Ok(()) => break,
+            Err(TryLockError::Error(source)) => return Err(io_error("lock", &lock_path)(source)),
+            // A daemon that answers serves this project. One that does not is on its way out,
+            // having just been told to give way to this one.
+            Err(TryLockError::WouldBlock) => {
+                if UnixStream::connect(&socket).await.is_ok() || started.elapsed() > LOCK_WAIT {
+                    info!("Another daemon serves {}", root.display());
+                    return Ok(());
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
         }
-        Err(TryLockError::Error(source)) => return Err(io_error("lock", &lock_path)(source)),
     }
 
-    let socket = mimir_protocol::socket_path(&root).map_err(io_error("prepare socket", &root))?;
+    let identity: Arc<str> = mimir_protocol::build_identity().into();
     if socket.exists() {
         fs::remove_file(&socket).map_err(io_error("remove", &socket))?;
     }
@@ -103,10 +115,14 @@ pub async fn run(
         tokio::select! {
             accepted = listener.accept() => match accepted {
                 Ok((stream, _)) => {
-                    let (handle, shutdown, last_used) =
-                        (engine.handle().clone(), shutdown.clone(), last_used.clone());
+                    let (handle, shutdown, last_used, identity) = (
+                        engine.handle().clone(),
+                        shutdown.clone(),
+                        last_used.clone(),
+                        identity.clone(),
+                    );
                     tokio::spawn(async move {
-                        if let Err(e) = serve(stream, handle, shutdown, last_used).await {
+                        if let Err(e) = serve(stream, handle, shutdown, last_used, identity).await {
                             error!("Connection failed: {e}");
                         }
                     });
@@ -137,6 +153,7 @@ async fn serve(
     handle: GraphHandle,
     shutdown: broadcast::Sender<()>,
     last_used: Arc<LastUsed>,
+    identity: Arc<str>,
 ) -> Result<(), DaemonError> {
     let (reader, mut writer) = stream.into_split();
     let mut reader = BufReader::new(reader);
@@ -153,7 +170,7 @@ async fn serve(
         let (response, stopping) = match serde_json::from_str::<IpcRequest>(&line) {
             Ok(request) => {
                 let stopping = matches!(request.command, IpcCommand::Shutdown);
-                (answer(request, &handle).await, stopping)
+                (answer(request, &handle, &identity).await, stopping)
             }
             Err(e) => (IpcResponse::err(0, format!("Invalid request: {e}")), false),
         };
@@ -175,10 +192,10 @@ async fn serve(
 }
 
 /// Map a request to its engine call and the result back.
-async fn answer(request: IpcRequest, handle: &GraphHandle) -> IpcResponse {
+async fn answer(request: IpcRequest, handle: &GraphHandle, identity: &str) -> IpcResponse {
     let result: Result<IpcData, _> = match request.command {
         IpcCommand::Ping => Ok(IpcData::Pong {
-            version: VERSION.to_string(),
+            version: identity.to_string(),
         }),
         IpcCommand::FindSymbol { name, options } => handle
             .find_symbol_with_options(&name, options)
@@ -190,9 +207,13 @@ async fn answer(request: IpcRequest, handle: &GraphHandle) -> IpcResponse {
             .map(IpcData::TraceResult),
         IpcCommand::Read {
             name,
+            file,
             before,
             after,
-        } => handle.read(name, before, after).await.map(IpcData::Source),
+        } => handle
+            .read(name, file, before, after)
+            .await
+            .map(IpcData::Source),
         IpcCommand::Source { symbol_id, lines } => {
             handle.source(symbol_id, lines).await.map(IpcData::Source)
         }

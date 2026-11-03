@@ -129,6 +129,9 @@ pub struct Source {
     symbol: Found,
     first_line: u32,
     code: String,
+    /// How many other symbols share the name. `file` chooses among them.
+    #[serde(skip_serializing_if = "is_zero")]
+    others_with_this_name: usize,
 }
 
 impl From<SymbolSource> for Source {
@@ -137,6 +140,7 @@ impl From<SymbolSource> for Source {
             symbol: Found::from(&source.symbol),
             first_line: source.first_line,
             code: source.lines.join("\n"),
+            others_with_this_name: source.matches.saturating_sub(1),
         }
     }
 }

@@ -9,7 +9,8 @@ use mimir_protocol::{
     TraceNode, TraceRelation, TraceResponse,
 };
 use mimir_types::{FileId, Language, Symbol, SymbolId, SymbolKind};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 impl GraphActor {
     /// Handle finding symbols by name.
@@ -134,18 +135,7 @@ impl GraphActor {
         name: &str,
         options: &mimir_protocol::TraceOptions,
     ) -> Result<TraceResponse, GraphError> {
-        let mut found = self.graph.find_symbol(name);
-        if let Some(file) = &options.file {
-            let relative = file.strip_prefix(&self.root).unwrap_or(file);
-            if !self.file_paths.values().any(|path| path == relative) {
-                return Err(GraphError::FileNotFound { path: file.clone() });
-            }
-            found.retain(|symbol| {
-                self.file_paths
-                    .get(&symbol.file_id)
-                    .is_some_and(|path| path == relative)
-            });
-        }
+        let found = self.named(name, options.file.as_deref())?;
         let best = source::most_likely(&found, name).ok_or_else(|| GraphError::SymbolNotFound {
             name: name.to_string(),
         })?;
@@ -154,18 +144,41 @@ impl GraphActor {
         Ok(trace)
     }
 
+    /// The symbols with this name, only those in `file` if given.
+    pub fn named(&self, name: &str, file: Option<&Path>) -> Result<Vec<Arc<Symbol>>, GraphError> {
+        let mut found = self.graph.find_symbol(name);
+        if let Some(file) = file {
+            let absolute = self.root.join(file);
+            let relative = absolute.strip_prefix(&self.root).unwrap_or(&absolute);
+            if !self.file_paths.values().any(|path| path == relative) {
+                return Err(GraphError::FileNotFound {
+                    path: file.to_path_buf(),
+                });
+            }
+            found.retain(|symbol| {
+                self.file_paths
+                    .get(&symbol.file_id)
+                    .is_some_and(|path| path == relative)
+            });
+        }
+        Ok(found)
+    }
+
     /// The source of the symbol a name most likely means, with lines of context around it.
     pub fn handle_read(
         &self,
         name: &str,
+        file: Option<&Path>,
         before: u32,
         after: u32,
     ) -> Result<SymbolSource, GraphError> {
-        let found = self.graph.find_symbol(name);
+        let found = self.named(name, file)?;
         let best = source::most_likely(&found, name).ok_or_else(|| GraphError::SymbolNotFound {
             name: name.to_string(),
         })?;
-        self.source_lines(best, before, after, None)
+        let mut source = self.source_lines(best, before, after, None)?;
+        source.matches = found.len();
+        Ok(source)
     }
 
     /// The first `lines` lines of a symbol, or all of them.
@@ -213,6 +226,7 @@ impl GraphActor {
             first_line,
             lines,
             truncated,
+            matches: 1,
         })
     }
 

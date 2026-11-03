@@ -4,7 +4,7 @@
 use mimir_protocol::{
     Edit, EditReport, FindOptions, FindResponse, IpcCommand, IpcData, IpcRequest, IpcResponse,
     IpcResult, SearchOptions, SearchResponse, StatsResponse, SymbolSource, SyncResult,
-    TraceOptions, TraceResponse, VERSION,
+    TraceOptions, TraceResponse,
 };
 use mimir_types::SymbolId;
 use std::fs::{self, File};
@@ -115,7 +115,8 @@ impl Client {
     /// A daemon left from another build speaks another protocol, so it gives way.
     async fn replace_other_version(&mut self) -> Result<(), ClientError> {
         let answer = self.exchange(&IpcCommand::Ping).await;
-        if matches!(&answer, Ok(IpcData::Pong { version }) if version == VERSION) {
+        let ours = mimir_protocol::build_identity();
+        if matches!(&answer, Ok(IpcData::Pong { version }) if *version == ours) {
             return Ok(());
         }
         // Either answer ends the old daemon; an error here means it is already gone.
@@ -198,11 +199,13 @@ impl Client {
     pub async fn read(
         &mut self,
         name: &str,
+        file: Option<PathBuf>,
         before: u32,
         after: u32,
     ) -> Result<SymbolSource, ClientError> {
         let command = IpcCommand::Read {
             name: name.to_string(),
+            file,
             before,
             after,
         };

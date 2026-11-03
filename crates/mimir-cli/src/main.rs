@@ -117,11 +117,14 @@ async fn main() -> anyhow::Result<()> {
         } => commands::search::execute(&pattern, kind.as_deref(), limit, json, code).await?,
         commands::Commands::Read {
             symbol,
+            file,
             before,
             after,
             numbers,
             json,
-        } => commands::read::execute(&symbol, before, after, numbers, json).await?,
+        } => {
+            commands::read::execute(&symbol, file.as_deref(), before, after, numbers, json).await?
+        }
     }
 
     Ok(())

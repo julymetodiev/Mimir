@@ -312,3 +312,102 @@ fn test_a_file_in_another_language_is_no_warning() {
     assert!(!log.contains("tool.py"), "{log}");
     stop(dir);
 }
+
+#[test]
+fn test_a_rebuild_replaces_the_daemon_and_the_same_build_keeps_it() {
+    let project = project();
+    let dir = project.path();
+    let binaries = TempDir::new().unwrap();
+    let built = assert_cmd::cargo::cargo_bin!("mimir");
+    let (old, new) = (binaries.path().join("old"), binaries.path().join("new"));
+    fs::copy(built, &old).unwrap();
+    fs::copy(built, &new).unwrap();
+    // A copy can keep the original's time; a rebuild does not.
+    let later = std::time::SystemTime::now() + std::time::Duration::from_secs(60);
+    fs::File::options()
+        .write(true)
+        .open(&new)
+        .unwrap()
+        .set_modified(later)
+        .unwrap();
+    let run = |binary: &Path| {
+        Command::new(binary)
+            .current_dir(dir)
+            .env("MIMIR_NO_SCIP", "1")
+            .args(["search", "--pattern", "helper"])
+            .assert()
+            .success();
+    };
+    // A daemon makes its socket as it starts, so a new one means a new daemon.
+    let root = dir.canonicalize().unwrap();
+    let daemon = || {
+        let socket = mimir_protocol::socket_path(&root).unwrap();
+        fs::metadata(socket).unwrap().modified().unwrap()
+    };
+
+    run(&old);
+    let first = daemon();
+    run(&old);
+    assert_eq!(daemon(), first, "the same build started again");
+
+    run(&new);
+    assert_ne!(daemon(), first, "the old daemon stayed");
+    Command::new(&new)
+        .current_dir(dir)
+        .args(["daemon", "stop"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_an_edit_of_a_shared_name_asks_which_and_a_file_answers() {
+    let project = project();
+    let dir = project.path();
+    fs::write(dir.join("src/lib.rs"), "pub fn run() -> u32 {\n    1\n}\n").unwrap();
+    fs::write(
+        dir.join("src/other.rs"),
+        "pub fn run() -> u32 {\n    2\n}\n",
+    )
+    .unwrap();
+    let edit = |extra: &[&str]| {
+        let mut command = mimir(dir);
+        command.args(["edit", "--symbol", "run", "--mode", "symbol"]);
+        command.args(["--content", "pub fn run() -> u32 {\n    3\n}"]);
+        command.args(extra);
+        command.assert()
+    };
+
+    edit(&[])
+        .failure()
+        .stderr(contains("src/other.rs"))
+        .stderr(contains("src/lib.rs"));
+    assert!(
+        !fs::read_to_string(dir.join("src/lib.rs"))
+            .unwrap()
+            .contains("    3")
+    );
+    assert!(
+        !fs::read_to_string(dir.join("src/other.rs"))
+            .unwrap()
+            .contains("    3")
+    );
+
+    edit(&["--file", "src/other.rs"]).success();
+    assert!(
+        fs::read_to_string(dir.join("src/other.rs"))
+            .unwrap()
+            .contains("    3")
+    );
+    assert!(
+        fs::read_to_string(dir.join("src/lib.rs"))
+            .unwrap()
+            .contains("    1")
+    );
+
+    mimir(dir)
+        .args(["read", "-s", "run", "--file", "src/lib.rs"])
+        .assert()
+        .success()
+        .stdout(contains("src/lib.rs"));
+    stop(dir);
+}

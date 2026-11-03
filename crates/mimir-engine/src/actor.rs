@@ -167,11 +167,12 @@ impl GraphActor {
 
                 GraphCommand::Read {
                     name,
+                    file,
                     before,
                     after,
                     reply,
                 } => {
-                    let response = self.handle_read(&name, before, after);
+                    let response = self.handle_read(&name, file.as_deref(), before, after);
                     answer(reply, response);
                 }
 

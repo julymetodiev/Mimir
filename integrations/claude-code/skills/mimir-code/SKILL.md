@@ -37,6 +37,7 @@ Text, comments and non-Rust files: use your usual tools.
 ## Editing
 
 `edit_symbols` replaces a symbol's lines. Doc comments and attributes above it are not part of it.
+When several symbols share a name, such as `new`, it fails and lists them: pass `file`.
 Use `preview: true` when unsure. A file changed since it was read is re-read first, so the right
 lines are replaced, and if the edit still does not apply it fails rather than guess.
 

@@ -1,13 +1,20 @@
 //! Choosing a symbol by name and cutting its lines out of a file's text.
 
 use mimir_types::{Symbol, SymbolKind};
-use std::cmp::Reverse;
 use std::sync::Arc;
 
 /// The symbol a bare name most likely means: one with exactly that name, then an impl, a type, a
-/// function; a field and a variant last.
+/// function; a field and a variant last. The lowest id among equals, so the same question gets the
+/// same symbol.
 pub fn most_likely<'a>(found: &'a [Arc<Symbol>], name: &str) -> Option<&'a Arc<Symbol>> {
-    found.iter().max_by_key(|symbol| {
+    likeliest(found, name)
+        .into_iter()
+        .min_by_key(|symbol| symbol.id.as_u64())
+}
+
+/// The symbols a bare name is equally likely to mean.
+pub fn likeliest<'a>(found: &'a [Arc<Symbol>], name: &str) -> Vec<&'a Arc<Symbol>> {
+    let rank = |symbol: &Symbol| {
         let rank = match symbol.kind {
             SymbolKind::Impl => 100,
             SymbolKind::Struct | SymbolKind::Class => 90,
@@ -17,9 +24,13 @@ pub fn most_likely<'a>(found: &'a [Arc<Symbol>], name: &str) -> Option<&'a Arc<S
             SymbolKind::EnumVariant => 10,
             _ => 60,
         };
-        // The lowest id among equals, so the same question gets the same symbol.
-        (symbol.name == name, rank, Reverse(symbol.id.as_u64()))
-    })
+        (symbol.name == name, rank)
+    };
+    let best = found.iter().map(|symbol| rank(symbol)).max();
+    found
+        .iter()
+        .filter(|symbol| Some(rank(symbol)) == best)
+        .collect()
 }
 
 /// Lines `start..=end` (1-indexed) with context, at most `limit` of the symbol's own when no context

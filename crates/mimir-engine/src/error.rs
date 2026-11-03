@@ -14,6 +14,9 @@ pub enum GraphError {
     #[error("Symbol not found: {name}")]
     SymbolNotFound { name: String },
 
+    #[error("{name} could mean any of {places}. Say which file.")]
+    AmbiguousSymbol { name: String, places: String },
+
     #[error("File not found in index: {path}")]
     FileNotFound { path: PathBuf },
 

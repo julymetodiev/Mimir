@@ -3,6 +3,7 @@
 use anyhow::Result;
 use mimir_client::Client;
 use serde::Serialize;
+use std::path::Path;
 
 /// Output structure for JSON mode.
 #[derive(Serialize)]
@@ -25,6 +26,7 @@ struct LineOutput<'a> {
 /// Execute the read command.
 pub async fn execute(
     symbol_name: &str,
+    file: Option<&Path>,
     before: usize,
     after: usize,
     show_numbers: bool,
@@ -32,7 +34,12 @@ pub async fn execute(
 ) -> Result<()> {
     let mut client = Client::open(&std::env::current_dir()?).await?;
     let source = client
-        .read(symbol_name, before as u32, after as u32)
+        .read(
+            symbol_name,
+            file.map(Path::canonicalize).transpose()?,
+            before as u32,
+            after as u32,
+        )
         .await?;
     let symbol = &source.symbol;
     let numbered = source
