@@ -17,7 +17,7 @@ use tracing::{info, warn};
 
 use crate::live::{Analyzers, LiveDocument};
 use crate::lookup::{SymbolTable, trait_of};
-use crate::{EdgeSet, ProjectFile, files_by_path};
+use crate::{ConstantUse, EdgeSet, ProjectFile, files_by_path};
 
 const ROLE_DEFINITION: u64 = 1;
 const ROLE_IMPORT: u64 = 2;
@@ -313,6 +313,7 @@ pub(crate) fn resolve(
     files: &[ProjectFile],
     indexes: &[ScipIndex],
     edges: &mut EdgeSet,
+    constant_uses: &mut Vec<ConstantUse>,
 ) -> HashSet<FileId> {
     let by_path = files_by_path(files);
     let mut covered = HashSet::new();
@@ -327,6 +328,7 @@ pub(crate) fn resolve(
             .collect();
 
         let mut definitions = Definitions::default();
+        let mut constants = Definitions::default();
         for (file, lines, occurrences) in &documents {
             if !index.unanswered.contains(&file.path) {
                 covered.insert(file.file_id);
@@ -344,7 +346,24 @@ pub(crate) fn resolve(
                     }
                     *n += 1;
                 }
+                let mut seen: HashMap<&str, usize> = HashMap::new();
+                let mut own: Vec<_> = occurrences.iter().filter(|o| o.roles & ROLE_DEFINITION != 0 && is_term(&o.symbol)).collect();
+                own.sort_by_key(|o| (o.line, o.column));
+                for o in own {
+                    let name = symbol_name(&o.symbol);
+                    let n = seen.entry(name).or_default();
+                    if let Some(symbol) = table.nth_constant(file.file_id, name, *n) {
+                        constants.add(o.symbol.as_str(), symbol);
+                    }
+                    *n += 1;
+                }
                 continue;
+            }
+            for o in occurrences.iter().filter(|o| o.roles & ROLE_DEFINITION != 0 && is_term(&o.symbol)) {
+                let name = lines.get(o.line as usize).and_then(|l| l.get(o.column as usize..o.end_column as usize));
+                if let Some(symbol) = name.and_then(|name| table.constant_at(file.file_id, o.line + 1, name)) {
+                    constants.add(o.symbol.as_str(), symbol);
+                }
             }
             for o in occurrences.iter().filter(|o| o.roles & ROLE_DEFINITION != 0 && is_function(&o.symbol)) {
                 let Some(name) = lines.get(o.line as usize).and_then(|l| l.get(o.column as usize..o.end_column as usize)) else {
@@ -389,6 +408,23 @@ pub(crate) fn resolve(
                     edges.add(from.id, target.id, kind, span, Confidence::Certain);
                 }
             }
+            for o in occurrences.iter().filter(|o| o.roles & (ROLE_DEFINITION | ROLE_IMPORT) == 0 && is_term(&o.symbol)) {
+                let Some(constant) = constants.get(o.symbol.as_str(), file.file_id) else {
+                    continue;
+                };
+                let start = byte_offset(lines, o.line, o.column);
+                if imports.iter().any(|i| i.start <= start && start < i.end) {
+                    continue;
+                }
+                if let Some(from) = table.any_at(file.file_id, start) {
+                    constant_uses.push(ConstantUse {
+                        from: from.id,
+                        constant: constant.id,
+                        span: Span::new(start, byte_offset(lines, o.end_line, o.end_column)),
+                        confidence: Confidence::Certain,
+                    });
+                }
+            }
         }
 
         for (file, lines, occurrences) in documents.iter().filter(|(file, ..)| !index.is_edited(&file.path)) {
@@ -407,7 +443,7 @@ pub(crate) fn resolve(
                 continue;
             };
             covered.insert(file.file_id);
-            resolve_live(table, file, document, &by_path, edges);
+            resolve_live(table, file, document, &by_path, edges, constant_uses);
         }
     }
     covered
@@ -442,9 +478,25 @@ fn resolve_live(
     document: &LiveDocument,
     by_path: &HashMap<&Path, &ProjectFile>,
     edges: &mut EdgeSet,
+    constant_uses: &mut Vec<ConstantUse>,
 ) {
     for reference in &file.references {
         let (line, column) = (reference.range.start_line, reference.range.start_col);
+        if reference.kind == ReferenceKind::Read {
+            let constant = document
+                .sites
+                .get(&(line, column))
+                .and_then(|t| table.constant_at(by_path.get(t.path.as_path())?.file_id, t.line, &t.name));
+            if let (Some(constant), Some(from)) = (constant, table.any_at(file.file_id, reference.span.start)) {
+                constant_uses.push(ConstantUse {
+                    from: from.id,
+                    constant: constant.id,
+                    span: reference.span,
+                    confidence: Confidence::Certain,
+                });
+            }
+            continue;
+        }
         let (from, kind) = match reference.kind {
             ReferenceKind::Call => (table.callable_at(file.file_id, line, column), EdgeKind::Calls),
             ReferenceKind::FunctionValue => (table.any_at(file.file_id, reference.span.start), EdgeKind::UsesAsValue),
@@ -523,9 +575,14 @@ fn byte_offset(lines: &[&str], line: u32, column: u32) -> u32 {
 
 /// The name in a function's SCIP symbol: `run` for `a 0.1.0 impl#[T]run().`.
 fn symbol_name(symbol: &str) -> &str {
-    let descriptor = symbol.strip_suffix("().").unwrap_or(symbol);
+    let descriptor = symbol.strip_suffix("().").or_else(|| symbol.strip_suffix('.')).unwrap_or(symbol);
     let start = descriptor.rfind(['/', '#', ']', ' ']).map_or(0, |at| at + 1);
     &descriptor[start..]
+}
+
+/// In SCIP's symbol syntax a constant, static or field ends in a plain `.`.
+fn is_term(symbol: &str) -> bool {
+    symbol.ends_with('.') && !symbol.ends_with("().") && !symbol.starts_with("local ")
 }
 
 /// In SCIP's symbol syntax a function or method ends in `().`.
@@ -733,6 +790,7 @@ mod tests {
         assert_eq!(symbol_name("rust-analyzer cargo a 0.1.0 run()."), "run");
         assert_eq!(symbol_name("rust-analyzer cargo a 0.1.0 m/T#run()."), "run");
         assert_eq!(symbol_name("rust-analyzer cargo a 0.1.0 m/impl#[T]run()."), "run");
+        assert_eq!(symbol_name("rust-analyzer cargo a 0.1.0 m/TABLE."), "TABLE");
     }
 
     #[test]

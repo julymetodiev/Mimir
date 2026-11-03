@@ -118,11 +118,10 @@ EXAMPLE - Replace all occurrences:
             }
 
             // Create parent directories if needed
-            if let Some(parent) = full_path.parent() {
-                if let Err(e) = fs::create_dir_all(parent) {
+            if let Some(parent) = full_path.parent()
+                && let Err(e) = fs::create_dir_all(parent) {
                     return ToolResult::error(format!("Failed to create directory: {}", e));
                 }
-            }
 
             // Write new file
             match fs::write(&full_path, &new_string) {

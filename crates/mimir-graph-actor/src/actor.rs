@@ -639,12 +639,11 @@ impl GraphActor {
         // Find files that were removed
         let tracked_paths: Vec<PathBuf> = self.files.keys().cloned().collect();
         for path in tracked_paths {
-            if !seen_paths.contains(&path) {
-                if let Some(removed_count) = self.remove_file_by_path(&path, events) {
+            if !seen_paths.contains(&path)
+                && let Some(removed_count) = self.remove_file_by_path(&path, events) {
                     symbols_removed += removed_count;
                     files_removed += 1;
                 }
-            }
         }
 
         // Calls can point at any file, so edges are resolved once all files are in

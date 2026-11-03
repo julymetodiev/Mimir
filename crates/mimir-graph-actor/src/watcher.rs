@@ -281,13 +281,11 @@ impl FileWatcher {
                     })
                     .await
                     .is_ok()
-                {
-                    if let Ok(Ok(file_id)) = reply_rx.await {
+                    && let Ok(Ok(file_id)) = reply_rx.await {
                         let mut ids = file_ids.write().await;
                         ids.insert(path.clone(), file_id);
                         info!("File changed: {}", path.display());
                     }
-                }
             }
 
             WatchEvent::Removed(path) => {

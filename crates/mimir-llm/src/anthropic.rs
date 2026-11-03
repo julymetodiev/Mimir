@@ -54,7 +54,7 @@ impl AnthropicProvider {
         let messages: Vec<AnthropicMessage> = request
             .messages
             .iter()
-            .map(|m| AnthropicMessage::from_message(m))
+            .map(AnthropicMessage::from_message)
             .collect();
 
         let tools: Option<Vec<Value>> = if request.tools.is_empty() {

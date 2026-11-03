@@ -20,6 +20,15 @@ const VIA_TRAIT: &str = " [via trait, possible]";
 const IMPLEMENTATION: &str = " [implementation, possible]";
 const AS_VALUE: &str = " [as value, possible]";
 
+/// What a trace shows.
+struct TraceView {
+    depth: usize,
+    json: bool,
+    show_code: bool,
+    callers_only: bool,
+    callees_only: bool,
+}
+
 /// Execute the trace command.
 pub async fn execute(
     file: Option<&Path>,
@@ -110,7 +119,8 @@ async fn execute_single_file(
     link(&graph, std::slice::from_ref(&project_file), &[]);
 
     // Find and trace the symbol
-    trace_symbol(&graph, symbol_name, depth, json, show_code, callers_only, callees_only, Some((file, file_id)))
+    let view = TraceView { depth, json, show_code, callers_only, callees_only };
+    trace_symbol(&graph, symbol_name, view, Some((file, file_id)))
 }
 
 /// Execute trace from the synced graph.
@@ -146,7 +156,8 @@ async fn execute_from_graph(file: Option<&Path>, symbol_name: &str, depth: usize
         .transpose()?;
 
     // Find and trace the symbol
-    trace_symbol(&graph, symbol_name, depth, json, show_code, callers_only, callees_only, scope)
+    let view = TraceView { depth, json, show_code, callers_only, callees_only };
+    trace_symbol(&graph, symbol_name, view, scope)
 }
 
 /// The graph's id for a file given as a path.
@@ -244,13 +255,10 @@ async fn execute_via_daemon(config: &Config, symbol_name: &str, depth: usize, js
 fn trace_symbol(
     graph: &CodeGraph,
     symbol_name: &str,
-    depth: usize,
-    json: bool,
-    show_code: bool,
-    callers_only: bool,
-    callees_only: bool,
+    view: TraceView,
     scope: Option<(&Path, FileId)>,
 ) -> Result<()> {
+    let TraceView { depth, json, show_code, callers_only, callees_only } = view;
     let file = scope.map(|(path, _)| path);
 
     // Find the target symbol
@@ -294,9 +302,9 @@ fn trace_symbol(
         }
 
         // Show code snippet if requested
-        if show_code {
-            if let Some(f) = file {
-                if let Ok(source) = std::fs::read_to_string(f) {
+        if show_code
+            && let Some(f) = file
+                && let Ok(source) = std::fs::read_to_string(f) {
                     let lines: Vec<&str> = source.lines().collect();
                     let start = (result.root.range.start_line as usize).saturating_sub(1);
                     let end = (result.root.range.end_line as usize).min(lines.len());
@@ -307,8 +315,6 @@ fn trace_symbol(
                     }
                     println!("```");
                 }
-            }
-        }
         println!();
 
         if !callees_only && !result.callers.is_empty() {

@@ -94,13 +94,12 @@ async fn count_objects(path: &PathBuf) -> usize {
     let mut count = 0;
     if let Ok(mut entries) = tokio::fs::read_dir(path).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
-            if entry.path().is_dir() {
-                if let Ok(mut sub_entries) = tokio::fs::read_dir(entry.path()).await {
+            if entry.path().is_dir()
+                && let Ok(mut sub_entries) = tokio::fs::read_dir(entry.path()).await {
                     while let Ok(Some(_)) = sub_entries.next_entry().await {
                         count += 1;
                     }
                 }
-            }
         }
     }
     count

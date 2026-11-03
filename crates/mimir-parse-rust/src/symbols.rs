@@ -212,10 +212,10 @@ fn extract_struct_fields(
 ) {
     if let Some(body) = node.child_by_field_name("body") {
         for i in 0..body.named_child_count() {
-            if let Some(field) = body.named_child(i) {
-                if field.kind() == "field_declaration" {
-                    if let Some(name_node) = field.child_by_field_name("name") {
-                        if let Ok(name) = name_node.utf8_text(source) {
+            if let Some(field) = body.named_child(i)
+                && field.kind() == "field_declaration"
+                    && let Some(name_node) = field.child_by_field_name("name")
+                        && let Ok(name) = name_node.utf8_text(source) {
                             let range = node_to_range(&field);
                             let span = node_to_span(&field);
                             let visibility = extract_visibility(&field);
@@ -236,9 +236,6 @@ fn extract_struct_fields(
 
                             symbols.push(sym);
                         }
-                    }
-                }
-            }
         }
     }
 }
@@ -271,10 +268,10 @@ fn extract_enum_variants(
 ) {
     if let Some(body) = node.child_by_field_name("body") {
         for i in 0..body.named_child_count() {
-            if let Some(variant) = body.named_child(i) {
-                if variant.kind() == "enum_variant" {
-                    if let Some(name_node) = variant.child_by_field_name("name") {
-                        if let Ok(name) = name_node.utf8_text(source) {
+            if let Some(variant) = body.named_child(i)
+                && variant.kind() == "enum_variant"
+                    && let Some(name_node) = variant.child_by_field_name("name")
+                        && let Ok(name) = name_node.utf8_text(source) {
                             let range = node_to_range(&variant);
                             let span = node_to_span(&variant);
 
@@ -293,9 +290,6 @@ fn extract_enum_variants(
 
                             symbols.push(sym);
                         }
-                    }
-                }
-            }
         }
     }
 }
@@ -365,15 +359,14 @@ fn extract_impl_methods(
 ) {
     if let Some(body) = node.child_by_field_name("body") {
         for i in 0..body.named_child_count() {
-            if let Some(child) = body.named_child(i) {
-                if child.kind() == "function_item" {
+            if let Some(child) = body.named_child(i)
+                && child.kind() == "function_item" {
                     if let Some(mut sym) = extract_function(&child, source, Some(impl_name)) {
                         sym.kind = SymbolKind::Method;
                         symbols.push(sym);
                     }
                     extract_nested_items(&child, source, symbols);
                 }
-            }
         }
     }
 }
@@ -406,19 +399,17 @@ fn extract_module(node: &Node, source: &[u8], parent: Option<&str>) -> Option<Ex
 
 fn has_visibility_modifier(node: &Node) -> Visibility {
     for i in 0..node.child_count() {
-        if let Some(child) = node.child(i) {
-            if child.kind() == "visibility_modifier" {
+        if let Some(child) = node.child(i)
+            && child.kind() == "visibility_modifier" {
                 // Check for pub(crate) by looking at child nodes
                 for j in 0..child.child_count() {
-                    if let Some(inner) = child.child(j) {
-                        if inner.kind() == "crate" {
+                    if let Some(inner) = child.child(j)
+                        && inner.kind() == "crate" {
                             return Visibility::Internal;
                         }
-                    }
                 }
                 return Visibility::Public;
             }
-        }
     }
     Visibility::Private
 }

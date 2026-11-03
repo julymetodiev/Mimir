@@ -32,8 +32,9 @@ const MAX_CONTEXT_LINES: usize = 10;
 // Data Structures
 // ============================================================================
 
-/// A parsed patch operation
+/// A parsed patch operation, named after the patch format's `*** Add File:` and so on.
 #[derive(Debug, Clone)]
+#[allow(clippy::enum_variant_names)]
 pub enum PatchOp {
     /// Create a new file with content
     AddFile { path: String, content: String },
@@ -199,8 +200,6 @@ impl ApplyPatchTool {
                 content.push_str(text);
                 content.push('\n');
                 consumed += 1;
-            } else if line.starts_with("***") {
-                break;
             } else {
                 break;
             }
@@ -219,12 +218,11 @@ impl ApplyPatchTool {
         let mut idx = 0;
 
         // Check for optional Move to
-        if let Some(line) = lines.first() {
-            if let Some(new_path) = line.strip_prefix(MOVE_TO_MARKER) {
+        if let Some(line) = lines.first()
+            && let Some(new_path) = line.strip_prefix(MOVE_TO_MARKER) {
                 move_to = Some(new_path.to_string());
                 idx += 1;
             }
-        }
 
         // Parse chunks
         while idx < lines.len() {
@@ -540,13 +538,7 @@ impl ApplyPatchTool {
         }
 
         // Stage 4: Unicode normalization
-        for i in search_start..=lines.len().saturating_sub(pattern.len()) {
-            if Self::matches_normalized(lines, pattern, i) {
-                return Some(i);
-            }
-        }
-
-        None
+        (search_start..=lines.len().saturating_sub(pattern.len())).find(|&i| Self::matches_normalized(lines, pattern, i))
     }
 
     fn matches_exact(lines: &[String], pattern: &[String], pos: usize) -> bool {
@@ -834,9 +826,9 @@ mod tests {
     }
 
     #[test]
-    fn test_missing_end_marker() {
+    fn test_end_marker_is_optional() {
         let patch = "*** Begin Patch\n*** Update File: test.rs\n@@\n+line";
-        assert!(ApplyPatchTool::parse_patch(patch).is_err());
+        assert_eq!(ApplyPatchTool::parse_patch(patch).unwrap().len(), 1);
     }
 
     #[test]

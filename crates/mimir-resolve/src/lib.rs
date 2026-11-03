@@ -17,7 +17,7 @@ use std::sync::Arc;
 use mimir_graph::CodeGraph;
 use mimir_parse_core::ExtractedReference;
 use mimir_relations::{EdgeData, EdgeKind};
-use mimir_types::{Confidence, FileId, Span, SymbolId};
+use mimir_types::{Confidence, FileId, Span, SymbolId, SymbolKind};
 
 pub use live::Analyzers;
 pub use scip::{Refresh, ScipIndex, load_or_generate};
@@ -61,13 +61,16 @@ pub fn link(graph: &CodeGraph, files: &[ProjectFile], indexes: &[ScipIndex]) -> 
     let table = lookup::SymbolTable::new(graph, files);
     let mut edges = EdgeSet::default();
 
-    let covered = scip::resolve(&table, files, indexes, &mut edges);
+    let mut constant_uses = Vec::new();
+    let covered = scip::resolve(&table, files, indexes, &mut edges, &mut constant_uses);
     let semantic_calls = edges.count(EdgeKind::Calls);
     syntax::resolve_shorthand_values(&table, files, &covered, &mut edges);
     syntax::resolve_calls(&table, files, &covered, &mut edges);
     let syntax_calls = edges.count(EdgeKind::Calls) - semantic_calls;
     syntax::resolve_implementations(&table, files, &covered, &mut edges);
     let implementations = edges.count(EdgeKind::Implements);
+    syntax::resolve_constant_uses(&table, files, &covered, &mut constant_uses);
+    add_uses_of_function_holders(graph, &mut edges, &constant_uses);
     let function_values = edges.count(EdgeKind::UsesAsValue);
     let linked_calls = edges.len();
     syntax::resolve_imports(&table, files, &mut edges);
@@ -85,6 +88,39 @@ pub fn link(graph: &CodeGraph, files: &[ProjectFile], indexes: &[ScipIndex]) -> 
         semantic_files,
         live_files: indexes.iter().map(|index| index.live.len()).sum(),
         syntax_files: files.len() - semantic_files,
+    }
+}
+
+/// A symbol using a constant or static.
+pub(crate) struct ConstantUse {
+    pub(crate) from: SymbolId,
+    pub(crate) constant: SymbolId,
+    pub(crate) span: Span,
+    pub(crate) confidence: Confidence,
+}
+
+/// Add an edge for each use of a constant that holds a function, directly or through another
+/// constant. Other constants are left out: `MAX_SIZE` under every function would hide the rest.
+fn add_uses_of_function_holders(graph: &CodeGraph, edges: &mut EdgeSet, uses: &[ConstantUse]) {
+    let is_constant =
+        |id: SymbolId| graph.get_symbol(id).is_some_and(|s| s.kind == SymbolKind::Constant);
+    let mut holders: HashSet<SymbolId> = edges
+        .edges
+        .iter()
+        .filter(|(from, _, data)| data.kind == EdgeKind::UsesAsValue && is_constant(*from))
+        .map(|(from, _, _)| *from)
+        .collect();
+    loop {
+        let mut grew = false;
+        for used in uses {
+            if holders.contains(&used.constant) && used.from != used.constant {
+                edges.add(used.from, used.constant, EdgeKind::UsesAsValue, used.span, used.confidence);
+                grew |= is_constant(used.from) && holders.insert(used.from);
+            }
+        }
+        if !grew {
+            return;
+        }
     }
 }
 

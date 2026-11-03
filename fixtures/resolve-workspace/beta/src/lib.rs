@@ -98,6 +98,29 @@ pub fn value_in_macro() -> Vec<fn() -> u32> {
 /// Holds functions outside any function; two of them share a name.
 pub const HANDLERS: &[fn() -> u32] = &[helper, alpha::helper];
 
+/// Whoever uses `HANDLERS` can reach the functions in it.
+pub fn run_handlers() -> u32 {
+    HANDLERS.iter().map(|h| h()).sum()
+}
+
+pub fn handlers_in_macro() -> String {
+    format!("{}", HANDLERS.len())
+}
+
+/// Holds the functions through another constant.
+pub const NESTED: &[&[fn() -> u32]] = &[HANDLERS];
+
+pub fn run_nested() -> usize {
+    NESTED.len()
+}
+
+/// Holds no function, so using it says nothing about what runs.
+pub const PLAIN: u32 = 1;
+
+pub fn uses_plain() -> u32 {
+    PLAIN
+}
+
 /// A parameter named like a function is not that function.
 pub fn shadowed(helper: fn() -> u32) -> Option<u32> {
     std::iter::once_with(helper).next()

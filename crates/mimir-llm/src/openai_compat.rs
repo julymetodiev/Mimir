@@ -174,11 +174,10 @@ impl OpenAIResponse {
         let mut content = vec![];
 
         // Add text content
-        if let Some(text) = choice.message.content {
-            if !text.is_empty() {
+        if let Some(text) = choice.message.content
+            && !text.is_empty() {
                 content.push(ContentBlock::Text { text });
             }
-        }
 
         // Add tool calls
         if let Some(tool_calls) = choice.message.tool_calls {

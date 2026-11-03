@@ -231,9 +231,9 @@ fn parse_sse_chunk(bytes: &[u8]) -> LlmResult<StreamChunk> {
                 });
             }
 
-            if let Ok(event) = serde_json::from_str::<Value>(data) {
-                if let Some(choices) = event["choices"].as_array() {
-                    if let Some(choice) = choices.first() {
+            if let Ok(event) = serde_json::from_str::<Value>(data)
+                && let Some(choices) = event["choices"].as_array()
+                    && let Some(choice) = choices.first() {
                         let delta = &choice["delta"];
 
                         // Text content
@@ -246,8 +246,8 @@ fn parse_sse_chunk(bytes: &[u8]) -> LlmResult<StreamChunk> {
                         }
 
                         // Tool calls
-                        if let Some(tool_calls) = delta["tool_calls"].as_array() {
-                            if let Some(tool_call) = tool_calls.first() {
+                        if let Some(tool_calls) = delta["tool_calls"].as_array()
+                            && let Some(tool_call) = tool_calls.first() {
                                 let id = tool_call["id"].as_str().map(String::from);
                                 let name = tool_call["function"]["name"].as_str().map(String::from);
                                 let args = tool_call["function"]["arguments"]
@@ -276,10 +276,7 @@ fn parse_sse_chunk(bytes: &[u8]) -> LlmResult<StreamChunk> {
                                     });
                                 }
                             }
-                        }
                     }
-                }
-            }
         }
     }
 
@@ -305,7 +302,7 @@ mod tests {
     #[test]
     fn test_default_model() {
         let provider = OpenRouterProvider::from_api_key("test-key");
-        assert_eq!(provider.default_model(), "anthropic/claude-3.5-sonnet");
+        assert_eq!(provider.default_model(), "qwen/qwen3-coder");
     }
 
     #[test]

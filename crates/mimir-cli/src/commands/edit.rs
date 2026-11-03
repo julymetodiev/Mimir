@@ -50,17 +50,21 @@ struct SymbolLocation {
     end_line: u32,
 }
 
+/// What the edit command was asked to do.
+pub struct EditRequest<'a> {
+    pub file: Option<PathBuf>,
+    pub symbol: Option<&'a str>,
+    pub mode: EditMode,
+    pub start: Option<u32>,
+    pub end: Option<u32>,
+    pub content: Option<String>,
+    pub preview: bool,
+    pub backup: bool,
+}
+
 /// Execute the edit command.
-pub async fn execute(
-    file: Option<PathBuf>,
-    symbol: Option<&str>,
-    mode: EditMode,
-    start: Option<u32>,
-    end: Option<u32>,
-    content: Option<String>,
-    preview: bool,
-    backup: bool,
-) -> Result<()> {
+pub async fn execute(request: EditRequest<'_>) -> Result<()> {
+    let EditRequest { file, symbol, mode, start, end, content, preview, backup } = request;
     // Verify we're in a mimir project
     let root = find_project_root().context("Not in a Mimir project. Run 'mimir init' first.")?;
     let config = Config::new(&root);
@@ -169,8 +173,8 @@ pub async fn execute(
         println!("Edited: {}", result.file_path.display());
         println!(
             "  Bytes: {} → {} ({:+})",
-            result.old_hash.to_hex()[..8].to_string(),
-            result.new_hash.to_hex()[..8].to_string(),
+            &result.old_hash.to_hex()[..8],
+            &result.new_hash.to_hex()[..8],
             result.bytes_changed
         );
         println!(

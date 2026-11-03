@@ -145,12 +145,11 @@ impl LlmProvider for ZaiProvider {
         let api_request = self.build_request(&request);
 
         // Debug: dump first request to file
-        if std::env::var("MIMIR_DEBUG_REQUEST").is_ok() {
-            if let Ok(json) = serde_json::to_string_pretty(&api_request) {
+        if std::env::var("MIMIR_DEBUG_REQUEST").is_ok()
+            && let Ok(json) = serde_json::to_string_pretty(&api_request) {
                 let _ = std::fs::write("/tmp/mimir_request.json", &json);
                 eprintln!("[DEBUG] Request written to /tmp/mimir_request.json ({} bytes)", json.len());
             }
-        }
 
         let response = self
             .client
@@ -229,9 +228,9 @@ fn parse_sse_chunk(bytes: &[u8]) -> LlmResult<StreamChunk> {
                 });
             }
 
-            if let Ok(event) = serde_json::from_str::<Value>(data) {
-                if let Some(choices) = event["choices"].as_array() {
-                    if let Some(choice) = choices.first() {
+            if let Ok(event) = serde_json::from_str::<Value>(data)
+                && let Some(choices) = event["choices"].as_array()
+                    && let Some(choice) = choices.first() {
                         let delta = &choice["delta"];
 
                         // Text content
@@ -244,8 +243,8 @@ fn parse_sse_chunk(bytes: &[u8]) -> LlmResult<StreamChunk> {
                         }
 
                         // Tool calls
-                        if let Some(tool_calls) = delta["tool_calls"].as_array() {
-                            if let Some(tool_call) = tool_calls.first() {
+                        if let Some(tool_calls) = delta["tool_calls"].as_array()
+                            && let Some(tool_call) = tool_calls.first() {
                                 let id = tool_call["id"].as_str().map(String::from);
                                 let name = tool_call["function"]["name"]
                                     .as_str()
@@ -276,10 +275,7 @@ fn parse_sse_chunk(bytes: &[u8]) -> LlmResult<StreamChunk> {
                                     });
                                 }
                             }
-                        }
                     }
-                }
-            }
         }
     }
 

@@ -73,6 +73,10 @@ const VALUES: &[(&str, &str)] = &[
     ("beta::value_in_macro", "beta::helper"),
     ("beta::HANDLERS", "beta::helper"),
     ("beta::HANDLERS", "alpha::helper"),
+    ("beta::run_handlers", "beta::HANDLERS"),
+    ("beta::handlers_in_macro", "beta::HANDLERS"),
+    ("beta::NESTED", "beta::HANDLERS"),
+    ("beta::run_nested", "beta::NESTED"),
 ];
 
 /// Those syntax leaves out: macro tokens, a trait name used twice, a name used twice.
@@ -255,6 +259,14 @@ fn semantic_index_finds_every_call() {
     let holder = find(&graph, &files, "beta::method_as_value");
     let trace = graph.trace(holder, TraceOptions::new().callees_only().with_max_depth(1)).unwrap();
     assert_eq!(names(&trace.callees, TraceRelationship::CalleeByValue), ["alpha::Disk::get"]);
+
+    // A function in a table is reached through whoever uses the table.
+    let helper = find(&graph, &files, "beta::helper");
+    let trace = graph.trace(helper, TraceOptions::new().callers_only().with_max_depth(3)).unwrap();
+    let reached = names(&trace.callers, TraceRelationship::CallerByValue);
+    for holder in ["beta::HANDLERS", "beta::run_handlers", "beta::NESTED", "beta::run_nested"] {
+        assert!(reached.contains(&holder.to_string()), "{holder} not in {reached:?}");
+    }
 }
 
 /// An edit answered by a running analyzer gives what a new index gives.

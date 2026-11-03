@@ -121,6 +121,36 @@ impl SymbolTable {
         named.get(n).copied()
     }
 
+    /// The constant or static with this name declared on a line.
+    pub(crate) fn constant_at(&self, file: FileId, line: u32, name: &str) -> Option<&Arc<Symbol>> {
+        self.all_by_file.get(&file)?.iter().find(|s| {
+            s.kind == SymbolKind::Constant && s.name == name && s.range.start_line <= line && line <= s.range.end_line
+        })
+    }
+
+    /// The `n`th constant or static with this name in a file, in the order they are written.
+    pub(crate) fn nth_constant(&self, file: FileId, name: &str, n: usize) -> Option<&Arc<Symbol>> {
+        let mut named: Vec<_> = self
+            .all_by_file
+            .get(&file)?
+            .iter()
+            .filter(|s| s.kind == SymbolKind::Constant && s.name == name)
+            .collect();
+        named.sort_by_key(|s| s.span.start);
+        named.get(n).copied()
+    }
+
+    /// The only constant or static with this name: in this file first, then in the project.
+    pub(crate) fn only_constant(&self, file: FileId, name: &str) -> Option<&Arc<Symbol>> {
+        let all: Vec<_> = self.named(name).iter().filter(|s| s.kind == SymbolKind::Constant).collect();
+        let local: Vec<_> = all.iter().filter(|s| s.file_id == file).collect();
+        match (local.as_slice(), all.as_slice()) {
+            ([one], _) => Some(**one),
+            ([], [one]) => Some(*one),
+            _ => None,
+        }
+    }
+
     /// The innermost symbol of any kind holding a byte offset.
     pub(crate) fn any_at(&self, file: FileId, offset: u32) -> Option<&Arc<Symbol>> {
         self.all_by_file

@@ -12,7 +12,7 @@ use mimir_relations::EdgeKind;
 use mimir_types::{Confidence, FileId, ReferenceKind, Symbol};
 
 use crate::lookup::{SymbolTable, implements_generic_trait, owner_of, trait_of, type_name};
-use crate::{EdgeSet, ProjectFile};
+use crate::{ConstantUse, EdgeSet, ProjectFile};
 
 /// Add call and function value edges for every file not in `covered`.
 pub(crate) fn resolve_calls(
@@ -113,6 +113,28 @@ fn free_function(table: &SymbolTable, file: FileId, name: &str) -> Option<Arc<Sy
         ([one], _) => Some((**one).clone()),
         ([], [one]) => Some((*one).clone()),
         _ => None,
+    }
+}
+
+/// Collect uses of constants in files not in `covered`, by a name with one declaration.
+pub(crate) fn resolve_constant_uses(
+    table: &SymbolTable,
+    files: &[ProjectFile],
+    covered: &HashSet<FileId>,
+    uses: &mut Vec<ConstantUse>,
+) {
+    for file in files.iter().filter(|f| !covered.contains(&f.file_id)) {
+        for reference in file.references.iter().filter(|r| r.kind == ReferenceKind::Read) {
+            let from = table.any_at(file.file_id, reference.span.start);
+            if let (Some(from), Some(constant)) = (from, table.only_constant(file.file_id, &reference.name)) {
+                uses.push(ConstantUse {
+                    from: from.id,
+                    constant: constant.id,
+                    span: reference.span,
+                    confidence: Confidence::High,
+                });
+            }
+        }
     }
 }
 

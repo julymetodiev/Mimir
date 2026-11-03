@@ -182,8 +182,8 @@ pub fn check_daemon_running(agent_dir: &Path) -> bool {
     }
 
     // Check if PID is still running
-    if let Ok(pid_str) = std::fs::read_to_string(&pid_file) {
-        if let Ok(pid) = pid_str.trim().parse::<u32>() {
+    if let Ok(pid_str) = std::fs::read_to_string(&pid_file)
+        && let Ok(pid) = pid_str.trim().parse::<u32>() {
             // On Unix, check if process exists
             #[cfg(unix)]
             {
@@ -198,7 +198,6 @@ pub fn check_daemon_running(agent_dir: &Path) -> bool {
                 return true; // Assume running on non-Unix
             }
         }
-    }
 
     false
 }

@@ -98,10 +98,10 @@ pub async fn execute(
     if json {
         // JSON output
         let mut line_outputs = Vec::new();
-        for i in display_start..display_end {
+        for (i, line) in lines.iter().enumerate().take(display_end).skip(display_start) {
             line_outputs.push(LineOutput {
                 number: (i + 1) as u32,
-                content: lines[i].to_string(),
+                content: line.to_string(),
                 is_symbol: i >= sym_start && i < sym_end,
             });
         }
@@ -130,7 +130,7 @@ pub async fn execute(
         );
         println!();
 
-        for i in display_start..display_end {
+        for (i, line) in lines.iter().enumerate().take(display_end).skip(display_start) {
             let line_num = i + 1;
             let is_symbol_line = i >= sym_start && i < sym_end;
 
@@ -138,9 +138,9 @@ pub async fn execute(
             let marker = if !is_symbol_line { "·" } else { " " };
 
             if show_numbers {
-                println!("{}{:4}│ {}", marker, line_num, lines[i]);
+                println!("{}{:4}│ {}", marker, line_num, line);
             } else {
-                println!("{} {}", marker, lines[i]);
+                println!("{} {}", marker, line);
             }
         }
     }

@@ -33,7 +33,7 @@ pub async fn restore_snapshot<S: ContentStore>(
         let content = content_store
             .get(hash)
             .await?
-            .ok_or_else(|| StorageError::ContentNotFound { hash: *hash })?;
+            .ok_or(StorageError::ContentNotFound { hash: *hash })?;
 
         // Write to file
         let mut file =

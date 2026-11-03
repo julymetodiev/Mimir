@@ -137,7 +137,8 @@ A call through a trait, including `dyn`, links to the trait's method. `trace` th
 implementations under it, and the trait's callers on each implementation, marked as possible
 because the target is decided at runtime. A function named without being called, as in
 `.map(helper)` or `&[run, stop]`, is not counted as a call: `trace` shows it on both sides marked
-`[as value, possible]`, because it may run later or never. Without `rust-analyzer` this is found
+`[as value, possible]`, because it may run later or never. A constant or static holding a function
+counts too, along with whoever uses that constant; other constants are left out. Without `rust-analyzer` this is found
 only outside macros, and a name bound in the function is taken for a local variable.
 
 ## Performance Targets

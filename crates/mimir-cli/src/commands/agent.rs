@@ -83,7 +83,7 @@ impl CliCallback {
 
 impl AgentCallback for CliCallback {
     fn on_start(&self, task: &Task) {
-        println!("  {}  {}\n", "◈", task.goal);
+        println!("  ◈  {}\n", task.goal);
     }
 
     fn on_llm_request(&self, messages: &[Message]) {
@@ -117,8 +117,8 @@ impl AgentCallback for CliCallback {
         }
 
         // In verbose mode, show edit_batch contents
-        if self.verbose && name == "edit_batch" {
-            if let Some(edits) = input.get("edits").and_then(|v| v.as_array()) {
+        if self.verbose && name == "edit_batch"
+            && let Some(edits) = input.get("edits").and_then(|v| v.as_array()) {
                 for edit in edits {
                     if let Some(symbol) = edit.get("symbol").and_then(|v| v.as_str()) {
                         let content_len = edit.get("content")
@@ -129,23 +129,20 @@ impl AgentCallback for CliCallback {
                     }
                 }
             }
-        }
 
         // Start spinner for shell commands (they can take a while)
-        if name == "shell" {
-            if let Ok(mut spinner) = self.spinner.lock() {
+        if name == "shell"
+            && let Ok(mut spinner) = self.spinner.lock() {
                 spinner.start("executing...");
             }
-        }
     }
 
     fn on_tool_result(&self, name: &str, result: &str, is_error: bool) {
         // Stop spinner if it was running
-        if name == "shell" {
-            if let Ok(mut spinner) = self.spinner.lock() {
+        if name == "shell"
+            && let Ok(mut spinner) = self.spinner.lock() {
                 spinner.stop();
             }
-        }
 
         if is_error {
             let preview = &result[..result.len().min(80)];
@@ -256,7 +253,7 @@ fn format_tool_action(name: &str, input: &serde_json::Value) -> (&'static str, S
                 .unwrap_or("?");
             ("᛫ ", format!("append {}", file))
         }
-        _ => ("᛫ ", format!("{}", name))
+        _ => ("᛫ ", name.to_string())
     }
 }
 
@@ -373,11 +370,10 @@ pub async fn list_tasks(task_dir: &Path, status: Option<TaskStatus>) -> Result<(
     println!("{}", "-".repeat(80));
 
     for task in tasks {
-        if let Some(filter_status) = status {
-            if task.status != filter_status {
+        if let Some(filter_status) = status
+            && task.status != filter_status {
                 continue;
             }
-        }
 
         let status_str = match task.status {
             TaskStatus::Pending => "pending",
@@ -445,11 +441,10 @@ pub async fn resume_task(
     let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let agent_dir = cwd.join(".mimir");
 
-    if check_daemon_running(&agent_dir) {
-        if let Ok(client) = DaemonGraphClient::connect(&agent_dir, cwd).await {
+    if check_daemon_running(&agent_dir)
+        && let Ok(client) = DaemonGraphClient::connect(&agent_dir, cwd).await {
             agent = agent.with_graph_client(Arc::new(client));
         }
-    }
 
     // Resume or run
     let result = if let Some(cp) = checkpoint {

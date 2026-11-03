@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use mimir_parse_core::ExtractedReference;
-use mimir_types::ContentHash;
+use mimir_types::{ContentHash, ReferenceKind};
 use serde_json::{Value, json};
 use tracing::info;
 
@@ -116,7 +116,7 @@ fn resolve_documents(
     for file in stale {
         let path = project.join(&file.path);
         let mut document = LiveDocument::default();
-        for reference in file.references.iter().filter(|r| r.call_form.is_some()) {
+        for reference in file.references.iter().filter(|r| r.call_form.is_some() || r.kind == ReferenceKind::Read) {
             let (line, column) = site_of(reference);
             if let Some(found) = target(analyzer.definition(&path, line - 1, column)?)
                 && (found.name == reference.name || !FORWARDING_METHODS.contains(&reference.name.as_str()))

@@ -61,7 +61,16 @@ async fn main() -> anyhow::Result<()> {
         } => {
             let edit_mode: commands::edit::EditMode =
                 mode.parse().map_err(|e: String| anyhow::anyhow!(e))?;
-            commands::edit::execute(file, symbol.as_deref(), edit_mode, start, end, content, preview, backup).await?
+            commands::edit::execute(commands::edit::EditRequest {
+                file,
+                symbol: symbol.as_deref(),
+                mode: edit_mode,
+                start,
+                end,
+                content,
+                preview,
+                backup,
+            }).await?
         }
         commands::Commands::EditBatch {
             json,

@@ -52,6 +52,9 @@ fn extract_from_node(
             if let Some(reference) = extract_function_value(node, source, container, bound) {
                 references.push(reference);
             }
+            if let Some(reference) = extract_constant_read(node, source, container) {
+                references.push(reference);
+            }
         }
         // Tokens that are not code of this function: a macro's own rules, and attributes.
         "macro_definition" | "attribute_item" | "inner_attribute_item" => return,
@@ -145,6 +148,46 @@ fn extract_function_value(
     ))
 }
 
+/// A use of a constant or static, by its `SCREAMING_CASE` name: it may hold a function.
+fn extract_constant_read(node: &Node, source: &[u8], container: Option<&str>) -> Option<ExtractedReference> {
+    let parent = node.parent()?;
+    let name_node = match node.kind() {
+        "identifier" => {
+            let is_segment = parent.kind() == "scoped_identifier";
+            let is_declared = parent.child_by_field_name("name").is_some_and(|name| name == *node);
+            if is_segment || is_declared {
+                return None;
+            }
+            *node
+        }
+        "scoped_identifier" => node.child_by_field_name("name")?,
+        _ => return None,
+    };
+    constant_read(name_node, source, container)
+}
+
+fn constant_read(name_node: Node, source: &[u8], container: Option<&str>) -> Option<ExtractedReference> {
+    let name = name_node.utf8_text(source).ok()?;
+    if !is_constant_name(name) {
+        return None;
+    }
+    let mut reference = ExtractedReference::new(
+        name.to_string(),
+        ReferenceKind::Read,
+        node_to_range(&name_node),
+        node_to_span(&name_node),
+    )
+    .with_confidence(Confidence::Medium);
+    if let Some(c) = container {
+        reference = reference.with_container(c.to_string());
+    }
+    Some(reference)
+}
+
+fn is_constant_name(name: &str) -> bool {
+    name.chars().any(char::is_uppercase) && !name.chars().any(char::is_lowercase)
+}
+
 /// Whether an expression is used for its value, rather than being a path's segment,
 /// the function of a call, or a pattern.
 fn in_value_position(node: &Node) -> bool {
@@ -206,6 +249,11 @@ fn extract_from_tokens(
 ) {
     let tokens: Vec<Node> = (0..node.child_count()).filter_map(|i| node.child(i)).collect();
     for (i, token) in tokens.iter().enumerate() {
+        if token.kind() == "identifier"
+            && let Some(reference) = constant_read(*token, source, container)
+        {
+            references.push(reference);
+        }
         if token.kind() != "token_tree" {
             continue;
         }

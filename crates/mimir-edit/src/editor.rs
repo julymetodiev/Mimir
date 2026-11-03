@@ -34,15 +34,14 @@ impl Editor {
         let old_hash = ContentHash::compute(content.as_bytes());
 
         // Check optimistic lock
-        if let Some(expected) = op.expected_hash() {
-            if &old_hash != expected {
+        if let Some(expected) = op.expected_hash()
+            && &old_hash != expected {
                 return Err(EditError::HashMismatch {
                     path: path.clone(),
-                    expected: expected.clone(),
+                    expected: *expected,
                     actual: old_hash,
                 });
             }
-        }
 
         // Create backup if enabled
         if self.create_backups {
@@ -83,7 +82,7 @@ impl Editor {
             if &actual != expected {
                 return Err(EditError::HashMismatch {
                     path: path.clone(),
-                    expected: expected.clone(),
+                    expected: *expected,
                     actual,
                 });
             }
@@ -127,15 +126,14 @@ impl Editor {
 
             // Check all expected hashes
             for op in &file_ops {
-                if let Some(expected) = op.expected_hash() {
-                    if &old_hash != expected {
+                if let Some(expected) = op.expected_hash()
+                    && &old_hash != expected {
                         return Err(EditError::HashMismatch {
                             path: path.clone(),
-                            expected: expected.clone(),
-                            actual: old_hash.clone(),
+                            expected: *expected,
+                            actual: old_hash,
                         });
                     }
-                }
             }
 
             // Create backup if enabled
@@ -346,11 +344,10 @@ impl Editor {
         spans.sort_by_key(|(start, _)| *start);
 
         for window in spans.windows(2) {
-            if let [(_, end1), (start2, _)] = window {
-                if end1 > start2 {
+            if let [(_, end1), (start2, _)] = window
+                && end1 > start2 {
                     return Err(EditError::OverlappingEdits);
                 }
-            }
         }
 
         Ok(())

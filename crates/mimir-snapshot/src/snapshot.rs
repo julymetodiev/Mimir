@@ -27,6 +27,7 @@ pub struct Snapshot {
 
 /// Metadata about a snapshot.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct SnapshotMetadata {
     /// Number of files in the snapshot.
     pub files_count: usize,
@@ -71,15 +72,6 @@ impl Snapshot {
     }
 }
 
-impl Default for SnapshotMetadata {
-    fn default() -> Self {
-        Self {
-            files_count: 0,
-            total_size: 0,
-            languages: HashMap::new(),
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {

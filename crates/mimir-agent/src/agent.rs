@@ -24,12 +24,11 @@ fn compress_result(content: &str) -> String {
 
         // Helper to truncate array
         let truncate_array = |val: &mut serde_json::Value, limit: usize| -> bool {
-            if let Some(arr) = val.as_array_mut() {
-                if arr.len() > limit {
+            if let Some(arr) = val.as_array_mut()
+                && arr.len() > limit {
                     arr.truncate(limit);
                     return true;
                 }
-            }
             false
         };
 
@@ -40,11 +39,10 @@ fn compress_result(content: &str) -> String {
             }
         } else if let Some(obj) = json.as_object_mut() {
             for field in ["matches", "symbols", "callers", "callees", "references"] {
-                if let Some(val) = obj.get_mut(field) {
-                    if truncate_array(val, 10) {
+                if let Some(val) = obj.get_mut(field)
+                    && truncate_array(val, 10) {
                         modified = true;
                     }
-                }
             }
             
             if modified {
@@ -113,7 +111,7 @@ impl ToolCache {
 
     /// Generate cache key from tool name and input.
     fn cache_key(tool_name: &str, input: &serde_json::Value) -> String {
-        format!("{}:{}", tool_name, input.to_string())
+        format!("{}:{}", tool_name, input)
     }
 
     /// Get cached result if available.
