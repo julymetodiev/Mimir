@@ -87,8 +87,6 @@ pub enum TraceRelation {
     Caller,
     /// This symbol is called by the parent.
     Callee,
-    /// Cross-language reference.
-    CrossLanguage,
     /// Calls a trait method this symbol implements, so it may reach this symbol at runtime.
     CallerViaTrait,
     /// Implements the trait method above it, so a call may land here at runtime.
@@ -116,7 +114,7 @@ pub struct TraceResponse {
     /// which leave out what they cannot be sure of.
     #[serde(default)]
     pub provisional: bool,
-    /// How many symbols have the name that was traced; this is the first of them.
+    /// How many symbols have the name that was traced; this is the one it most likely means.
     #[serde(default)]
     pub matches: usize,
 }
@@ -169,7 +167,7 @@ impl StatsResponse {
 pub struct SearchResponse {
     /// Matching symbols.
     pub symbols: Vec<SymbolInfo>,
-    /// Total matches found.
+    /// All that match, of which `symbols` may be the first few.
     pub total_count: usize,
     /// Whether results were truncated.
     pub truncated: bool,

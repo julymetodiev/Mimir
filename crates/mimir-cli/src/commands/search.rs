@@ -63,6 +63,14 @@ pub async fn execute(
             println!("     ```");
         }
     }
-    println!("\nTotal: {} matches", results.total_count);
+    if results.truncated {
+        println!(
+            "\nShowing {} of {} matches",
+            results.symbols.len(),
+            results.total_count
+        );
+    } else {
+        println!("\nTotal: {} matches", results.total_count);
+    }
     Ok(())
 }

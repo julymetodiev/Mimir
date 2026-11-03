@@ -256,3 +256,59 @@ fn test_a_preview_changes_nothing_and_a_file_outside_is_refused() {
         .stderr(contains("outside the project"));
     stop(dir);
 }
+
+#[test]
+fn test_a_name_shared_with_a_field_traces_the_function() {
+    let project = project();
+    let dir = project.path();
+    fs::write(
+        dir.join("src/lib.rs"),
+        "pub struct Report {\n    pub total: u32,\n}\n\npub fn total() -> u32 {\n    helper()\n}\n\npub fn helper() -> u32 {\n    1\n}\n",
+    )
+    .unwrap();
+    mimir(dir)
+        .args(["trace", "-s", "total", "--callees"])
+        .assert()
+        .success()
+        .stdout(contains("Trace for: total (function)"))
+        .stdout(contains("→ helper"))
+        .stderr(contains("tracing the most likely"));
+    stop(dir);
+}
+
+#[test]
+fn test_search_counts_all_matches_and_functions_include_methods() {
+    let project = project();
+    let dir = project.path();
+    fs::write(
+        dir.join("src/lib.rs"),
+        "pub struct S;\nimpl S {\n    pub fn sync_one(&self) {}\n}\npub fn sync_two() {}\npub fn sync_three() {}\n",
+    )
+    .unwrap();
+    mimir(dir)
+        .args(["search", "--pattern", "^sync_", "--kind", "function"])
+        .assert()
+        .success()
+        .stdout(contains("sync_one"))
+        .stdout(contains("Total: 3 matches"));
+    mimir(dir)
+        .args(["search", "--pattern", "^sync_", "--limit", "2"])
+        .assert()
+        .success()
+        .stdout(contains("Showing 2 of 3 matches"));
+    stop(dir);
+}
+
+#[test]
+fn test_a_file_in_another_language_is_no_warning() {
+    let project = project();
+    let dir = project.path();
+    fs::write(dir.join("tool.py"), "print('hello')\n").unwrap();
+    mimir(dir)
+        .args(["search", "--pattern", "helper"])
+        .assert()
+        .success();
+    let log = fs::read_to_string(dir.join(".mimir/daemon.log")).unwrap();
+    assert!(!log.contains("tool.py"), "{log}");
+    stop(dir);
+}

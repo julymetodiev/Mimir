@@ -17,10 +17,11 @@ impl GraphActor {
         preview: bool,
         backup: bool,
     ) -> Result<EditReport, GraphError> {
+        let editor = Editor::new().with_root(&self.root);
         let editor = if backup {
-            Editor::new().with_backups()
+            editor.with_backups()
         } else {
-            Editor::new()
+            editor
         };
         match self.apply_edits(&editor, edits, preview).await {
             Err(GraphError::Edit(EditError::HashMismatch { .. })) => {

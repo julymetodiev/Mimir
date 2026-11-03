@@ -15,9 +15,6 @@ pub struct TraceOptions {
 
     /// Include callees (symbols that this symbol calls).
     pub include_callees: bool,
-
-    /// Follow cross-language references.
-    pub cross_language: bool,
 }
 
 /// A node in the trace result call chain.

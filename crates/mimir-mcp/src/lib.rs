@@ -1,5 +1,7 @@
 //! The MCP server: each tool parses its arguments, makes one client call and returns the answer as
-//! JSON. The client finds the project from the directory the server runs in, and starts the daemon.
+//! compact JSON (see [`view`]). The client finds the project from the directory the server runs in, and starts the daemon.
+
+mod view;
 
 use mimir_client::Client;
 use mimir_protocol::{Edit, EditChange, EditTarget, SearchOptions, TraceOptions};
@@ -72,7 +74,7 @@ struct TraceArguments {
 struct SearchArguments {
     /// A regular expression over symbol names and qualified names.
     pattern: String,
-    /// Only this kind of symbol: function, struct, enum and so on.
+    /// Only this kind of symbol: function (methods too), method, struct, enum and so on.
     kind: Option<String>,
     /// The most results to return. The default is 20.
     limit: Option<u32>,
@@ -174,11 +176,13 @@ impl MimirServer {
             max_depth: Some(arguments.depth.unwrap_or(1)),
             callers_only: matches!(arguments.direction, Direction::Callers),
             callees_only: matches!(arguments.direction, Direction::Callees),
-            cross_language: false,
             file: arguments.file,
         };
-        self.with_client(async |client| client.trace(&arguments.symbol, options).await)
-            .await
+        self.with_client(async |client| {
+            let trace = client.trace(&arguments.symbol, options).await?;
+            Ok(view::Trace::from(trace))
+        })
+        .await
     }
 
     #[tool(description = "Find symbols by a regular expression over their names.")]
@@ -191,7 +195,7 @@ impl MimirServer {
             kind_filter: arguments.kind,
             limit: arguments.limit,
         };
-        self.with_client(async |client| client.search(options).await)
+        self.with_client(async |client| Ok(view::Search::from(client.search(options).await?)))
             .await
     }
 
@@ -201,9 +205,10 @@ impl MimirServer {
         Parameters(arguments): Parameters<ReadArguments>,
     ) -> Result<String, String> {
         self.with_client(async |client| {
-            client
+            let source = client
                 .read(&arguments.symbol, arguments.before, arguments.after)
-                .await
+                .await?;
+            Ok(view::Source::from(source))
         })
         .await
     }
@@ -259,7 +264,8 @@ impl MimirServer {
 
     #[tool(description = "How many files, symbols and edges the graph holds.")]
     async fn status(&self) -> Result<String, String> {
-        self.with_client(async |client| client.stats().await).await
+        self.with_client(async |client| Ok(view::Status::from(client.stats().await?)))
+            .await
     }
 }
 

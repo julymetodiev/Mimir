@@ -149,6 +149,10 @@ impl GraphActor {
 
         // Process each scanned file
         for scanned in scanned_files {
+            // A file in a language Mimir does not read yet is not an error.
+            if self.registry.get_by_language(scanned.language).is_none() {
+                continue;
+            }
             seen_paths.insert(scanned.absolute_path.clone());
 
             // Check if we already have this file

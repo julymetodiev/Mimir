@@ -89,7 +89,6 @@ impl GraphActor {
             max_depth: Some(options.max_depth.unwrap_or(1) as usize),
             include_callers: !options.callees_only,
             include_callees: !options.callers_only,
-            cross_language: options.cross_language,
         };
         let Some(trace) = self.graph.trace(symbol_id, trace_options) else {
             return TraceResponse::new(self.symbol_to_info(&root_sym));
@@ -129,7 +128,7 @@ impl GraphActor {
             .collect()
     }
 
-    /// Trace the first symbol with this name, in `options.file` if given.
+    /// Trace the symbol this name most likely means, in `options.file` if given.
     pub fn handle_trace_by_name(
         &self,
         name: &str,
@@ -147,10 +146,10 @@ impl GraphActor {
                     .is_some_and(|path| path == relative)
             });
         }
-        let first = found.first().ok_or_else(|| GraphError::SymbolNotFound {
+        let best = source::most_likely(&found, name).ok_or_else(|| GraphError::SymbolNotFound {
             name: name.to_string(),
         })?;
-        let mut trace = self.handle_trace(first.id, options);
+        let mut trace = self.handle_trace(best.id, options);
         trace.matches = found.len();
         Ok(trace)
     }
@@ -239,40 +238,38 @@ impl GraphActor {
             })?;
 
         let limit = options.limit.unwrap_or(20) as usize;
-        let mut matches = Vec::new();
+        let mut matches: Vec<SymbolInfo> = self
+            .graph
+            .symbols()
+            .all_symbols()
+            .iter()
+            .filter(|symbol| {
+                pattern.is_match(&symbol.name)
+                    || pattern.is_match(&symbol.qualified_name.to_string())
+            })
+            .filter(|symbol| {
+                options
+                    .kind_filter
+                    .as_ref()
+                    .is_none_or(|filter| kind_matches(symbol.kind, filter))
+            })
+            .map(|symbol| self.symbol_to_info(symbol))
+            .collect();
+        // The graph holds symbols in no order, and the first few must be the same ones each time.
+        matches.sort_by(|a, b| (&a.file_path, a.start_line).cmp(&(&b.file_path, b.start_line)));
 
-        // Search all symbols in the graph
-        for symbol in self.graph.symbols().all_symbols() {
-            if pattern.is_match(&symbol.name)
-                || pattern.is_match(&symbol.qualified_name.to_string())
-            {
-                // Apply kind filter if specified
-                if let Some(ref kind_filter) = options.kind_filter
-                    && !kind_matches(symbol.kind, kind_filter)
-                {
-                    continue;
-                }
-
-                matches.push(self.symbol_to_info(&symbol));
-
-                if matches.len() >= limit {
-                    break;
-                }
-            }
-        }
-
-        let truncated = matches.len() >= limit;
         let total_count = matches.len();
-
+        matches.truncate(limit);
         Ok(SearchResponse {
+            truncated: matches.len() < total_count,
             symbols: matches,
             total_count,
-            truncated,
         })
     }
 }
 
-/// Whether a kind is what a filter asks for: part of its short name, or its full name.
+/// Whether a kind is what a filter asks for: part of its short name, or its full name. A method is
+/// a function too: someone asking for functions named `sync` means those as well.
 pub fn kind_matches(kind: SymbolKind, filter: &str) -> bool {
     let filter = filter.to_lowercase();
     let full = match kind {
@@ -285,5 +282,6 @@ pub fn kind_matches(kind: SymbolKind, filter: &str) -> bool {
         _ => "",
     };
     let short = kind.to_string();
-    short.contains(&filter) || full == filter
+    let is_a_function = matches!(kind, SymbolKind::Method | SymbolKind::Constructor);
+    short.contains(&filter) || full == filter || (is_a_function && filter == "function")
 }

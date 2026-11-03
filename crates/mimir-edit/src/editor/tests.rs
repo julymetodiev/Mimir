@@ -120,6 +120,26 @@ async fn test_preview_operation() {
 }
 
 #[tokio::test]
+async fn test_preview_header_counts_lines_and_shows_a_relative_path() {
+    let dir = tempdir().unwrap();
+    let path = create_test_file(dir.path(), "test.rs", "one\ntwo\nthree\n").await;
+
+    let op = EditOp::replace_lines(&path, 1, 2, "only\n");
+    let diff = Editor::new()
+        .with_root(dir.path())
+        .preview(&op)
+        .await
+        .unwrap();
+
+    assert!(
+        diff.unified.starts_with("--- test.rs\n+++ test.rs\n"),
+        "{}",
+        diff.unified
+    );
+    assert!(diff.unified.contains("@@ -1,2 +1,1 @@"), "{}", diff.unified);
+}
+
+#[tokio::test]
 async fn test_invalid_span() {
     let dir = tempdir().unwrap();
     let path = create_test_file(dir.path(), "test.txt", "short").await;

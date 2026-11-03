@@ -1,6 +1,7 @@
 //! Choosing a symbol by name and cutting its lines out of a file's text.
 
 use mimir_types::{Symbol, SymbolKind};
+use std::cmp::Reverse;
 use std::sync::Arc;
 
 /// The symbol a bare name most likely means: one with exactly that name, then an impl, a type, a
@@ -16,7 +17,8 @@ pub fn most_likely<'a>(found: &'a [Arc<Symbol>], name: &str) -> Option<&'a Arc<S
             SymbolKind::EnumVariant => 10,
             _ => 60,
         };
-        (symbol.name == name, rank)
+        // The lowest id among equals, so the same question gets the same symbol.
+        (symbol.name == name, rank, Reverse(symbol.id.as_u64()))
     })
 }
 

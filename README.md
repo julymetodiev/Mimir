@@ -63,7 +63,7 @@ one that says so is handled.
 
 ## Develop
 
-Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), the specification, and [CLAUDE.md](CLAUDE.md).
+Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), the specification. `scripts/check.sh` runs every check.
 
 ## License
 

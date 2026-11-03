@@ -171,7 +171,6 @@ fn trace_options(include_callers: bool, include_callees: bool, max_depth: usize)
         max_depth: Some(max_depth),
         include_callers,
         include_callees,
-        cross_language: false,
     }
 }
 

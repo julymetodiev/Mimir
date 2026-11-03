@@ -26,8 +26,6 @@ pub struct TraceOptions {
     pub callers_only: bool,
     /// Only trace callees (what this calls).
     pub callees_only: bool,
-    /// Include cross-language references.
-    pub cross_language: bool,
     /// Only a symbol in this file, by absolute path.
     #[serde(default)]
     pub file: Option<PathBuf>,
@@ -182,7 +180,6 @@ mod tests {
         assert!(opts.max_depth.is_none());
         assert!(!opts.callers_only);
         assert!(!opts.callees_only);
-        assert!(!opts.cross_language);
     }
 
     #[test]

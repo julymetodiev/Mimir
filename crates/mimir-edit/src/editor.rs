@@ -3,7 +3,7 @@
 use crate::op::{Diff, EditOp, EditResult as OpResult};
 use crate::{EditError, EditResult};
 use mimir_types::ContentHash;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 
 /// Editor for applying file operations with conflict detection.
@@ -11,6 +11,8 @@ use tokio::fs;
 pub struct Editor {
     /// Whether to create backup files before editing.
     create_backups: bool,
+    /// What paths in diffs are shown relative to.
+    root: Option<PathBuf>,
 }
 
 impl Editor {
@@ -22,6 +24,12 @@ impl Editor {
     /// Enable backup file creation.
     pub fn with_backups(mut self) -> Self {
         self.create_backups = true;
+        self
+    }
+
+    /// Show paths in diffs relative to this directory.
+    pub fn with_root(mut self, root: impl Into<PathBuf>) -> Self {
+        self.root = Some(root.into());
         self
     }
 
@@ -354,12 +362,22 @@ impl Editor {
 
     /// Generate unified diff format.
     fn generate_unified_diff(&self, path: &Path, old: &str, new: &str, start_line: u32) -> String {
-        let path_str = path.display();
+        let shown = self
+            .root
+            .as_deref()
+            .and_then(|root| path.strip_prefix(root).ok())
+            .unwrap_or(path);
         let mut diff = String::new();
 
-        diff.push_str(&format!("--- a/{}\n", path_str));
-        diff.push_str(&format!("+++ b/{}\n", path_str));
-        diff.push_str(&format!("@@ -{},1 +{},1 @@\n", start_line, start_line));
+        diff.push_str(&format!("--- {}\n", shown.display()));
+        diff.push_str(&format!("+++ {}\n", shown.display()));
+        diff.push_str(&format!(
+            "@@ -{},{} +{},{} @@\n",
+            start_line,
+            old.lines().count(),
+            start_line,
+            new.lines().count()
+        ));
 
         for line in old.lines() {
             diff.push_str(&format!("-{}\n", line));

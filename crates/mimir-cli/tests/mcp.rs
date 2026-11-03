@@ -119,10 +119,11 @@ fn test_tools_work_end_to_end() {
 
     let (trace, failed) = server.call("trace", json!({"symbol": "helper", "direction": "callers"}));
     assert!(!failed, "{trace}");
-    assert_eq!(
-        serde_json::from_str::<Value>(&trace).unwrap()["callers"][0]["symbol"]["name"],
-        "compute"
-    );
+    let trace: Value = serde_json::from_str(&trace).unwrap();
+    assert_eq!(trace["callers"][0]["name"], "compute");
+    assert_eq!(trace["callers"][0]["at"], "src/lib.rs:5-7");
+    assert!(trace["callers"][0].get("possible").is_none());
+    assert!(trace.get("id").is_none());
 
     let (read, failed) = server.call("read", json!({"symbol": "compute"}));
     assert!(!failed && read.contains("helper()"), "{read}");
@@ -145,7 +146,7 @@ fn test_tools_work_end_to_end() {
     assert!(failed && missing.contains("no_such_symbol"), "{missing}");
 
     let (stats, failed) = server.call("status", json!({}));
-    assert!(!failed && stats.contains("symbols_count"), "{stats}");
+    assert!(!failed && stats.contains("\"symbols\""), "{stats}");
 
     let stop = Command::new(env!("CARGO_BIN_EXE_mimir"))
         .args(["daemon", "stop"])

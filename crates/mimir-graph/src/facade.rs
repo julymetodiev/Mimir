@@ -328,7 +328,6 @@ mod tests {
                     max_depth: Some(3),
                     include_callers: true,
                     include_callees: true,
-                    cross_language: false,
                 },
             )
             .unwrap();

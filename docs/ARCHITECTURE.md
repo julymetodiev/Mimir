@@ -1,7 +1,7 @@
 # Mimir architecture
 
-The specification of the system (rule 2 of the law in `CLAUDE.md`: code follows it exactly). Code
-cites it by section number. Why a decision was made is in git and in project memory, not here.
+The specification of the system: code follows it exactly. Code cites it by section number. Why a
+decision was made is in git and in project memory, not here.
 
 ## 1. The system
 

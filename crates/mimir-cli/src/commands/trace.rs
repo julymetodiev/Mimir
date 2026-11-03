@@ -24,7 +24,6 @@ pub async fn execute(request: TraceRequest<'_>) -> Result<()> {
         max_depth: Some(request.depth as u32),
         callers_only: request.callers_only,
         callees_only: request.callees_only,
-        cross_language: false,
         file,
     };
     let trace = client.trace(request.symbol, options).await?;
@@ -36,7 +35,7 @@ pub async fn execute(request: TraceRequest<'_>) -> Result<()> {
 
     if trace.matches > 1 {
         eprintln!(
-            "note: {} symbols are named '{}'; tracing the first. Narrow it with -f <file>.",
+            "note: {} symbols are named '{}'; tracing the most likely. Narrow it with -f <file>.",
             trace.matches, request.symbol
         );
     }

@@ -271,4 +271,7 @@ fn test_kind_filter_takes_short_and_full_names() {
     assert!(kind_matches(SymbolKind::TypeAlias, "type"));
     assert!(!kind_matches(SymbolKind::EnumVariant, "enum"));
     assert!(!kind_matches(SymbolKind::Function, "struct"));
+    assert!(kind_matches(SymbolKind::Method, "function"));
+    assert!(kind_matches(SymbolKind::Method, "method"));
+    assert!(!kind_matches(SymbolKind::Function, "method"));
 }
