@@ -88,6 +88,27 @@ impl RelationGraph {
         self.graph.store(Arc::new(new_inner));
     }
 
+    /// Replace every edge with the given ones in one step, keeping the symbol nodes.
+    pub fn replace_edges(&self, edges: Vec<(SymbolId, SymbolId, EdgeData)>) {
+        let current = self.graph.load();
+        let mut new_inner = (**current).clone();
+        new_inner.graph.clear_edges();
+
+        for (from, to, data) in edges {
+            let from_node = *new_inner
+                .symbol_to_node
+                .entry(from)
+                .or_insert_with(|| new_inner.graph.add_node(from));
+            let to_node = *new_inner
+                .symbol_to_node
+                .entry(to)
+                .or_insert_with(|| new_inner.graph.add_node(to));
+            new_inner.graph.add_edge(from_node, to_node, data);
+        }
+
+        self.graph.store(Arc::new(new_inner));
+    }
+
     /// Remove all edges from a symbol.
     pub fn remove_symbol_edges(&self, symbol_id: SymbolId) {
         let current = self.graph.load();

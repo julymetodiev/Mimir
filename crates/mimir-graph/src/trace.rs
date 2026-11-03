@@ -80,6 +80,14 @@ pub enum TraceRelationship {
     Caller,
     /// This symbol is called by the parent.
     Callee,
+    /// Calls a trait method this symbol implements, so it may reach this symbol at runtime.
+    CallerViaTrait,
+    /// Implements the trait method above it, so a call may land here at runtime.
+    Implementation,
+    /// Holds this function as a value, so it may call it at runtime.
+    CallerByValue,
+    /// Held as a value by the symbol above it, which may call it at runtime.
+    CalleeByValue,
 }
 
 /// Result of a trace operation.

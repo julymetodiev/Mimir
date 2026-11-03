@@ -48,7 +48,11 @@ pub enum Commands {
     Status,
 
     /// Sync the code graph from project files.
-    Sync,
+    Sync {
+        /// Write a new semantic index instead of asking a running analyzer about edited files.
+        #[arg(long)]
+        full: bool,
+    },
 
     /// Trace call chains for a symbol.
     Trace {

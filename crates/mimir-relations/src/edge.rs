@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 pub enum EdgeKind {
     /// Function/method call.
     Calls,
+    /// Names a function without calling it, as in `.map(name)`. It may run later, or never.
+    UsesAsValue,
     /// Import relationship.
     Imports,
     /// Type usage.
@@ -37,6 +39,7 @@ impl From<ReferenceKind> for EdgeKind {
     fn from(kind: ReferenceKind) -> Self {
         match kind {
             ReferenceKind::Call => EdgeKind::Calls,
+            ReferenceKind::FunctionValue => EdgeKind::UsesAsValue,
             ReferenceKind::Import => EdgeKind::Imports,
             ReferenceKind::TypeUse => EdgeKind::UsesType,
             ReferenceKind::Instantiation => EdgeKind::Instantiates,

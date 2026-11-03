@@ -2,7 +2,8 @@
 
 use mimir_error::GraphError;
 use mimir_files::{ScannedFile, Scanner};
-use mimir_graph::CodeGraph;
+use mimir_graph::{CodeGraph, TraceOptions as GraphTraceOptions, TraceRelationship};
+use mimir_resolve::{Analyzers, ProjectFile, Refresh, ScipIndex, link, load_or_generate};
 use mimir_parse_core::AdapterRegistry;
 use mimir_protocol::{
     CommandReceiver, EventSender, FindResponse, GraphCommand, GraphEvent, SearchOptions,
@@ -11,9 +12,24 @@ use mimir_protocol::{
 use mimir_types::{ContentHash, FileId, IdGenerator, Language, Symbol, SymbolId, SymbolKind};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Instant;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
+
+/// How long a running analyzer, which holds gigabytes, is kept for the next edit.
+const ANALYZER_IDLE: Duration = Duration::from_secs(600);
+
+/// How long a query waits for semantic resolution. A running analyzer is usually done by then;
+/// a new index or a first load is not, and the query goes on with syntax rules.
+const QUERY_WAIT: Duration = Duration::from_millis(500);
+
+/// Semantic resolution running in the background, for a set of files.
+struct PendingLink {
+    indexes: tokio::task::JoinHandle<Vec<ScipIndex>>,
+    files: Vec<ProjectFile>,
+    /// The graph already holds what syntax rules give for these files.
+    linked_by_syntax: bool,
+}
 
 /// Tracked file info.
 #[derive(Clone)]
@@ -38,6 +54,29 @@ pub struct GraphActor {
     files: HashMap<PathBuf, TrackedFile>,
     /// Reverse mapping: file ID to path.
     file_paths: HashMap<FileId, PathBuf>,
+    /// What was extracted from each file, from which all edges are resolved.
+    sources: HashMap<FileId, ProjectFile>,
+    /// A file changed since edges were last resolved.
+    needs_link: bool,
+    /// Running analyzers, which answer for edited files.
+    analyzers: Arc<Mutex<Analyzers>>,
+    pending: Option<PendingLink>,
+    query_wait: Duration,
+}
+
+/// The next command. Waiting for it is also when idle analyzers stop.
+async fn next_command(commands: &mut CommandReceiver, analyzers: &Mutex<Analyzers>) -> Option<GraphCommand> {
+    let mut tick = tokio::time::interval(Duration::from_secs(60));
+    loop {
+        tokio::select! {
+            command = commands.recv() => return command,
+            _ = tick.tick() => {
+                if let Ok(mut analyzers) = analyzers.try_lock() {
+                    analyzers.stop_if_idle(ANALYZER_IDLE);
+                }
+            }
+        }
+    }
 }
 
 impl GraphActor {
@@ -50,6 +89,11 @@ impl GraphActor {
             ids: IdGenerator::new(),
             files: HashMap::new(),
             file_paths: HashMap::new(),
+            sources: HashMap::new(),
+            needs_link: false,
+            analyzers: Arc::default(),
+            pending: None,
+            query_wait: QUERY_WAIT,
         }
     }
 
@@ -62,7 +106,18 @@ impl GraphActor {
             ids: IdGenerator::new(),
             files: HashMap::new(),
             file_paths: HashMap::new(),
+            sources: HashMap::new(),
+            needs_link: false,
+            analyzers: Arc::default(),
+            pending: None,
+            query_wait: QUERY_WAIT,
         }
+    }
+
+    /// Set how long a query waits for semantic resolution.
+    pub fn with_query_wait(mut self, wait: Duration) -> Self {
+        self.query_wait = wait;
+        self
     }
 
     /// Run the actor's command processing loop.
@@ -73,7 +128,7 @@ impl GraphActor {
     ) -> Result<(), GraphError> {
         info!("Graph actor starting for root: {}", self.root.display());
 
-        while let Some(cmd) = commands.recv().await {
+        while let Some(cmd) = next_command(&mut commands, &self.analyzers).await {
             match cmd {
                 GraphCommand::AddFile {
                     path,
@@ -104,11 +159,13 @@ impl GraphActor {
                     options,
                     reply,
                 } => {
+                    self.ensure_linked().await;
                     let response = self.handle_trace(symbol_id, &options);
                     let _ = reply.send(response);
                 }
 
                 GraphCommand::Stats { reply } => {
+                    self.ensure_linked().await;
                     let response = self.handle_stats();
                     let _ = reply.send(response);
                 }
@@ -149,6 +206,26 @@ impl GraphActor {
             let _ = self.handle_remove_file(tracked.file_id, events);
         }
 
+        // Store reverse mapping for file path lookup
+        let relative_path = path.strip_prefix(&self.root).unwrap_or(&path).to_path_buf();
+        let content_hash = ContentHash::compute(content.as_bytes());
+        let (file_id, _) = self.insert_file(path, relative_path, content, content_hash, language, events)?;
+
+        self.needs_link = true;
+
+        Ok(file_id)
+    }
+
+    /// Parse a file and add it and its symbols to the graph. Edges come from `relink`.
+    fn insert_file(
+        &mut self,
+        path: PathBuf,
+        relative_path: PathBuf,
+        content: String,
+        content_hash: ContentHash,
+        language: Language,
+        events: &EventSender,
+    ) -> Result<(FileId, usize), GraphError> {
         // Get adapter for this language
         let adapter = self.registry.get_by_language(language).ok_or_else(|| {
             GraphError::FileNotFound {
@@ -160,9 +237,6 @@ impl GraphActor {
         let tree = adapter.parse(&content).ok_or_else(|| GraphError::FileNotFound {
             path: path.clone(),
         })?;
-
-        // Compute content hash
-        let content_hash = ContentHash::compute(content.as_bytes());
 
         // Assign file ID
         let file_id: FileId = self.ids.next();
@@ -176,24 +250,25 @@ impl GraphActor {
                 language,
             },
         );
-        // Store reverse mapping for file path lookup
-        let relative_path = path.strip_prefix(&self.root).unwrap_or(&path).to_path_buf();
-        self.file_paths.insert(file_id, relative_path);
+        self.file_paths.insert(file_id, relative_path.clone());
 
         // Extract symbols
         let extracted_symbols = adapter.extract_symbols(&tree, file_id);
-        let extracted_refs = adapter.extract_references(&tree, file_id);
+        let references = adapter.extract_references(&tree, file_id);
+        self.sources.insert(
+            file_id,
+            ProjectFile {
+                file_id,
+                path: relative_path,
+                source: content.as_str().into(),
+                references,
+            },
+        );
 
         // Convert ExtractedSymbol to Symbol and add to graph
-        let mut symbol_map: std::collections::HashMap<String, SymbolId> =
-            std::collections::HashMap::new();
-
         for extracted in &extracted_symbols {
-            let symbol_id: SymbolId = self.ids.next();
-            symbol_map.insert(extracted.name.clone(), symbol_id);
-
             let symbol = Symbol {
-                id: symbol_id,
+                id: self.ids.next(),
                 name: extracted.name.clone(),
                 qualified_name: extracted.qualified_name.clone(),
                 kind: extracted.kind,
@@ -209,22 +284,6 @@ impl GraphActor {
             self.graph.add_symbol(symbol);
         }
 
-        // Add references as edges
-        for reference in &extracted_refs {
-            // Find source symbol (the one making the reference)
-            if let Some(&from_id) = reference.container.as_ref().and_then(|c| symbol_map.get(c)) {
-                // Find target symbol by name
-                if let Some(target) = self.graph.find_symbol(&reference.name).first() {
-                    self.graph.add_call(
-                        from_id,
-                        target.id,
-                        reference.span,
-                        reference.confidence,
-                    );
-                }
-            }
-        }
-
         let symbols_count = extracted_symbols.len();
 
         // Emit event
@@ -234,7 +293,55 @@ impl GraphActor {
             symbols_count,
         });
 
-        Ok(file_id)
+        Ok((file_id, symbols_count))
+    }
+
+    /// Resolve every edge if a file changed since the last time. A query that reads edges
+    /// waits for this, so several edits in a row cost one index and no answer is stale.
+    /// Bring edges up to date, waiting only briefly: if semantic resolution takes longer, it
+    /// goes on in the background and the graph has what syntax rules give until it is done.
+    /// Later queries pick up its result.
+    async fn ensure_linked(&mut self) {
+        let cache_dir = self.root.join(".mimir").join("graph");
+        if self.needs_link {
+            self.needs_link = false;
+            let files: Vec<ProjectFile> = self.sources.values().cloned().collect();
+            let (root, cache_dir, scan) = (self.root.clone(), cache_dir.clone(), files.clone());
+            let analyzers = self.analyzers.clone();
+            // Replacing an unfinished one leaves it to end alone; this one waits for the analyzers.
+            let indexes = tokio::task::spawn_blocking(move || {
+                let mut analyzers = analyzers.lock().unwrap_or_else(|e| e.into_inner());
+                load_or_generate(&root, &cache_dir, &scan, &mut analyzers, Refresh::Edits)
+            });
+            self.pending = Some(PendingLink { indexes, files, linked_by_syntax: false });
+        }
+        let Some(pending) = self.pending.as_mut() else {
+            return;
+        };
+        let wait = if pending.linked_by_syntax { Duration::ZERO } else { self.query_wait };
+        match tokio::time::timeout(wait, &mut pending.indexes).await {
+            Ok(indexes) => {
+                let indexes = indexes.unwrap_or_else(|e| {
+                    warn!("Semantic indexing failed: {}", e);
+                    Vec::new()
+                });
+                let report = link(&self.graph, &pending.files, &indexes);
+                debug!("Linked: {:?}", report);
+                self.pending = None;
+            }
+            Err(_) if pending.linked_by_syntax => {}
+            Err(_) => {
+                let (root, scan) = (self.root.clone(), pending.files.clone());
+                let saved = tokio::task::spawn_blocking(move || {
+                    load_or_generate(&root, &cache_dir, &scan, &mut Analyzers::default(), Refresh::Saved)
+                })
+                .await
+                .unwrap_or_default();
+                let report = link(&self.graph, &pending.files, &saved);
+                debug!("Linked for now: {:?}", report);
+                pending.linked_by_syntax = true;
+            }
+        }
     }
 
     /// Handle removing a file from the graph.
@@ -257,9 +364,11 @@ impl GraphActor {
             self.files.remove(&path);
         }
         self.file_paths.remove(&file_id);
+        self.sources.remove(&file_id);
 
         let removed = self.graph.remove_file(file_id);
         let was_removed = !removed.is_empty();
+        self.needs_link = true;
 
         if was_removed {
             let _ = events.send(GraphEvent::FileRemoved {
@@ -274,6 +383,8 @@ impl GraphActor {
     /// Remove a file by path.
     fn remove_file_by_path(&mut self, path: &PathBuf, events: &EventSender) -> Option<usize> {
         if let Some(tracked) = self.files.remove(path) {
+            self.file_paths.remove(&tracked.file_id);
+            self.sources.remove(&tracked.file_id);
             let removed = self.graph.remove_file(tracked.file_id);
             let symbols_removed = removed.len();
 
@@ -358,109 +469,51 @@ impl GraphActor {
                 callees: Vec::new(),
                 max_depth_reached: 0,
                 total_symbols: 0,
+                provisional: self.pending.is_some(),
             };
         };
 
-        let root_info = self.symbol_to_info(&root_sym);
-        let max_depth = options.max_depth.unwrap_or(1);
-
-        // Get callers
-        let callers = if !options.callees_only {
-            self.collect_callers(symbol_id, max_depth)
-        } else {
-            Vec::new()
+        let trace_options = GraphTraceOptions {
+            max_depth: Some(options.max_depth.unwrap_or(1) as usize),
+            include_callers: !options.callees_only,
+            include_callees: !options.callers_only,
+            cross_language: options.cross_language,
+        };
+        let Some(trace) = self.graph.trace(symbol_id, trace_options) else {
+            return TraceResponse::new(self.symbol_to_info(&root_sym));
         };
 
-        // Get callees
-        let callees = if !options.callers_only {
-            self.collect_callees(symbol_id, max_depth)
-        } else {
-            Vec::new()
-        };
-
+        let callers = self.to_trace_nodes(trace.callers);
+        let callees = self.to_trace_nodes(trace.callees);
         let total = 1 + callers.len() + callees.len();
 
         TraceResponse {
-            root: root_info,
+            root: self.symbol_to_info(&root_sym),
             callers,
             callees,
-            max_depth_reached: max_depth,
+            max_depth_reached: trace.max_depth_reached as u32,
             total_symbols: total,
+            provisional: self.pending.is_some(),
         }
     }
 
-    /// Collect callers recursively up to max depth.
-    fn collect_callers(&self, symbol_id: SymbolId, max_depth: u32) -> Vec<TraceNode> {
-        let mut result = Vec::new();
-        let mut visited = std::collections::HashSet::new();
-
-        self.collect_callers_recursive(symbol_id, 1, max_depth, &mut visited, &mut result);
-
-        result
-    }
-
-    fn collect_callers_recursive(
-        &self,
-        symbol_id: SymbolId,
-        depth: u32,
-        max_depth: u32,
-        visited: &mut std::collections::HashSet<SymbolId>,
-        result: &mut Vec<TraceNode>,
-    ) {
-        if depth > max_depth || visited.contains(&symbol_id) {
-            return;
-        }
-        visited.insert(symbol_id);
-
-        for caller in self.graph.get_callers(symbol_id) {
-            if !visited.contains(&caller.id) {
-                let info = self.symbol_to_info(&caller);
-                result.push(TraceNode {
-                    symbol: info,
-                    depth,
-                    relationship: TraceRelation::Caller,
-                });
-
-                self.collect_callers_recursive(caller.id, depth + 1, max_depth, visited, result);
-            }
-        }
-    }
-
-    /// Collect callees recursively up to max depth.
-    fn collect_callees(&self, symbol_id: SymbolId, max_depth: u32) -> Vec<TraceNode> {
-        let mut result = Vec::new();
-        let mut visited = std::collections::HashSet::new();
-
-        self.collect_callees_recursive(symbol_id, 1, max_depth, &mut visited, &mut result);
-
-        result
-    }
-
-    fn collect_callees_recursive(
-        &self,
-        symbol_id: SymbolId,
-        depth: u32,
-        max_depth: u32,
-        visited: &mut std::collections::HashSet<SymbolId>,
-        result: &mut Vec<TraceNode>,
-    ) {
-        if depth > max_depth || visited.contains(&symbol_id) {
-            return;
-        }
-        visited.insert(symbol_id);
-
-        for callee in self.graph.get_callees(symbol_id) {
-            if !visited.contains(&callee.id) {
-                let info = self.symbol_to_info(&callee);
-                result.push(TraceNode {
-                    symbol: info,
-                    depth,
-                    relationship: TraceRelation::Callee,
-                });
-
-                self.collect_callees_recursive(callee.id, depth + 1, max_depth, visited, result);
-            }
-        }
+    fn to_trace_nodes(&self, nodes: Vec<mimir_graph::TraceNode>) -> Vec<TraceNode> {
+        nodes
+            .into_iter()
+            .map(|node| TraceNode {
+                symbol: self.symbol_to_info(&node.symbol),
+                depth: node.depth as u32,
+                relationship: match node.relationship {
+                    TraceRelationship::Root => TraceRelation::Root,
+                    TraceRelationship::Caller => TraceRelation::Caller,
+                    TraceRelationship::Callee => TraceRelation::Callee,
+                    TraceRelationship::CallerViaTrait => TraceRelation::CallerViaTrait,
+                    TraceRelationship::Implementation => TraceRelation::Implementation,
+                    TraceRelationship::CallerByValue => TraceRelation::CallerByValue,
+                    TraceRelationship::CalleeByValue => TraceRelation::CalleeByValue,
+                },
+            })
+            .collect()
     }
 
     /// Handle getting statistics.
@@ -594,6 +647,10 @@ impl GraphActor {
             }
         }
 
+        // Calls can point at any file, so edges are resolved once all files are in
+        self.needs_link |= files_added + files_updated + files_removed > 0;
+        self.ensure_linked().await;
+
         let duration_ms = start.elapsed().as_millis() as u64;
 
         let result = SyncResult {
@@ -627,85 +684,14 @@ impl GraphActor {
             }
         })?;
 
-        // Get adapter for this language
-        let adapter = self.registry.get_by_language(scanned.language).ok_or_else(|| {
-            GraphError::FileNotFound {
-                path: scanned.absolute_path.clone(),
-            }
-        })?;
-
-        // Parse the file
-        let tree = adapter.parse(&content).ok_or_else(|| {
-            GraphError::FileNotFound {
-                path: scanned.absolute_path.clone(),
-            }
-        })?;
-
-        // Assign file ID
-        let file_id: FileId = self.ids.next();
-
-        // Track the file
-        self.files.insert(
+        let (_, symbols_count) = self.insert_file(
             scanned.absolute_path.clone(),
-            TrackedFile {
-                file_id,
-                content_hash: scanned.content_hash.clone(),
-                language: scanned.language,
-            },
-        );
-        // Store reverse mapping for file path lookup
-        self.file_paths.insert(file_id, scanned.path.clone());
-
-        // Extract symbols
-        let extracted_symbols = adapter.extract_symbols(&tree, file_id);
-        let extracted_refs = adapter.extract_references(&tree, file_id);
-
-        // Convert ExtractedSymbol to Symbol and add to graph
-        let mut symbol_map: HashMap<String, SymbolId> = HashMap::new();
-
-        for extracted in &extracted_symbols {
-            let symbol_id: SymbolId = self.ids.next();
-            symbol_map.insert(extracted.name.clone(), symbol_id);
-
-            let symbol = Symbol {
-                id: symbol_id,
-                name: extracted.name.clone(),
-                qualified_name: extracted.qualified_name.clone(),
-                kind: extracted.kind,
-                language: extracted.language,
-                file_id,
-                range: extracted.range,
-                span: extracted.span,
-                signature: extracted.signature.clone(),
-                visibility: extracted.visibility,
-                doc: extracted.doc.clone(),
-            };
-
-            self.graph.add_symbol(symbol);
-        }
-
-        // Add references as edges
-        for reference in &extracted_refs {
-            if let Some(&from_id) = reference.container.as_ref().and_then(|c| symbol_map.get(c)) {
-                if let Some(target) = self.graph.find_symbol(&reference.name).first() {
-                    self.graph.add_call(
-                        from_id,
-                        target.id,
-                        reference.span,
-                        reference.confidence,
-                    );
-                }
-            }
-        }
-
-        let symbols_count = extracted_symbols.len();
-
-        // Emit event
-        let _ = events.send(GraphEvent::FileAdded {
-            file_id,
-            path: scanned.absolute_path.clone(),
-            symbols_count,
-        });
+            scanned.path.clone(),
+            content,
+            scanned.content_hash,
+            scanned.language,
+            events,
+        )?;
 
         Ok(symbols_count)
     }

@@ -35,6 +35,9 @@ pub enum ReferenceKind {
     /// Function or method call.
     Call,
 
+    /// A function named without being called, as in `.map(name)`.
+    FunctionValue,
+
     /// Import statement.
     Import,
 
@@ -94,6 +97,7 @@ impl fmt::Display for ReferenceKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
             Self::Call => "call",
+            Self::FunctionValue => "fn_value",
             Self::Import => "import",
             Self::TypeUse => "type_use",
             Self::Instantiation => "new",

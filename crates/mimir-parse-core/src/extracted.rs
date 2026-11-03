@@ -121,6 +121,24 @@ pub struct ExtractedReference {
 
     /// Name of the containing symbol (the "from" side).
     pub container: Option<String>,
+
+    /// How a call or function value is written; `context` holds its receiver or path.
+    /// `None` for anything else.
+    #[serde(default)]
+    pub call_form: Option<CallForm>,
+}
+
+/// How a call is written, which decides what its name can refer to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CallForm {
+    /// `name()`
+    Plain,
+    /// `receiver.name()`
+    Method,
+    /// `path::name()`
+    Scoped,
+    /// `Struct { name }`, which only a value can be.
+    Shorthand,
 }
 
 impl ExtractedReference {
@@ -134,7 +152,14 @@ impl ExtractedReference {
             confidence: Confidence::default(),
             context: None,
             container: None,
+            call_form: None,
         }
+    }
+
+    /// Set the form of a call.
+    pub fn with_call_form(mut self, form: CallForm) -> Self {
+        self.call_form = Some(form);
+        self
     }
 
     /// Set the confidence level.

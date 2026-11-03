@@ -15,9 +15,10 @@ mimir-protocol.workspace = true
 mimir-graph.workspace = true
 mimir-parse-core.workspace = true
 mimir-parse-rust.workspace = true
+mimir-resolve.workspace = true
 mimir-files.workspace = true
 
-tokio = { workspace = true, features = ["sync", "rt", "time"] }
+tokio = { workspace = true, features = ["sync", "rt", "time", "macros"] }
 tracing.workspace = true
 notify.workspace = true
 notify-debouncer-mini.workspace = true

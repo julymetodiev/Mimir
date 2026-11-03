@@ -5,6 +5,8 @@ use mimir_files::Scanner;
 use mimir_graph::CodeGraph;
 use mimir_parse_core::AdapterRegistry;
 use mimir_parse_rust::RustAdapter;
+use mimir_relations::{EdgeData, EdgeKind};
+use mimir_resolve::{Analyzers, ProjectFile, Refresh, link, load_or_generate};
 use mimir_types::{FileId, IdGenerator, Language, Symbol};
 use std::collections::HashMap;
 use std::path::Path;
@@ -40,6 +42,14 @@ pub struct SyncStats {
 /// Sync the project and return the graph.
 /// This is the core sync function that can be called by other commands.
 pub async fn sync_project(config: &Config, verbose: bool) -> Result<(CodeGraph, IdGenerator, HashMap<String, FileId>, SyncStats)> {
+    sync_project_with(config, verbose, Refresh::Edits).await
+}
+
+async fn sync_project_with(
+    config: &Config,
+    verbose: bool,
+    refresh: Refresh,
+) -> Result<(CodeGraph, IdGenerator, HashMap<String, FileId>, SyncStats)> {
     // Ensure graph directory exists
     tokio::fs::create_dir_all(&config.graph_dir).await?;
 
@@ -77,7 +87,7 @@ pub async fn sync_project(config: &Config, verbose: bool) -> Result<(CodeGraph, 
     }
 
     let mut total_symbols = 0;
-    let mut total_refs = 0;
+    let mut project_files = Vec::with_capacity(rust_files.len());
 
     for scanned in &rust_files {
         let rel_path = scanned.path.to_string_lossy().to_string();
@@ -133,32 +143,41 @@ pub async fn sync_project(config: &Config, verbose: bool) -> Result<(CodeGraph, 
             total_symbols += 1;
         }
 
-        // Extract references
-        let references = adapter.extract_references(&parsed, file_id);
-        for reference in &references {
-            // Find source symbol (containing function)
-            if let Some(from_symbol) = find_containing_symbol(&graph, file_id, reference.span.start)
-            {
-                // Find target symbol by name
-                let targets = graph.find_symbol(&reference.name);
-                if let Some(to_symbol) = targets.first() {
-                    graph.add_call(
-                        from_symbol.id,
-                        to_symbol.id,
-                        reference.span,
-                        reference.confidence,
-                    );
-                    total_refs += 1;
-                }
-            }
-        }
+        // Calls can point at any file, so they are resolved once all symbols are known
+        project_files.push(ProjectFile {
+            file_id,
+            path: scanned.path.clone(),
+            references: adapter.extract_references(&parsed, file_id),
+            source: source.into(),
+        });
     }
+
+    let indexes = {
+        let (root, cache_dir, files) = (config.root.clone(), config.graph_dir.clone(), project_files.clone());
+        // Here the analyzer lives as long as this sync, which still saves most of a new index.
+        tokio::task::spawn_blocking(move || load_or_generate(&root, &cache_dir, &files, &mut Analyzers::default(), refresh))
+            .await?
+    };
+    let linked = link(&graph, &project_files, &indexes);
+    let total_refs = linked.semantic_calls + linked.syntax_calls + linked.implementations + linked.imports;
 
     if verbose {
         println!(
             "Indexed {} symbols, {} references",
             total_symbols, total_refs
         );
+        println!(
+            "Calls: {} semantic ({} files), {} from syntax only ({} files)",
+            linked.semantic_calls, linked.semantic_files, linked.syntax_calls, linked.syntax_files
+        );
+        if linked.live_files > 0 {
+            println!(
+                "Edited since the index: {} files, from a running analyzer (`mimir sync --full` rewrites the index)",
+                linked.live_files
+            );
+        }
+        println!("Trait method implementations: {}", linked.implementations);
+        println!("Functions used as values: {}", linked.function_values);
     }
 
     // Persist the graph
@@ -178,7 +197,7 @@ pub async fn sync_project(config: &Config, verbose: bool) -> Result<(CodeGraph, 
 }
 
 /// Execute the sync command.
-pub async fn execute() -> Result<()> {
+pub async fn execute(full: bool) -> Result<()> {
     // Find project root
     let root = find_project_root().context("Not in a Mimir project. Run 'mimir init' first.")?;
     let config = Config::new(&root);
@@ -187,18 +206,9 @@ pub async fn execute() -> Result<()> {
         anyhow::bail!("Project not initialized. Run 'mimir init' first.");
     }
 
-    let (_graph, _ids, _file_ids, _stats) = sync_project(&config, true).await?;
+    let (_graph, _ids, _file_ids, _stats) = sync_project_with(&config, true, if full { Refresh::Full } else { Refresh::Edits }).await?;
 
     Ok(())
-}
-
-/// Find the symbol containing a given byte offset.
-fn find_containing_symbol(graph: &CodeGraph, file_id: FileId, offset: u32) -> Option<Arc<Symbol>> {
-    let symbols = graph.symbols_in_file(file_id);
-    symbols
-        .into_iter()
-        .filter(|s| s.span.start <= offset && offset <= s.span.end)
-        .min_by_key(|s| s.span.end - s.span.start)
 }
 
 /// Persist the graph to disk.
@@ -284,25 +294,32 @@ pub async fn load_graph(
     }
 
     // Add edges
-    for (from_id, to_id, kind_str, span_start, span_end, confidence_str) in persisted.edges {
-        use mimir_types::{Confidence, Span};
-
-        let from = mimir_types::SymbolId::from_u64(from_id);
-        let to = mimir_types::SymbolId::from_u64(to_id);
-        let span = Span::new(span_start, span_end);
-
-        let confidence = match confidence_str.as_str() {
-            "Certain" => Confidence::Certain,
-            "High" => Confidence::High,
-            "Medium" => Confidence::Medium,
-            "Low" => Confidence::Low,
-            _ => Confidence::Medium,
-        };
-
-        // For now, treat all as calls (kind_str reserved for future edge types)
-        let _ = kind_str;
-        graph.add_call(from, to, span, confidence);
-    }
+    use mimir_types::{Confidence, Span};
+    let edges = persisted
+        .edges
+        .into_iter()
+        .map(|(from_id, to_id, kind_str, span_start, span_end, confidence_str)| {
+            let kind = match kind_str.as_str() {
+                "Imports" => EdgeKind::Imports,
+                "Implements" => EdgeKind::Implements,
+                "UsesAsValue" => EdgeKind::UsesAsValue,
+                _ => EdgeKind::Calls,
+            };
+            let confidence = match confidence_str.as_str() {
+                "Certain" => Confidence::Certain,
+                "High" => Confidence::High,
+                "Medium" => Confidence::Medium,
+                "Low" => Confidence::Low,
+                _ => Confidence::Medium,
+            };
+            (
+                mimir_types::SymbolId::from_u64(from_id),
+                mimir_types::SymbolId::from_u64(to_id),
+                EdgeData::new(kind, Span::new(span_start, span_end), confidence),
+            )
+        })
+        .collect();
+    graph.replace_edges(edges);
 
     Ok(Some((graph, ids, file_ids)))
 }

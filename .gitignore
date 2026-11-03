@@ -41,3 +41,4 @@ GEMINI.md
 .mimir/
 # test-project/
 test-project/target
+fixtures/resolve-workspace/target

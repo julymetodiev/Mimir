@@ -11,4 +11,4 @@ mod trace;
 
 pub use facade::CodeGraph;
 pub use query::{QueryOptions, QueryResult};
-pub use trace::{TraceOptions, TraceResult};
+pub use trace::{TraceNode, TraceOptions, TraceRelationship, TraceResult};

@@ -124,6 +124,11 @@ impl CodeGraph {
 
     // ============ Relation Operations ============
 
+    /// Replace every edge with the given ones in one step.
+    pub fn replace_edges(&self, edges: Vec<(SymbolId, SymbolId, EdgeData)>) {
+        self.relations.replace_edges(edges);
+    }
+
     /// Add a call relationship between symbols.
     pub fn add_call(&self, from: SymbolId, to: SymbolId, span: Span, confidence: Confidence) {
         self.relations
@@ -251,19 +256,35 @@ impl CodeGraph {
             return;
         }
 
-        for caller_id in self.relations.callers(symbol_id) {
-            if visited.contains(&caller_id) {
+        let value_users = |id| {
+            self.relations
+                .incoming(id)
+                .into_iter()
+                .filter(|(_, edge)| edge.kind == EdgeKind::UsesAsValue)
+                .map(|(user, _)| user)
+        };
+        let via_trait = self
+            .relations
+            .outgoing(symbol_id)
+            .into_iter()
+            .filter(|(_, edge)| edge.kind == EdgeKind::Implements)
+            .flat_map(|(declared, _)| self.relations.callers(declared).into_iter().chain(value_users(declared)))
+            .map(|caller| (caller, TraceRelationship::CallerViaTrait));
+        let by_value = value_users(symbol_id).map(|user| (user, TraceRelationship::CallerByValue));
+        let direct = self
+            .relations
+            .callers(symbol_id)
+            .into_iter()
+            .map(|caller| (caller, TraceRelationship::Caller));
+        let callers: Vec<_> = direct.chain(by_value).chain(via_trait).collect();
+
+        for (caller_id, relationship) in callers {
+            if !visited.insert(caller_id) {
                 continue;
             }
-            visited.insert(caller_id);
 
             if let Some(symbol) = self.symbols.get(caller_id) {
-                result.push(TraceNode {
-                    symbol: symbol.clone(),
-                    depth,
-                    relationship: TraceRelationship::Caller,
-                });
-
+                result.push(TraceNode { symbol, depth, relationship });
                 self.trace_callers(caller_id, depth + 1, max_depth, visited, result);
             }
         }
@@ -281,20 +302,33 @@ impl CodeGraph {
             return;
         }
 
-        for callee_id in self.relations.callees(symbol_id) {
-            if visited.contains(&callee_id) {
+        let implementations = self
+            .relations
+            .incoming(symbol_id)
+            .into_iter()
+            .filter(|(_, edge)| edge.kind == EdgeKind::Implements)
+            .map(|(method, _)| (method, TraceRelationship::Implementation));
+        let direct = self
+            .relations
+            .callees(symbol_id)
+            .into_iter()
+            .map(|callee| (callee, TraceRelationship::Callee));
+        let by_value = self
+            .relations
+            .outgoing(symbol_id)
+            .into_iter()
+            .filter(|(_, edge)| edge.kind == EdgeKind::UsesAsValue)
+            .map(|(function, _)| (function, TraceRelationship::CalleeByValue));
+        let targets: Vec<_> = direct.chain(by_value).chain(implementations).collect();
+
+        for (target_id, relationship) in targets {
+            if !visited.insert(target_id) {
                 continue;
             }
-            visited.insert(callee_id);
 
-            if let Some(symbol) = self.symbols.get(callee_id) {
-                result.push(TraceNode {
-                    symbol: symbol.clone(),
-                    depth,
-                    relationship: TraceRelationship::Callee,
-                });
-
-                self.trace_callees(callee_id, depth + 1, max_depth, visited, result);
+            if let Some(symbol) = self.symbols.get(target_id) {
+                result.push(TraceNode { symbol, depth, relationship });
+                self.trace_callees(target_id, depth + 1, max_depth, visited, result);
             }
         }
     }

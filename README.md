@@ -21,7 +21,7 @@ A semantic code intelligence engine that gives AI agents structured understandin
 ## Features
 
 - **Symbol Graph**: Track functions, structs, traits, and their relationships
-- **Trace Queries**: Find callers/callees across the codebase
+- **Trace Queries**: Find callers/callees across the codebase, with types resolved by `rust-analyzer`
 - **Incremental Sync**: Only re-parse changed files
 - **File Watching**: Automatic detection of file changes
 - **Edit Operations**: Safe code modifications with conflict detection
@@ -112,9 +112,36 @@ Layer 0: Primitives     mimir-types, mimir-error, mimir-protocol
 | `mimir-agent` | Agent orchestration with tool execution loop |
 | `mimir-cli` | Command-line interface |
 
+## Call Resolution
+
+`mimir sync` takes call edges from a SCIP index written by `rust-analyzer`, the same tool an
+editor uses, so `x.get()` links to the `get` of `x`'s type, inside macros too. The index is
+cached and rebuilt only when a source file or manifest changes.
+
+Without `rust-analyzer`, or with `MIMIR_NO_SCIP=1`, Mimir falls back to syntax rules. They leave
+out a call they cannot link for certain, so you get fewer callers, and `sync` tells you how many
+files were resolved this way.
+
+After an edit the index is kept, and a running `rust-analyzer` answers for the edited files only.
+Files that were not edited keep their edges until the next index, which `mimir sync --full`, a
+change to a manifest or more than 50 edited files will write. The daemon keeps that analyzer
+running and stops it after 10 idle minutes. A query waits half a second for all this; after that
+it answers from syntax rules for what is not done yet, and says the result is partial.
+
+**Accuracy** (Mimir's own workspace, calls between its functions, compared with `rust-analyzer`):
+
+- with `rust-analyzer`: 100% precision and recall
+- syntax only: 99.8% precision, 53.5% recall
+
+A call through a trait, including `dyn`, links to the trait's method. `trace` then shows the
+implementations under it, and the trait's callers on each implementation, marked as possible
+because the target is decided at runtime. A function named without being called, as in
+`.map(helper)` or `&[run, stop]`, is not counted as a call: `trace` shows it on both sides marked
+`[as value, possible]`, because it may run later or never. Without `rust-analyzer` this is found
+only outside macros, and a name bound in the function is taken for a local variable.
+
 ## Performance Targets
 
-- **Accuracy**: >85% symbol resolution without LSP, >95% with LSP
 - **Performance**: <100ms for trace() in 50k LOC project
 - **Cold start**: <5s to first working query
 - **Memory**: <500MB for 100k LOC project

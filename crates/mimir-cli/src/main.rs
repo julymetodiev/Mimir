@@ -39,7 +39,7 @@ async fn main() -> anyhow::Result<()> {
         },
         commands::Commands::Init { force } => commands::init::execute(force).await?,
         commands::Commands::Status => commands::status::execute().await?,
-        commands::Commands::Sync => commands::sync::execute().await?,
+        commands::Commands::Sync { full } => commands::sync::execute(full).await?,
         commands::Commands::Trace {
             file,
             symbol,

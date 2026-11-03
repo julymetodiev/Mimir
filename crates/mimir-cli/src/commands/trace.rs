@@ -1,11 +1,13 @@
 //! Trace command - trace call chains for a symbol.
 
 use anyhow::{Context, Result};
-use mimir_graph::{CodeGraph, TraceOptions};
+use mimir_graph::{CodeGraph, TraceOptions, TraceRelationship};
 use mimir_parse_core::AdapterRegistry;
 use mimir_parse_rust::RustAdapter;
-use mimir_protocol::TraceOptions as IpcTraceOptions;
+use mimir_protocol::{TraceOptions as IpcTraceOptions, TraceRelation};
+use mimir_resolve::{ProjectFile, link};
 use mimir_types::{FileId, IdGenerator, Language, Symbol};
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -13,7 +15,11 @@ use crate::app::{Config, find_project_root};
 use crate::commands::sync::{load_graph, sync_project};
 use crate::daemon::{check_daemon_running, DaemonClient};
 
-/// Execute the trace command.
+/// Which implementation a trait call reaches is decided at runtime, so these are possibilities.
+const VIA_TRAIT: &str = " [via trait, possible]";
+const IMPLEMENTATION: &str = " [implementation, possible]";
+const AS_VALUE: &str = " [as value, possible]";
+
 /// Execute the trace command.
 pub async fn execute(
     file: Option<&Path>,
@@ -24,9 +30,12 @@ pub async fn execute(
     callers_only: bool,
     callees_only: bool,
 ) -> Result<()> {
+    let in_project = find_project_root().is_some_and(|root| Config::new(&root).is_initialized());
     match file {
+        // Callers live in other files, so a file in a project is traced through the project.
+        Some(f) if in_project => execute_from_graph(Some(f), symbol_name, depth, json, show_code, callers_only, callees_only).await,
         Some(f) => execute_single_file(f, symbol_name, depth, json, show_code, callers_only, callees_only).await,
-        None => execute_from_graph(symbol_name, depth, json, show_code, callers_only, callees_only).await,
+        None => execute_from_graph(None, symbol_name, depth, json, show_code, callers_only, callees_only).await,
     }
 }
 
@@ -91,30 +100,21 @@ async fn execute_single_file(
         graph.add_symbol(symbol);
     }
 
-    // Extract and add references
-    let references = adapter.extract_references(&parsed, file_id);
-    for reference in &references {
-        // Find source symbol (containing function)
-        if let Some(from_symbol) = find_containing_symbol(&graph, file_id, reference.span.start) {
-            // Find target symbol by name
-            let targets = graph.find_symbol(&reference.name);
-            if let Some(to_symbol) = targets.first() {
-                graph.add_call(
-                    from_symbol.id,
-                    to_symbol.id,
-                    reference.span,
-                    reference.confidence,
-                );
-            }
-        }
-    }
+    // Resolve the references within this file
+    let project_file = ProjectFile {
+        file_id,
+        path: file.to_path_buf(),
+        references: adapter.extract_references(&parsed, file_id),
+        source: source.as_str().into(),
+    };
+    link(&graph, std::slice::from_ref(&project_file), &[]);
 
     // Find and trace the symbol
-    trace_symbol(&graph, symbol_name, depth, json, show_code, callers_only, callees_only, Some(file))
+    trace_symbol(&graph, symbol_name, depth, json, show_code, callers_only, callees_only, Some((file, file_id)))
 }
 
 /// Execute trace from the synced graph.
-async fn execute_from_graph(symbol_name: &str, depth: usize, json: bool, show_code: bool, callers_only: bool, callees_only: bool) -> Result<()> {
+async fn execute_from_graph(file: Option<&Path>, symbol_name: &str, depth: usize, json: bool, show_code: bool, callers_only: bool, callees_only: bool) -> Result<()> {
     // Find project root
     let root = find_project_root().context("Not in a Mimir project. Run 'mimir init' first.")?;
     let config = Config::new(&root);
@@ -124,25 +124,39 @@ async fn execute_from_graph(symbol_name: &str, depth: usize, json: bool, show_co
     }
 
     // Check if daemon is running - use it for automatic updates
-    if check_daemon_running(&config.agent_dir) {
+    if file.is_none() && check_daemon_running(&config.agent_dir) {
         return execute_via_daemon(&config, symbol_name, depth, json, show_code, callers_only, callees_only).await;
     }
 
     // Fallback: sync and query locally
-    let graph = if config.sync.sync_on_query {
+    let (graph, file_ids) = if config.sync.sync_on_query {
         // Sync before query to ensure graph is up-to-date
-        let (graph, _ids, _file_ids, _stats) = sync_project(&config, false).await?;
-        graph
+        let (graph, _ids, file_ids, _stats) = sync_project(&config, false).await?;
+        (graph, file_ids)
     } else {
         // Load from disk
-        let (graph, _ids, _file_ids) = load_graph(&config)
+        let (graph, _ids, file_ids) = load_graph(&config)
             .await?
             .context("Graph not found. Run 'mimir sync' first.")?;
-        graph
+        (graph, file_ids)
     };
 
+    let scope = file
+        .map(|f| project_file_id(&config.root, f, &file_ids).map(|id| (f, id)))
+        .transpose()?;
+
     // Find and trace the symbol
-    trace_symbol(&graph, symbol_name, depth, json, show_code, callers_only, callees_only, None)
+    trace_symbol(&graph, symbol_name, depth, json, show_code, callers_only, callees_only, scope)
+}
+
+/// The graph's id for a file given as a path.
+fn project_file_id(root: &Path, file: &Path, file_ids: &HashMap<String, FileId>) -> Result<FileId> {
+    let absolute = file.canonicalize().with_context(|| format!("File not found: {}", file.display()))?;
+    let relative = absolute.strip_prefix(root.canonicalize()?).unwrap_or(&absolute);
+    file_ids
+        .get(&*relative.to_string_lossy())
+        .copied()
+        .with_context(|| format!("{} is not indexed in this project", file.display()))
 }
 
 /// Execute trace via the daemon.
@@ -188,7 +202,12 @@ async fn execute_via_daemon(config: &Config, symbol_name: &str, depth: usize, js
             println!("Callers ({}):", result.callers.len());
             for node in &result.callers {
                 let indent = "  ".repeat(node.depth as usize);
-                println!("{}← {} ({:?})", indent, node.symbol.name, node.symbol.kind);
+                let via = match node.relationship {
+                    TraceRelation::CallerViaTrait => VIA_TRAIT,
+                    TraceRelation::CallerByValue => AS_VALUE,
+                    _ => "",
+                };
+                println!("{}← {} ({:?}){}", indent, node.symbol.name, node.symbol.kind, via);
             }
             println!();
         }
@@ -197,7 +216,14 @@ async fn execute_via_daemon(config: &Config, symbol_name: &str, depth: usize, js
             println!("Callees ({}):", result.callees.len());
             for node in &result.callees {
                 let indent = "  ".repeat(node.depth as usize);
-                println!("{}→ {} ({:?})", indent, node.symbol.name, node.symbol.kind);
+                if node.relationship == TraceRelation::Implementation {
+                    let name = node.symbol.qualified_name.as_deref().unwrap_or(&node.symbol.name);
+                    println!("{}→ {} ({:?}){}", indent, name, node.symbol.kind, IMPLEMENTATION);
+                } else if node.relationship == TraceRelation::CalleeByValue {
+                    println!("{}→ {} ({:?}){}", indent, node.symbol.name, node.symbol.kind, AS_VALUE);
+                } else {
+                    println!("{}→ {} ({:?})", indent, node.symbol.name, node.symbol.kind);
+                }
             }
             println!();
         }
@@ -206,6 +232,9 @@ async fn execute_via_daemon(config: &Config, symbol_name: &str, depth: usize, js
             "Total: {} symbols, max depth: {}",
             result.total_symbols, result.max_depth_reached
         );
+        if result.provisional {
+            println!("Partial: rust-analyzer is still working, so some calls may be missing. Run this again shortly.");
+        }
     }
 
     Ok(())
@@ -220,10 +249,15 @@ fn trace_symbol(
     show_code: bool,
     callers_only: bool,
     callees_only: bool,
-    file: Option<&Path>,
+    scope: Option<(&Path, FileId)>,
 ) -> Result<()> {
+    let file = scope.map(|(path, _)| path);
+
     // Find the target symbol
-    let symbols = graph.find_symbol(symbol_name);
+    let mut symbols = graph.find_symbol(symbol_name);
+    if let Some((_, file_id)) = scope {
+        symbols.retain(|s| s.file_id == file_id);
+    }
     if symbols.is_empty() {
         if let Some(f) = file {
             anyhow::bail!("Symbol '{}' not found in {}", symbol_name, f.display());
@@ -232,6 +266,13 @@ fn trace_symbol(
         }
     }
 
+    if symbols.len() > 1 {
+        eprintln!(
+            "note: {} symbols are named '{}'; tracing the first. Narrow it with -f <file>.",
+            symbols.len(),
+            symbol_name
+        );
+    }
     let target = &symbols[0];
 
     // Trace the symbol
@@ -274,7 +315,12 @@ fn trace_symbol(
             println!("Callers ({}):", result.callers.len());
             for node in &result.callers {
                 let indent = "  ".repeat(node.depth);
-                println!("{}← {} ({})", indent, node.symbol.name, node.symbol.kind);
+                let via = match node.relationship {
+                    TraceRelationship::CallerViaTrait => VIA_TRAIT,
+                    TraceRelationship::CallerByValue => AS_VALUE,
+                    _ => "",
+                };
+                println!("{}← {} ({}){}", indent, node.symbol.name, node.symbol.kind, via);
             }
             println!();
         }
@@ -283,7 +329,13 @@ fn trace_symbol(
             println!("Callees ({}):", result.callees.len());
             for node in &result.callees {
                 let indent = "  ".repeat(node.depth);
-                println!("{}→ {} ({})", indent, node.symbol.name, node.symbol.kind);
+                if node.relationship == TraceRelationship::Implementation {
+                    println!("{}→ {} ({}){}", indent, node.symbol.qualified_name, node.symbol.kind, IMPLEMENTATION);
+                } else if node.relationship == TraceRelationship::CalleeByValue {
+                    println!("{}→ {} ({}){}", indent, node.symbol.name, node.symbol.kind, AS_VALUE);
+                } else {
+                    println!("{}→ {} ({})", indent, node.symbol.name, node.symbol.kind);
+                }
             }
             println!();
         }
@@ -296,13 +348,4 @@ fn trace_symbol(
     }
 
     Ok(())
-}
-
-/// Find the symbol containing a given byte offset.
-fn find_containing_symbol(graph: &CodeGraph, file_id: FileId, offset: u32) -> Option<Arc<Symbol>> {
-    let symbols = graph.symbols_in_file(file_id);
-    symbols
-        .into_iter()
-        .filter(|s| s.span.start <= offset && offset <= s.span.end)
-        .min_by_key(|s| s.span.end - s.span.start) // Smallest containing span
 }

@@ -47,6 +47,11 @@ impl RelationsHandle {
         self.inner.add_edge(from, to, data)
     }
 
+    /// Replace every edge with the given ones in one step.
+    pub fn replace_edges(&self, edges: Vec<(SymbolId, SymbolId, EdgeData)>) {
+        self.inner.replace_edges(edges)
+    }
+
     /// Remove a symbol and all its edges.
     pub fn remove_symbol(&self, symbol_id: SymbolId) {
         self.inner.remove_symbol(symbol_id)

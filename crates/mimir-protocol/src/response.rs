@@ -76,6 +76,14 @@ pub enum TraceRelation {
     Callee,
     /// Cross-language reference.
     CrossLanguage,
+    /// Calls a trait method this symbol implements, so it may reach this symbol at runtime.
+    CallerViaTrait,
+    /// Implements the trait method above it, so a call may land here at runtime.
+    Implementation,
+    /// Holds this function as a value, so it may call it at runtime.
+    CallerByValue,
+    /// Held as a value by the symbol above it, which may call it at runtime.
+    CalleeByValue,
 }
 
 /// Response for trace queries.
@@ -91,6 +99,10 @@ pub struct TraceResponse {
     pub max_depth_reached: u32,
     /// Total symbols in trace.
     pub total_symbols: usize,
+    /// Semantic resolution is still running: files it has not reached come from syntax rules,
+    /// which leave out what they cannot be sure of.
+    #[serde(default)]
+    pub provisional: bool,
 }
 
 impl TraceResponse {
@@ -102,6 +114,7 @@ impl TraceResponse {
             callees: Vec::new(),
             max_depth_reached: 0,
             total_symbols: 1,
+            provisional: false,
         }
     }
 

@@ -27,6 +27,12 @@ fn extract_from_node(
             if let Some(sym) = extract_function(node, source, parent) {
                 symbols.push(sym);
             }
+            extract_nested_items(node, source, symbols);
+        }
+        "const_item" | "static_item" => {
+            if let Some(sym) = extract_constant(node, source, parent) {
+                symbols.push(sym);
+            }
         }
         "struct_item" => {
             if let Some(sym) = extract_struct(node, source, parent) {
@@ -46,7 +52,9 @@ fn extract_from_node(
         }
         "trait_item" => {
             if let Some(sym) = extract_trait(node, source, parent) {
+                let name = sym.name.clone();
                 symbols.push(sym);
+                extract_trait_methods(node, source, symbols, &name);
             }
         }
         "impl_item" => {
@@ -84,6 +92,46 @@ fn extract_from_node(
     }
 }
 
+/// Items declared inside a function's body: nested functions, and impls with their methods.
+fn extract_nested_items(function: &Node, source: &[u8], symbols: &mut Vec<ExtractedSymbol>) {
+    let Some(body) = function.child_by_field_name("body") else {
+        return;
+    };
+    let mut stack = vec![body];
+    while let Some(node) = stack.pop() {
+        for i in (0..node.named_child_count()).rev() {
+            let Some(child) = node.named_child(i) else {
+                continue;
+            };
+            match child.kind() {
+                "function_item" | "impl_item" | "trait_item" | "struct_item" | "enum_item" | "mod_item" => {
+                    extract_from_node(&child, source, symbols, None);
+                }
+                _ => stack.push(child),
+            }
+        }
+    }
+}
+
+/// A trait's methods, with or without a default body.
+fn extract_trait_methods(node: &Node, source: &[u8], symbols: &mut Vec<ExtractedSymbol>, trait_name: &str) {
+    let Some(body) = node.child_by_field_name("body") else {
+        return;
+    };
+    for i in 0..body.named_child_count() {
+        let Some(child) = body.named_child(i) else {
+            continue;
+        };
+        if matches!(child.kind(), "function_item" | "function_signature_item") {
+            if let Some(mut sym) = extract_function(&child, source, Some(trait_name)) {
+                sym.kind = SymbolKind::Method;
+                symbols.push(sym);
+            }
+            extract_nested_items(&child, source, symbols);
+        }
+    }
+}
+
 fn extract_function(node: &Node, source: &[u8], parent: Option<&str>) -> Option<ExtractedSymbol> {
     let name_node = node.child_by_field_name("name")?;
     let name = name_node.utf8_text(source).ok()?.to_string();
@@ -100,6 +148,26 @@ fn extract_function(node: &Node, source: &[u8], parent: Option<&str>) -> Option<
         span,
     )
     .with_visibility(visibility);
+
+    if let Some(p) = parent {
+        sym = sym
+            .with_parent(p.to_string())
+            .with_qualified_name(QualifiedName::new(vec![p.to_string(), name]));
+    }
+
+    Some(sym)
+}
+
+fn extract_constant(node: &Node, source: &[u8], parent: Option<&str>) -> Option<ExtractedSymbol> {
+    let name = node.child_by_field_name("name")?.utf8_text(source).ok()?.to_string();
+    let mut sym = ExtractedSymbol::new(
+        name.clone(),
+        SymbolKind::Constant,
+        Language::Rust,
+        node_to_range(node),
+        node_to_span(node),
+    )
+    .with_visibility(extract_visibility(node));
 
     if let Some(p) = parent {
         sym = sym
@@ -303,6 +371,7 @@ fn extract_impl_methods(
                         sym.kind = SymbolKind::Method;
                         symbols.push(sym);
                     }
+                    extract_nested_items(&child, source, symbols);
                 }
             }
         }
