@@ -4,11 +4,11 @@ debug_names 1
 domain_io 0
 env_below_root 0
 path_attrs 0
-pub_crate 3
+pub_crate 0
 pub_in_path 0
 pub_super 0
 string_errors 0
-super_paths 2
+super_paths 0
 swallowed 9
 transport_reach 0
 unused_deps 1

@@ -87,7 +87,7 @@ Allowed dependencies between crates are listed in `scripts/check-architecture.sh
 8. **Every `pub` item has a caller.** Dead code is deleted, never kept for later.
 9. **No hidden copies.** Search before adding a function.
 10. **The newest packages.** Every dependency is on its latest stable version, checked by
-    `scripts/check-deps.sh`. Toolchain: `stable`, with `rust-version` as in `Cargo.toml`.
+    `scripts/check-deps.py`. Toolchain: `stable`, with `rust-version` as in `Cargo.toml`.
 
 ## 5. Resolution
 
@@ -107,5 +107,5 @@ Edge kinds: `Calls` is exact. `UsesAsValue` (function values, constants holding 
 ## 6. Checks
 
 Work is not done until these pass: `scripts/check-architecture.sh` (and `--new HEAD`),
-`scripts/check-file-size.sh`, `scripts/check-deps.sh`, `cargo fmt --check`,
+`scripts/check-file-size.sh`, `scripts/check-deps.py`, `cargo fmt --check`,
 `cargo clippy --all-targets -- -D warnings`, `cargo test`. Budgets only go down, to 0.

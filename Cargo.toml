@@ -48,7 +48,7 @@ mimir-mcp = { path = "crates/mimir-mcp" }
 
 # MCP
 rmcp = { version = "3.8", features = ["server", "macros", "transport-io"] }
-schemars = "1.0"
+schemars = "1.2.3"
 
 # Error handling
 thiserror = "2.0.21"

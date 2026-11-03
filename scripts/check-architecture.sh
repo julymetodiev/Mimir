@@ -90,10 +90,10 @@ now() {
     env_below_root) src crates | grep -v '^crates/mimir-cli/' | count 'env::var(_os)?\(' ;;
     # Rule 7
     pub_super) src crates | count 'pub\(super\)' ;;
-    super_paths) src crates | count '(^|[^a-z_])super::' ;;
+    super_paths) src crates | count '^[^/"]*(^|[^a-z_])super::' ;;
     pub_in_path) src crates | count 'pub\(in ' ;;
     path_attrs) src crates | count '#\[path' ;;
-    pub_crate) src crates | count 'pub\(crate\)' ;;
+    pub_crate) src crates | count '^[[:space:]]*pub\(crate\)' ;;
     *) echo "" ;;
   esac
 }

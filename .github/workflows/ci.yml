@@ -24,6 +24,8 @@ jobs:
         run: scripts/check-architecture.sh
       - name: File size
         run: scripts/check-file-size.sh
+      - name: Newest dependencies
+        run: scripts/check-deps.py
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Clippy
