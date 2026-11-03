@@ -5,37 +5,21 @@ use mimir_types::Language;
 use notify::RecursiveMode;
 use notify_debouncer_mini::{DebouncedEventKind, new_debouncer};
 use std::{
-    collections::HashMap,
     path::{Path, PathBuf},
-    sync::Arc,
     time::Duration,
 };
-use tokio::sync::{RwLock, mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error, info, warn};
 
 use crate::channel::CommandSender;
 use crate::command::GraphCommand;
 use crate::scanner;
 
-/// Default patterns to ignore when watching.
-const DEFAULT_IGNORE_PATTERNS: &[&str] = &[
-    "target",
-    "node_modules",
-    ".git",
-    "dist",
-    "build",
-    "__pycache__",
-    ".venv",
-    "venv",
-];
-
 /// Configuration for the file watcher.
 #[derive(Debug, Clone)]
 pub struct WatcherConfig {
     /// Debounce duration for file events.
     pub debounce: Duration,
-    /// Directory names to ignore.
-    pub ignore_dirs: Vec<String>,
     /// Whether to watch recursively.
     pub recursive: bool,
 }
@@ -44,39 +28,33 @@ impl Default for WatcherConfig {
     fn default() -> Self {
         Self {
             debounce: Duration::from_millis(100),
-            ignore_dirs: DEFAULT_IGNORE_PATTERNS
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
             recursive: true,
         }
     }
 }
 
-impl WatcherConfig {
-    /// Check if a path should be ignored.
-    fn should_ignore(&self, path: &Path) -> bool {
-        for component in path.components() {
-            if let std::path::Component::Normal(name) = component {
-                let name_str = name.to_string_lossy();
-                for ignore in &self.ignore_dirs {
-                    if name_str == *ignore {
-                        return true;
-                    }
-                }
-            }
-        }
-        false
-    }
+/// What a report from the file system means for the graph. A scan decides what belongs there, so
+/// the watcher asks the same question.
+#[derive(Debug, Clone, PartialEq)]
+enum WatchEvent {
+    /// A file a scan would take was created or modified.
+    Changed(PathBuf),
+    /// A path is gone, or holds what a scan would leave out.
+    Removed(PathBuf),
+    /// A directory changed, which may mean files came with it that are not reported one by one.
+    Rescan,
 }
 
-/// Events from the file watcher.
-#[derive(Debug, Clone)]
-enum WatchEvent {
-    /// A file was created or modified.
-    Changed(PathBuf),
-    /// A file was removed.
-    Removed(PathBuf),
+/// The meaning of a report about `path`.
+fn event_for(root: &Path, path: PathBuf) -> Option<WatchEvent> {
+    if path.is_dir() {
+        return scanner::visits(root, &path).then_some(WatchEvent::Rescan);
+    }
+    Some(if scanner::takes(root, &path) {
+        WatchEvent::Changed(path)
+    } else {
+        WatchEvent::Removed(path)
+    })
 }
 
 /// Keeps the file watcher running. Dropping the last handle ends the watcher's event handler.
@@ -90,8 +68,6 @@ pub struct FileWatcher {
     root: PathBuf,
     config: WatcherConfig,
     commands: CommandSender,
-    /// Maps watched paths to their FileId.
-    file_ids: Arc<RwLock<HashMap<PathBuf, mimir_types::FileId>>>,
 }
 
 impl FileWatcher {
@@ -101,107 +77,87 @@ impl FileWatcher {
             root,
             config,
             commands,
-            file_ids: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
-    /// Start watching for file changes.
-    ///
-    /// Returns a handle that can be used to shut down the watcher.
+    /// Start watching for file changes, and return once the watching has begun: a change made
+    /// after this is reported, so a scan that starts after this misses nothing.
     pub async fn start(self) -> Result<WatcherHandle, GraphError> {
         let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
         let (event_tx, mut event_rx) = mpsc::channel::<WatchEvent>(256);
+        let (ready_tx, ready_rx) = oneshot::channel::<Result<(), String>>();
 
         let root = self.root.clone();
         let recursive = self.config.recursive;
         let debounce = self.config.debounce;
-        let config = self.config.clone();
 
-        // Get runtime handle BEFORE spawning the thread
-        let rt = tokio::runtime::Handle::current();
-
-        // Spawn the notify watcher in a blocking task
-        let event_tx_clone = event_tx.clone();
+        // The events go to a thread of their own, as notify calls back from outside the runtime.
         std::thread::spawn(move || {
-            // Use the captured runtime handle
-            let rt = rt;
-
             let (tx, rx) = std::sync::mpsc::channel();
-            let mut debouncer = match new_debouncer(debounce, tx) {
-                Ok(d) => d,
-                Err(e) => {
-                    error!("Failed to create debouncer: {}", e);
-                    return;
-                }
-            };
-
             let mode = if recursive {
                 RecursiveMode::Recursive
             } else {
                 RecursiveMode::NonRecursive
             };
-
-            if let Err(e) = debouncer.watcher().watch(&root, mode) {
-                error!("Failed to start watching {}: {}", root.display(), e);
-                return;
-            }
-
+            let started = new_debouncer(debounce, tx).and_then(|mut debouncer| {
+                debouncer.watcher().watch(&root, mode)?;
+                Ok(debouncer)
+            });
+            let _debouncer = match started {
+                Ok(debouncer) => {
+                    if ready_tx.send(Ok(())).is_err() {
+                        debug!("Nobody waits for the watcher any more");
+                    }
+                    debouncer
+                }
+                Err(e) => {
+                    if ready_tx.send(Err(e.to_string())).is_err() {
+                        debug!("Nobody waits for the watcher any more");
+                    }
+                    return;
+                }
+            };
             info!("Watching {} for changes", root.display());
 
-            loop {
-                match rx.recv_timeout(Duration::from_millis(100)) {
-                    Ok(Ok(events)) => {
-                        for event in events {
-                            // Filter ignored paths
-                            if config.should_ignore(&event.path) {
-                                continue;
+            while let Ok(reported) = rx.recv() {
+                match reported {
+                    Ok(events) => {
+                        for event in meanings(&root, events) {
+                            if event_tx.blocking_send(event).is_err() {
+                                debug!("The watcher's event handler has stopped");
+                                return;
                             }
-
-                            let watch_event = match event.kind {
-                                DebouncedEventKind::Any => {
-                                    if event.path.exists() {
-                                        if !scanner::visits(&root, &event.path) {
-                                            continue;
-                                        }
-                                        WatchEvent::Changed(event.path)
-                                    } else {
-                                        WatchEvent::Removed(event.path)
-                                    }
-                                }
-                                DebouncedEventKind::AnyContinuous => continue,
-                                _ => continue, // Handle future variants
-                            };
-
-                            let tx = event_tx_clone.clone();
-                            rt.spawn(async move {
-                                if tx.send(watch_event).await.is_err() {
-                                    debug!("The watcher's event handler has stopped");
-                                }
-                            });
                         }
                     }
-                    Ok(Err(e)) => {
-                        error!("Watch error: {:?}", e);
-                    }
-                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                        // Check if we should stop (poll periodically)
-                    }
-                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                        break;
-                    }
+                    Err(e) => error!("Watch error: {:?}", e),
                 }
             }
         });
 
+        match ready_rx.await {
+            Ok(Ok(())) => {}
+            Ok(Err(reason)) => {
+                return Err(GraphError::Watch {
+                    path: self.root,
+                    reason,
+                });
+            }
+            Err(_) => {
+                return Err(GraphError::Watch {
+                    path: self.root,
+                    reason: "the watcher's thread stopped".to_string(),
+                });
+            }
+        }
+
         // Spawn the event handler task. It ends when the actor has stopped.
         let commands = self.commands.clone();
-        let file_ids = self.file_ids.clone();
 
         tokio::spawn(async move {
             loop {
                 tokio::select! {
                     Some(event) = event_rx.recv() => {
-                        if let Err(e) = Self::handle_event(&commands, &file_ids, event).await {
+                        if let Err(e) = Self::handle_event(&commands, event).await {
                             warn!("The file watcher stops: {e}");
                             break;
                         }
@@ -220,35 +176,15 @@ impl FileWatcher {
     }
 
     /// Apply one watch event to the graph. It fails only when the actor has stopped.
-    async fn handle_event(
-        commands: &CommandSender,
-        file_ids: &Arc<RwLock<HashMap<PathBuf, mimir_types::FileId>>>,
-        event: WatchEvent,
-    ) -> Result<(), GraphError> {
+    async fn handle_event(commands: &CommandSender, event: WatchEvent) -> Result<(), GraphError> {
         match event {
             WatchEvent::Changed(path) => {
-                // Only process files (not directories)
-                if path.is_dir() {
+                let language = Language::from_path(&path);
+                if !language.is_known() {
+                    debug!("Ignoring file in no known language: {}", path.display());
                     return Ok(());
                 }
 
-                // Only process files with known languages
-                let language = match path.extension().and_then(|e| e.to_str()) {
-                    Some(ext) => {
-                        let lang = Language::from_extension(ext);
-                        if lang == Language::Unknown {
-                            debug!("Ignoring file with unknown extension: {}", path.display());
-                            return Ok(());
-                        }
-                        lang
-                    }
-                    None => {
-                        debug!("Ignoring file without extension: {}", path.display());
-                        return Ok(());
-                    }
-                };
-
-                // Read file content
                 let content = match std::fs::read_to_string(&path) {
                     Ok(c) => c,
                     Err(e) => {
@@ -257,25 +193,7 @@ impl FileWatcher {
                     }
                 };
 
-                // Check if we already have this file
-                let existing_id = {
-                    let ids = file_ids.read().await;
-                    ids.get(&path).copied()
-                };
-
-                if let Some(file_id) = existing_id {
-                    // Remove old version first
-                    let (reply_tx, _reply_rx) = oneshot::channel();
-                    commands
-                        .send(GraphCommand::RemoveFile {
-                            file_id,
-                            reply: reply_tx,
-                        })
-                        .await
-                        .map_err(|_| GraphError::EngineStopped)?;
-                }
-
-                // Add the file
+                // Adding a file the graph has replaces it.
                 let (reply_tx, reply_rx) = oneshot::channel();
                 commands
                     .send(GraphCommand::AddFile {
@@ -287,32 +205,29 @@ impl FileWatcher {
                     .await
                     .map_err(|_| GraphError::EngineStopped)?;
                 match reply_rx.await {
-                    Ok(Ok(file_id)) => {
-                        let mut ids = file_ids.write().await;
-                        ids.insert(path.clone(), file_id);
-                        info!("File changed: {}", path.display());
-                    }
+                    Ok(Ok(_)) => info!("File changed: {}", path.display()),
                     Ok(Err(e)) => warn!("Failed to add {}: {}", path.display(), e),
                     Err(_) => warn!("The graph actor stopped before adding {}", path.display()),
                 }
             }
 
             WatchEvent::Removed(path) => {
-                let file_id = {
-                    let mut ids = file_ids.write().await;
-                    ids.remove(&path)
-                };
+                commands
+                    .send(GraphCommand::RemovePath { path })
+                    .await
+                    .map_err(|_| GraphError::EngineStopped)?;
+            }
 
-                if let Some(file_id) = file_id {
-                    let (reply_tx, _reply_rx) = oneshot::channel();
-                    commands
-                        .send(GraphCommand::RemoveFile {
-                            file_id,
-                            reply: reply_tx,
-                        })
-                        .await
-                        .map_err(|_| GraphError::EngineStopped)?;
-                    info!("File removed: {}", path.display());
+            WatchEvent::Rescan => {
+                let (reply_tx, reply_rx) = oneshot::channel();
+                commands
+                    .send(GraphCommand::Sync { reply: reply_tx })
+                    .await
+                    .map_err(|_| GraphError::EngineStopped)?;
+                match reply_rx.await {
+                    Ok(Ok(_)) => debug!("Rescanned after a directory changed"),
+                    Ok(Err(e)) => warn!("A rescan failed: {e}"),
+                    Err(_) => warn!("The graph actor stopped during a rescan"),
                 }
             }
         }
@@ -320,9 +235,26 @@ impl FileWatcher {
     }
 }
 
+/// What a batch of reports means, with at most one rescan: it covers the whole project.
+fn meanings(root: &Path, events: Vec<notify_debouncer_mini::DebouncedEvent>) -> Vec<WatchEvent> {
+    let mut meant = Vec::new();
+    for event in events {
+        if event.kind != DebouncedEventKind::Any {
+            continue;
+        }
+        if let Some(event) = event_for(root, event.path)
+            && !(event == WatchEvent::Rescan && meant.contains(&WatchEvent::Rescan))
+        {
+            meant.push(event);
+        }
+    }
+    meant
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
     #[test]
     fn test_watcher_config_default() {
@@ -332,14 +264,32 @@ mod tests {
     }
 
     #[test]
-    fn test_should_ignore() {
-        let config = WatcherConfig::default();
+    fn test_a_report_means_what_a_scan_would_do() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        std::fs::create_dir(root.join(".git")).unwrap();
+        std::fs::write(root.join(".gitignore"), "skipped/\n").unwrap();
+        std::fs::create_dir_all(root.join("build")).unwrap();
+        std::fs::create_dir_all(root.join("skipped")).unwrap();
+        for file in ["build/kept.rs", "skipped/left.rs"] {
+            std::fs::write(root.join(file), "fn a() {}\n").unwrap();
+        }
 
-        assert!(config.should_ignore(Path::new("/project/target/debug/main")));
-        assert!(config.should_ignore(Path::new("/project/node_modules/package/index.js")));
-        assert!(config.should_ignore(Path::new("/project/.git/objects/abc")));
-
-        assert!(!config.should_ignore(Path::new("/project/src/main.rs")));
-        assert!(!config.should_ignore(Path::new("/project/lib/utils.rs")));
+        let meaning = |path: &str| event_for(root, root.join(path));
+        // A directory named as a build's is kept if git does not ignore it, as in a scan.
+        assert_eq!(
+            meaning("build/kept.rs"),
+            Some(WatchEvent::Changed(root.join("build/kept.rs")))
+        );
+        assert_eq!(
+            meaning("skipped/left.rs"),
+            Some(WatchEvent::Removed(root.join("skipped/left.rs")))
+        );
+        assert_eq!(
+            meaning("gone.rs"),
+            Some(WatchEvent::Removed(root.join("gone.rs")))
+        );
+        assert_eq!(meaning("build"), Some(WatchEvent::Rescan));
+        assert_eq!(meaning("skipped"), None);
     }
 }

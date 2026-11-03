@@ -169,10 +169,13 @@ impl GraphActor {
                 source,
             })?;
             let language = Language::from_path(&path);
-            if self.registry.get_by_language(language).is_some()
-                && scanner::visits(&self.root, &path)
-            {
+            if self.registry.get_by_language(language).is_none() {
+                continue;
+            }
+            if scanner::takes(&self.root, &path) {
                 self.handle_add_file(path, content, language)?;
+            } else {
+                self.handle_remove_path(&path);
             }
         }
         Ok(())

@@ -4,7 +4,7 @@ use crate::actor::{GraphActor, TrackedFile};
 use crate::error::GraphError;
 use mimir_resolve::ProjectFile;
 use mimir_types::{ContentHash, FileId, Language, Symbol};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::debug;
 
 impl GraphActor {
@@ -130,6 +130,21 @@ impl GraphActor {
         self.needs_link = true;
 
         Ok(was_removed)
+    }
+
+    /// Forget a file, or everything under a directory. A path the graph does not hold changes nothing.
+    pub fn handle_remove_path(&mut self, path: &Path) {
+        let gone: Vec<PathBuf> = self
+            .files
+            .keys()
+            .filter(|tracked| tracked.starts_with(path))
+            .cloned()
+            .collect();
+        for tracked in &gone {
+            self.remove_file_by_path(tracked);
+            debug!("File removed: {}", tracked.display());
+        }
+        self.needs_link |= !gone.is_empty();
     }
 
     /// Remove a file by path.

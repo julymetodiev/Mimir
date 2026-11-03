@@ -6,6 +6,9 @@ use mimir_types::{ContentHash, Language};
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
+/// A file over this is generated, not written, and stays out of the graph.
+const MAX_FILE_BYTES: u64 = 500 * 1024;
+
 /// Information about a scanned file.
 #[derive(Debug, Clone)]
 pub struct ScannedFile {
@@ -50,10 +53,15 @@ pub fn visits(root: &Path, path: &Path) -> bool {
         .any(|entry| entry.path() == path)
 }
 
+/// Whether a scan would take this file into the graph, whichever way it came to be noticed.
+pub fn takes(root: &Path, path: &Path) -> bool {
+    std::fs::metadata(path).is_ok_and(|file| file.is_file() && file.len() <= MAX_FILE_BYTES)
+        && visits(root, path)
+}
+
 /// Directory scanner with gitignore support.
 pub struct Scanner {
     root: PathBuf,
-    max_file_size: u64,
 }
 
 impl Scanner {
@@ -61,14 +69,12 @@ impl Scanner {
     pub fn new(root: impl AsRef<Path>) -> Self {
         Self {
             root: root.as_ref().to_path_buf(),
-            max_file_size: 500 * 1024, // 500KB default
         }
     }
 
     /// Scan the directory and return all matching files.
     pub async fn scan(&self) -> std::io::Result<Vec<ScannedFile>> {
         let root = self.root.clone();
-        let max_size = self.max_file_size;
 
         let walker = walker(&root).build();
 
@@ -94,7 +100,7 @@ impl Scanner {
             };
 
             // Skip files that are too large
-            if metadata.len() > max_size {
+            if metadata.len() > MAX_FILE_BYTES {
                 continue;
             }
 

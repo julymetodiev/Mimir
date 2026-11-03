@@ -27,6 +27,9 @@ pub enum GraphCommand {
         reply: oneshot::Sender<Result<bool, GraphError>>,
     },
 
+    /// Forget a file, or everything under a directory, that is gone from the disk.
+    RemovePath { path: PathBuf },
+
     /// Find symbols by name.
     FindSymbol {
         name: String,

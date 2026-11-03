@@ -56,6 +56,9 @@ pub enum GraphError {
     #[error("Text search failed: {0}")]
     Grep(#[source] tokio::task::JoinError),
 
+    #[error("Cannot watch {path}: {reason}")]
+    Watch { path: PathBuf, reason: String },
+
     #[error("Scan failed: {0}")]
     Scan(#[source] std::io::Error),
 
