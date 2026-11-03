@@ -19,6 +19,12 @@ to date as the agent works.
 
 Rust only for now, on macOS and Linux.
 
+<p align="center">
+  <a href="https://mimir.369.is/"><img src="docs/images/graph.jpg" alt="Mimir's own code as a graph: symbols grouped by crate and file, joined by calls and uses"></a>
+  <br>
+  <em>Mimir's own code. <a href="https://mimir.369.is/">Open it in your browser</a>: zoom, search, choose a symbol.</em>
+</p>
+
 ## Install
 
 With [Homebrew](https://brew.sh), on macOS and Linux:
@@ -141,6 +147,10 @@ your project:
 ```bash
 mimir view
 ```
+
+<p align="center">
+  <img src="docs/images/symbol.jpg" alt="A chosen symbol, with what calls it, what it calls and what it uses, and its source">
+</p>
 
 A browser opens on the whole graph, which changes as the code and the agents do. Symbols are placed by
 crate and file. Zoom in, search, or choose a symbol to see what it calls, who calls it and its source.
