@@ -46,8 +46,15 @@ async fn main() -> anyhow::Result<()> {
             commands::DaemonCommands::Status => commands::daemon::status().await?,
         },
         commands::Commands::Mcp => mimir_mcp::serve(std::env::current_dir()?).await?,
-        commands::Commands::View { no_open } => {
-            mimir_view::serve(&std::env::current_dir()?, !no_open).await?
+        commands::Commands::View { no_open, export } => {
+            let here = std::env::current_dir()?;
+            match export {
+                Some(directory) => {
+                    let symbols = mimir_view::export(&here, &directory).await?;
+                    println!("Wrote {symbols} symbols to {}", directory.display());
+                }
+                None => mimir_view::serve(&here, !no_open).await?,
+            }
         }
         commands::Commands::Init => commands::init::execute()?,
         commands::Commands::Status => commands::status::execute().await?,

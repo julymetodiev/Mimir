@@ -10,6 +10,7 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use mimir_client::{Client, ClientError};
+use mimir_view_wire::encode_sources;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -144,6 +145,47 @@ async fn listen(root: PathBuf) -> Result<(TcpListener, Router, String), ViewErro
     Ok((listener, router(access), address))
 }
 
+/// Say in the page that it is one with no server. The page reads this when it starts.
+fn static_index() -> String {
+    INDEX.replacen(
+        "<head>",
+        "<head>\n<meta name=\"mimir-static\" content=\"true\">",
+        1,
+    )
+}
+
+/// Write the view of the project at or above `from` as files for a static host. Waits until the
+/// graph is complete, since nothing will update it. Says how many symbols it holds.
+pub async fn export(from: &Path, directory: &Path) -> Result<usize, ViewError> {
+    let mut client = Client::open(from).await?;
+    client.sync(false).await?;
+    let snapshot = client.snapshot().await?;
+    let mut sources = Vec::with_capacity(snapshot.symbols.len());
+    for symbol in &snapshot.symbols {
+        let source = client.source(symbol.id, None).await?;
+        sources.push((
+            symbol.id.as_u64(),
+            source.first_line,
+            source.lines.join("\n"),
+        ));
+    }
+    let count = snapshot.symbols.len();
+    let graph = connection::to_wire(snapshot).encode();
+    let sources = encode_sources(&sources);
+    let index = static_index();
+    mimir_client::write_files(
+        directory,
+        &[
+            ("index.html", index.as_bytes()),
+            ("mimir_view_page.js", SCRIPT.as_bytes()),
+            ("mimir_view_page_bg.wasm", PROGRAM),
+            ("graph.bin", &graph),
+            ("sources.bin", &sources),
+        ],
+    )?;
+    Ok(count)
+}
+
 /// Serve a view of the project at or above `from`, until stopped.
 pub async fn serve(from: &Path, open: bool) -> Result<(), ViewError> {
     let root = Client::open(from).await?.root().to_path_buf();
@@ -198,6 +240,12 @@ mod tests {
         let other = headers("127.0.0.1:9", Some("https://evil.example"));
         assert!(!access.allows_socket("secret", &other));
         assert!(!access.allows_socket("secret", &headers("127.0.0.1:9", None)));
+    }
+
+    #[test]
+    fn test_a_static_page_says_so() {
+        assert!(!INDEX.contains("mimir-static"));
+        assert!(static_index().contains("<meta name=\"mimir-static\""));
     }
 
     #[test]

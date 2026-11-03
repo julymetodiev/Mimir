@@ -1,11 +1,12 @@
 //! The page's state and its events: the socket, the mouse, the frame loop.
 
-use crate::events::{connect, listen};
+use crate::events::{connect, listen, load_static};
 use crate::gpu::{Camera, Gpu};
 use crate::graph::{Model, Places};
 use crate::ui::{LABELS, Ui};
 use mimir_view_wire::{ClientMessage, ServerMessage, Snapshot};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{JsCast, closure::Closure};
@@ -29,6 +30,8 @@ pub struct App {
     pub ui: Ui,
     pub canvas: HtmlCanvasElement,
     pub socket: Option<WebSocket>,
+    /// A page with no server has every symbol's source already.
+    pub sources: Option<HashMap<u64, (u32, String)>>,
     pub model: Model,
     places: Places,
     flags: Vec<u32>,
@@ -128,11 +131,16 @@ impl App {
                 let related = self.model.related(symbol);
                 self.ui.show_symbol(&self.model, symbol, &related)?;
                 self.related = related.all().collect();
-                if let Some(id) = self.model.snapshot.ids.get(symbol as usize)
-                    && let Some(socket) = &self.socket
-                    && socket.ready_state() == WebSocket::OPEN
-                {
-                    socket.send_with_u8_array(&ClientMessage::Source { id: *id }.encode())?;
+                if let Some(id) = self.model.snapshot.ids.get(symbol as usize) {
+                    if let Some((first_line, text)) =
+                        self.sources.as_ref().and_then(|sources| sources.get(id))
+                    {
+                        self.ui.show_source(*first_line as usize, text)?;
+                    } else if let Some(socket) = &self.socket
+                        && socket.ready_state() == WebSocket::OPEN
+                    {
+                        socket.send_with_u8_array(&ClientMessage::Source { id: *id }.encode())?;
+                    }
                 }
                 if fly && let Some(place) = self.places.at.get(symbol as usize) {
                     self.wanted = Camera {
@@ -367,6 +375,7 @@ pub async fn start() -> Result<(), JsValue> {
         ui: Ui::new(document.clone())?,
         canvas: canvas.clone(),
         socket: None,
+        sources: None,
         model,
         places,
         flags: Vec::new(),
@@ -383,6 +392,13 @@ pub async fn start() -> Result<(), JsValue> {
         fitted: false,
     }));
     listen(&app, &canvas, &document)?;
-    connect(&app)?;
+    let is_static = document
+        .query_selector("meta[name=mimir-static]")?
+        .is_some();
+    if is_static {
+        load_static(&app).await?;
+    } else {
+        connect(&app)?;
+    }
     run_frames(app)
 }

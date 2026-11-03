@@ -67,6 +67,15 @@ impl Ui {
         )));
     }
 
+    /// Say that this page shows the graph as it was, and how to see one that lives.
+    pub fn show_static(&self) {
+        let counts = self.counts.text_content().unwrap_or_default();
+        let counts = counts.trim_end_matches(", live");
+        self.counts.set_text_content(Some(&format!(
+            "{counts}. A picture of Mimir's own code: `mimir view` shows yours, live."
+        )));
+    }
+
     pub fn show_lost(&self) {
         self.counts
             .set_text_content(Some("Lost the connection; trying again"));

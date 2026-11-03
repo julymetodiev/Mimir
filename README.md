@@ -135,6 +135,9 @@ instructions, such as `AGENTS.md`.
 
 ## See it
 
+[Look at Mimir's own code this way](https://julymetodiev.github.io/Mimir/), in a browser with WebGPU. On
+your project:
+
 ```bash
 mimir view
 ```
@@ -144,6 +147,9 @@ crate and file. Zoom in, search, or choose a symbol to see what it calls, who ca
 What a query or an edit touches lights up as it happens, blue for a read and red for an edit, so you can
 watch an agent work. It only reads, loads nothing from the network, and listens on `127.0.0.1` with a
 private token in the address. It needs a browser with WebGPU; it has been tried in Chrome.
+
+`mimir view --export DIR` writes the same page as files for any static host, with the graph as it is and
+the source of every symbol, so use it only on code that may be public.
 
 ## What an answer means
 

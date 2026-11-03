@@ -45,6 +45,10 @@ pub enum Commands {
         /// Only say the address, without opening a browser.
         #[arg(long)]
         no_open: bool,
+
+        /// Write the view as files for a static host, with the project's source, and stop.
+        #[arg(long, value_name = "DIR")]
+        export: Option<std::path::PathBuf>,
     },
 
     /// Initialize Mimir in the current directory.

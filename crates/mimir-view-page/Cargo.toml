@@ -24,6 +24,6 @@ wasm-bindgen-futures = "0.4.80"
 web-sys = { version = "0.3.107", features = [
     "BinaryType", "CssStyleDeclaration", "Document", "DomRect", "Element", "Event", "EventTarget",
     "HtmlCanvasElement", "HtmlElement", "HtmlInputElement", "KeyboardEvent", "Location", "MessageEvent",
-    "MouseEvent", "PointerEvent", "WebSocket", "WheelEvent", "Window", "console",
+    "MouseEvent", "PointerEvent", "Response", "WebSocket", "WheelEvent", "Window", "console",
 ] }
 wgpu = { version = "30.0.1", default-features = false, features = ["webgpu", "wgsl"] }

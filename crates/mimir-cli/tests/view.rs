@@ -4,7 +4,7 @@ mod common;
 
 use assert_cmd::cargo::cargo_bin;
 use futures_util::{SinkExt, StreamExt};
-use mimir_view_wire::{ClientMessage, ServerMessage, Snapshot};
+use mimir_view_wire::{ClientMessage, ServerMessage, Snapshot, decode_sources};
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
@@ -117,6 +117,33 @@ async fn test_the_socket_passes_on_the_graph_and_its_changes() {
             break;
         }
     }
+    common::stop(dir.path());
+}
+
+/// An export holds all a static host needs, and a page that knows it has no server.
+#[test]
+fn test_an_export_writes_the_page_the_graph_and_the_source() {
+    let dir = common::project();
+    let out = dir.path().join("site");
+    common::mimir(dir.path())
+        .args(["view", "--export"])
+        .arg(&out)
+        .assert()
+        .success();
+
+    let index = std::fs::read_to_string(out.join("index.html")).unwrap();
+    assert!(index.contains("mimir-static"));
+    assert!(out.join("mimir_view_page.js").is_file());
+    assert!(out.join("mimir_view_page_bg.wasm").is_file());
+    let ServerMessage::Snapshot(graph) =
+        ServerMessage::decode(&std::fs::read(out.join("graph.bin")).unwrap()).unwrap()
+    else {
+        panic!("graph.bin is not a snapshot");
+    };
+    let helper = *named(&graph, "helper").unwrap();
+    let sources = decode_sources(&std::fs::read(out.join("sources.bin")).unwrap()).unwrap();
+    let (_, _, text) = sources.iter().find(|(id, _, _)| *id == helper).unwrap();
+    assert!(text.contains("fn helper"), "{text}");
     common::stop(dir.path());
 }
 

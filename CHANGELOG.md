@@ -6,6 +6,10 @@ All notable changes to Mimir are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`mimir view --export DIR`**: the view as files for a static host, with the graph and its source.
+
 ## [0.2.0] - 2026-11-03
 
 ### Added

@@ -46,7 +46,7 @@ fn edge_of(kind: SnapshotEdgeKind) -> u32 {
     }
 }
 
-fn to_wire(snapshot: GraphSnapshot) -> ServerMessage {
+pub fn to_wire(snapshot: GraphSnapshot) -> ServerMessage {
     let mut wire = Snapshot {
         generation: snapshot.generation,
         provisional: snapshot.provisional,

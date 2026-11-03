@@ -156,6 +156,9 @@ reads and never writes: rule 4 stands, and the page has no way to ask for an edi
 - **The built page is in the repository**, in `crates/mimir-view/page`, so any way of installing gets
   it without a WebAssembly toolchain. `scripts/build-page.sh` builds it and records a hash of its
   sources; `scripts/check-page.sh` fails if the sources moved on. A release builds it anew from source.
+- **`mimir view --export DIR` writes the page as files**, with the graph and the source of each
+  symbol, for any static host. Such a page has no server: it shows the graph as it was, and nothing
+  lights up. It holds the project's source, so it is for what may be public.
 - **The page is built into `mimir`.** It loads nothing from the network. Layout runs in a compute
   shader; where the browser has no WebGPU the page says so. Each symbol
   starts at a place given by its crate and file and is held there by a weak spring, so the picture

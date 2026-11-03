@@ -389,6 +389,15 @@ impl EventStream {
     }
 }
 
+/// Write files into a directory, which is made if missing.
+pub fn write_files(directory: &Path, files: &[(&str, &[u8])]) -> Result<(), ClientError> {
+    fs::create_dir_all(directory).map_err(io_error("make the directory"))?;
+    for (name, content) in files {
+        fs::write(directory.join(name), content).map_err(io_error("write a file"))?;
+    }
+    Ok(())
+}
+
 /// Open an address in the user's browser.
 pub fn open_in_browser(url: &str) -> Result<(), ClientError> {
     let opener = if cfg!(target_os = "macos") {

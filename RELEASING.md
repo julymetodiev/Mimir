@@ -25,6 +25,8 @@ page of `mimir view` anew from its sources, builds
 `mimir` for macOS and Linux on arm64 and x86-64, runs each binary its runner can run, and publishes a
 GitHub release with archives, `SHA256SUMS` and the changelog's section as notes.
 
+The tag also starts `.github/workflows/pages.yml`, which publishes the view of Mimir's own code.
+
 ## After a release
 
 Once the release is published, put it in the Homebrew tap,

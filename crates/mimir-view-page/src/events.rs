@@ -1,8 +1,10 @@
 //! What the page listens to: the socket, the mouse, the keyboard and the search.
 
 use crate::app::{App, Shared, log, window};
+use mimir_view_wire::decode_sources;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{JsCast, closure::Closure};
+use wasm_bindgen_futures::JsFuture;
 use web_sys::{BinaryType, HtmlCanvasElement, HtmlInputElement, WebSocket};
 
 const MOST_RESULTS: usize = 12;
@@ -26,6 +28,33 @@ fn on<E: JsCast + 'static>(
     });
     target.add_event_listener_with_callback(event, closure.as_ref().unchecked_ref())?;
     closure.forget();
+    Ok(())
+}
+
+async fn fetched(path: &str) -> Result<Vec<u8>, JsValue> {
+    let response = JsFuture::from(window()?.fetch_with_str(path)).await?;
+    let response: web_sys::Response = response.dyn_into()?;
+    if !response.ok() {
+        return Err(JsValue::from_str(&format!("cannot load {path}")));
+    }
+    let bytes = JsFuture::from(response.array_buffer()?).await?;
+    Ok(js_sys::Uint8Array::new(&bytes).to_vec())
+}
+
+/// Take the graph and the source from files, for a page with no server.
+pub async fn load_static(app: &Shared) -> Result<(), JsValue> {
+    let graph = fetched("graph.bin").await?;
+    let sources = fetched("sources.bin").await?;
+    let sources = decode_sources(&sources).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut app = app.borrow_mut();
+    app.sources = Some(
+        sources
+            .into_iter()
+            .map(|(id, first_line, text)| (id, (first_line, text)))
+            .collect(),
+    );
+    app.receive(&graph)?;
+    app.ui.show_static();
     Ok(())
 }
 

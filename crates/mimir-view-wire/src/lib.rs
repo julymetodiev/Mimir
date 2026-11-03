@@ -240,6 +240,29 @@ impl ServerMessage {
     }
 }
 
+/// The source of every symbol, for a page that has no server to ask.
+pub fn encode_sources(sources: &[(u64, u32, String)]) -> Vec<u8> {
+    let mut out = Writer(Vec::new());
+    out.u32(sources.len() as u32);
+    for (id, first_line, text) in sources {
+        out.u64(*id);
+        out.u32(*first_line);
+        out.text(text);
+    }
+    out.0
+}
+
+/// What [`encode_sources`] wrote.
+pub fn decode_sources(bytes: &[u8]) -> Result<Vec<(u64, u32, String)>, DecodeError> {
+    let mut input = Reader(bytes);
+    let count = input.count(16)?;
+    let mut sources = Vec::with_capacity(count);
+    for _ in 0..count {
+        sources.push((input.u64()?, input.u32()?, input.text()?));
+    }
+    Ok(sources)
+}
+
 impl ClientMessage {
     pub fn encode(&self) -> Vec<u8> {
         let Self::Source { id } = self;
@@ -289,6 +312,20 @@ mod tests {
         }
         let asked = ClientMessage::Source { id: u64::MAX };
         assert_eq!(ClientMessage::decode(&asked.encode()), Ok(asked));
+    }
+
+    #[test]
+    fn test_sources_come_back_as_they_went_and_a_cut_one_is_refused() {
+        let sources = vec![
+            (1, 10, "fn a() {}".to_string()),
+            (u64::MAX, 2, String::new()),
+        ];
+        let bytes = encode_sources(&sources);
+        assert_eq!(decode_sources(&bytes), Ok(sources));
+        assert_eq!(
+            decode_sources(&bytes[..bytes.len() - 1]),
+            Err(DecodeError::TooShort)
+        );
     }
 
     #[test]
