@@ -21,21 +21,32 @@ fn is_tooling(name: &str) -> bool {
 
 /// Every entry of a project git does not ignore, in path order, only those matching `glob` if given.
 pub fn walk(root: &Path, glob: Option<&str>) -> Result<Walk, GraphError> {
+    // Not given to the walker as an override: that is stronger than `.gitignore`, so `**` would
+    // bring in `target`. Here a glob only narrows what the walk finds.
+    let only = glob
+        .map(|glob| {
+            let invalid = |source| GraphError::InvalidGlob {
+                glob: glob.to_string(),
+                source,
+            };
+            let mut only = OverrideBuilder::new(root);
+            only.add(glob).map_err(invalid)?;
+            only.build().map_err(invalid)
+        })
+        .transpose()?;
     let mut walker = WalkBuilder::new(root);
     walker
         .hidden(false)
         .require_git(false)
         .sort_by_file_path(Path::cmp)
-        .filter_entry(|entry| !entry.file_name().to_str().is_some_and(is_tooling));
-    if let Some(glob) = glob {
-        let invalid = |source| GraphError::InvalidGlob {
-            glob: glob.to_string(),
-            source,
-        };
-        let mut only = OverrideBuilder::new(root);
-        only.add(glob).map_err(invalid)?;
-        walker.overrides(only.build().map_err(invalid)?);
-    }
+        .filter_entry(move |entry| {
+            let is_dir = entry.file_type().is_some_and(|kind| kind.is_dir());
+            !entry.file_name().to_str().is_some_and(is_tooling)
+                && (is_dir
+                    || only
+                        .as_ref()
+                        .is_none_or(|only| !only.matched(entry.path(), false).is_ignore()))
+        });
     Ok(walker.build())
 }
 
@@ -187,6 +198,23 @@ mod tests {
         let found = list(&root, None, 1).unwrap();
         assert_eq!((found.files.len(), found.total), (1, 4));
         assert!(list(&root, Some("{"), 1).is_err());
+    }
+
+    #[test]
+    fn test_a_glob_does_not_bring_back_what_git_ignores() {
+        let (_dir, root) = project();
+        fs::write(root.join(".gitignore"), "skipped.txt\nbuilt/\n").unwrap();
+        fs::create_dir(root.join("built")).unwrap();
+        fs::write(root.join("built/out.rs"), "x\n").unwrap();
+        for glob in ["**", "**/*", "*", "built/**", "skipped.txt"] {
+            let found = list(&root, Some(glob), 100).unwrap();
+            assert!(
+                !names(&found)
+                    .iter()
+                    .any(|name| name.starts_with("built") || *name == "skipped.txt"),
+                "{glob}: {found:?}"
+            );
+        }
     }
 
     #[test]
