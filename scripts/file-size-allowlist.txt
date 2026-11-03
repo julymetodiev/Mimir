@@ -1,8 +1,6 @@
 # Rust files still over 500 lines (architecture rule 6). scripts/check-file-size.sh fails on any
 # other file over the limit and on an entry back within it. This list only shrinks, to empty.
-crates/mimir-agent/src/agent.rs
 crates/mimir-edit/src/editor.rs
 crates/mimir-graph-actor/src/actor.rs
 crates/mimir-resolve/src/live.rs
 crates/mimir-resolve/src/scip.rs
-crates/mimir-tools/src/tools/apply_patch.rs

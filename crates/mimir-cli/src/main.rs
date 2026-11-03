@@ -118,47 +118,6 @@ async fn main() -> anyhow::Result<()> {
             numbers,
             json,
         } => commands::read::execute(&symbol, before, after, numbers, json).await?,
-        commands::Commands::Agent {
-            goal,
-            provider,
-            model,
-            max_iterations,
-            verbose,
-            checkpoint,
-        } => {
-            commands::agent::run_agent(
-                &goal,
-                &provider,
-                model.as_deref(),
-                max_iterations,
-                verbose,
-                checkpoint,
-            )
-            .await?
-        }
-        commands::Commands::Tasks { status } => {
-            let task_dir = app::find_project_root()
-                .unwrap_or_else(|| std::env::current_dir().unwrap())
-                .join(".mimir")
-                .join("tasks");
-            let status = status.and_then(|s| match s.as_str() {
-                "pending" => Some(mimir_tasks::TaskStatus::Pending),
-                "running" => Some(mimir_tasks::TaskStatus::Running),
-                "paused" => Some(mimir_tasks::TaskStatus::Paused),
-                "completed" | "done" => Some(mimir_tasks::TaskStatus::Completed),
-                "failed" => Some(mimir_tasks::TaskStatus::Failed),
-                "cancelled" => Some(mimir_tasks::TaskStatus::Cancelled),
-                _ => None,
-            });
-            commands::agent::list_tasks(&task_dir, status).await?
-        }
-        commands::Commands::Resume { task_id, verbose } => {
-            let task_dir = app::find_project_root()
-                .unwrap_or_else(|| std::env::current_dir().unwrap())
-                .join(".mimir")
-                .join("tasks");
-            commands::agent::resume_task(&task_id, &task_dir, verbose).await?
-        }
     }
 
     Ok(())

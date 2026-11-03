@@ -19,11 +19,6 @@ members = [
     "crates/mimir-edit",
     "crates/mimir-protocol",
     "crates/mimir-graph-actor",
-    # M4: Agent crates
-    "crates/mimir-tools",
-    "crates/mimir-llm",
-    "crates/mimir-tasks",
-    "crates/mimir-agent",
     # CLI
     "crates/mimir-cli",
 ]
@@ -63,11 +58,6 @@ mimir-edit = { path = "crates/mimir-edit" }
 mimir-protocol = { path = "crates/mimir-protocol" }
 mimir-graph-actor = { path = "crates/mimir-graph-actor" }
 
-# Internal crates - Layer 4 (Agent)
-mimir-tools = { path = "crates/mimir-tools" }
-mimir-llm = { path = "crates/mimir-llm" }
-mimir-tasks = { path = "crates/mimir-tasks" }
-mimir-agent = { path = "crates/mimir-agent" }
 
 # Error handling
 thiserror = "2.0"
@@ -88,7 +78,6 @@ dashmap = "6.1"
 tokio = { version = "1.48", features = ["full"] }
 async-trait = "0.1"
 arc-swap = "1.7"
-futures = "0.3"
 
 # Graph
 petgraph = "0.6"
