@@ -14,6 +14,7 @@ members = [
     "crates/mimir-engine",
     "crates/mimir-daemon",
     "crates/mimir-client",
+    "crates/mimir-mcp",
     # CLI
     "crates/mimir-cli",
 ]
@@ -43,6 +44,11 @@ mimir-protocol = { path = "crates/mimir-protocol" }
 mimir-engine = { path = "crates/mimir-engine" }
 mimir-daemon = { path = "crates/mimir-daemon" }
 mimir-client = { path = "crates/mimir-client" }
+mimir-mcp = { path = "crates/mimir-mcp" }
+
+# MCP
+rmcp = { version = "3.8", features = ["server", "macros", "transport-io"] }
+schemars = "1.0"
 
 # Error handling
 thiserror = "2.0"

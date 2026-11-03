@@ -44,7 +44,7 @@ allowed() {
     mimir-engine) echo "mimir-types mimir-graph mimir-parse-core mimir-parse-rust mimir-resolve mimir-edit mimir-protocol" ;;
     mimir-daemon) echo "mimir-protocol mimir-engine mimir-resolve" ;;
     mimir-client) echo "mimir-types mimir-protocol" ;;
-    mimir-mcp) echo "mimir-types mimir-protocol mimir-client" ;;
+    mimir-mcp) echo "mimir-protocol mimir-client" ;;
     mimir-cli) echo "mimir-types mimir-protocol mimir-client mimir-daemon mimir-mcp mimir-resolve mimir-resolve-ra" ;;
     *) echo "NOT-IN-SPEC" ;;
   esac

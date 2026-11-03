@@ -35,6 +35,9 @@ pub enum Commands {
         command: DaemonCommands,
     },
 
+    /// Serve MCP on stdin and stdout, for coding agents.
+    Mcp,
+
     /// Initialize Mimir in the current directory.
     Init,
 

@@ -45,6 +45,7 @@ async fn main() -> anyhow::Result<()> {
             commands::DaemonCommands::Stop => commands::daemon::stop().await?,
             commands::DaemonCommands::Status => commands::daemon::status().await?,
         },
+        commands::Commands::Mcp => mimir_mcp::serve(std::env::current_dir()?).await?,
         commands::Commands::Init => commands::init::execute()?,
         commands::Commands::Status => commands::status::execute().await?,
         commands::Commands::Sync { full } => commands::sync::execute(full).await?,

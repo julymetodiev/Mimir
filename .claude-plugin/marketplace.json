@@ -1,0 +1,16 @@
+{
+  "name": "mimir",
+  "description": "Mimir: the call graph of a project for coding agents",
+  "owner": {
+    "name": "Julius ML",
+    "url": "https://github.com/julymetodiev"
+  },
+  "plugins": [
+    {
+      "name": "mimir",
+      "source": "./integrations/claude-code",
+      "description": "Mimir MCP server and the mimir-code skill",
+      "category": "development"
+    }
+  ]
+}
