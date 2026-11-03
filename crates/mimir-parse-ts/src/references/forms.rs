@@ -1,12 +1,12 @@
 //! The forms that bring names in or name them in their own way: imports, `require`, JSX, heritage.
 
 use mimir_parse_core::extracted::CallForm;
+use mimir_parse_core::nodes::{MAX_DEPTH, text};
 use mimir_types::ReferenceKind;
 use tree_sitter::Node;
 
 use crate::references::Walk;
 use crate::references::names::{module_path, pattern_names, required_path};
-use crate::{MAX_DEPTH, text};
 
 impl<'a> Walk<'a> {
     pub fn import(&mut self, node: &Node<'a>) {

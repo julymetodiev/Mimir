@@ -24,7 +24,7 @@ The daemon starts by itself with the first command; after rebuilding `mimir`, ru
 | `daemon_latency.py` | How long does `trace` take through the daemon, from no daemon on and after edits? |
 | `graph_diff.py` | Which edges differ between two `graph.json`? |
 | `roots.py` | What does each index of a project add, and which files does none cover? |
-| `ts_compare.py` | How does a running `tsrs` compare with a `scip-typescript` index, site by site? |
+| `scip_compare.py` | How does a running `tsrs` compare with a `scip-typescript` index, site by site? |
 
 ## What the numbers mean
 

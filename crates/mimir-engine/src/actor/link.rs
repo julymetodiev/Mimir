@@ -138,6 +138,7 @@ impl GraphActor {
             syntax_files: report.syntax_files,
         });
         result.saved_to = Some(graph_file);
+        result.notes = self.semantics.notes(&self.root);
         result.duration_ms += started.elapsed().as_millis() as u64;
         Ok(result)
     }
@@ -267,6 +268,7 @@ impl GraphActor {
             duration_ms,
             link: None,
             saved_to: None,
+            notes: Vec::new(),
         };
 
         info!(

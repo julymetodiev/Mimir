@@ -1,7 +1,8 @@
-//! Resolution of TypeScript and JavaScript from syntax alone (`docs/TYPESCRIPT.md`, section 4).
+//! Resolution of the languages a server answers for site by site: TypeScript, JavaScript and Python
+//! (section 4 of `docs/TYPESCRIPT.md` and `docs/PYTHON.md`), and how those answers become edges.
 //!
-//! A call links to a function of the same file, or to one a relative import names. Anything else
-//! needs types: a method above all, and a name from a package.
+//! From syntax alone, a call links to a function of the same file, or to one an import in the project
+//! names. Anything else needs types: a method above all, and a name from a package.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
@@ -10,7 +11,7 @@ use std::sync::Arc;
 use mimir_graph::EdgeKind;
 use mimir_parse_core::ExtractedReference;
 use mimir_parse_core::extracted::CallForm;
-use mimir_types::{Confidence, FileId, ReferenceKind, Symbol, SymbolKind, Visibility};
+use mimir_types::{Confidence, FileId, Language, ReferenceKind, Symbol, SymbolKind, Visibility};
 
 use crate::ProjectFile;
 use crate::edges::{ConstantUse, EdgeSet};
@@ -172,12 +173,14 @@ impl Answers<'_> {
                 .filter(|s| is_callable(s))
             {
                 let wanted = match reference.kind {
-                    ReferenceKind::FieldUse => {
-                        accessor(callable, defined_in) != Some(Accessor::Set)
-                    }
-                    ReferenceKind::FieldWrite => {
-                        accessor(callable, defined_in) != Some(Accessor::Get)
-                    }
+                    ReferenceKind::FieldUse => !matches!(
+                        accessor(callable, defined_in),
+                        Some(Accessor::Set | Accessor::Delete)
+                    ),
+                    ReferenceKind::FieldWrite => !matches!(
+                        accessor(callable, defined_in),
+                        Some(Accessor::Get | Accessor::Delete)
+                    ),
                     _ => true,
                 };
                 if wanted && !callables.iter().any(|c: &Arc<Symbol>| c.id == callable.id) {
@@ -278,13 +281,30 @@ impl Answers<'_> {
 enum Accessor {
     Get,
     Set,
+    Delete,
 }
 
-/// Whether a method's source says `get` or `set`, after any modifiers.
+/// Whether a method's source says it is a getter or a setter: `get` or `set` after any modifiers, or
+/// in Python a decorator.
 fn accessor(symbol: &Symbol, file: &ProjectFile) -> Option<Accessor> {
     let text = file
         .source
         .get(symbol.span.start as usize..symbol.span.end as usize)?;
+    if Language::from_path(&file.path) == Language::Python {
+        return text
+            .lines()
+            .map(str::trim)
+            .take_while(|line| line.starts_with('@'))
+            .find_map(|decorator| {
+                let name = decorator.split('(').next().unwrap_or(decorator);
+                match name.rsplit('.').next().unwrap_or(name) {
+                    "setter" => Some(Accessor::Set),
+                    "deleter" => Some(Accessor::Delete),
+                    "getter" | "@property" | "property" | "cached_property" => Some(Accessor::Get),
+                    _ => None,
+                }
+            });
+    }
     for word in text.split_whitespace().take(5) {
         match word {
             "get" => return Some(Accessor::Get),
@@ -301,7 +321,8 @@ fn only(mut found: Vec<Arc<Symbol>>) -> Option<Arc<Symbol>> {
     if found.len() == 1 { found.pop() } else { None }
 }
 
-/// The relative path of the one import that binds this name as it is in the other file.
+/// The path of the one import that binds this name as it is in the other file: relative, or in
+/// Python any, since only a file of the project will be found for it.
 fn imported_from<'a>(file: &'a ProjectFile, name: &str) -> Option<&'a str> {
     let is_import = |r: &&ExtractedReference| r.kind == ReferenceKind::Import && r.name == name;
     let mut imports = file.references.iter().filter(is_import);
@@ -309,18 +330,22 @@ fn imported_from<'a>(file: &'a ProjectFile, name: &str) -> Option<&'a str> {
     if imports.next().is_some() || import.call_form == Some(CallForm::Bound) {
         return None;
     }
-    import
-        .context
-        .as_deref()
-        .filter(|path| path.starts_with("./") || path.starts_with("../"))
+    import.context.as_deref().filter(|path| {
+        path.starts_with("./")
+            || path.starts_with("../")
+            || Language::from_path(&file.path) == Language::Python
+    })
 }
 
-/// The file a relative import names.
+/// The file an import names.
 pub fn resolve_import(
     from: &Path,
     import: &str,
     by_path: &HashMap<&Path, FileId>,
 ) -> Option<FileId> {
+    if Language::from_path(from) == Language::Python {
+        return python_module(from, import, by_path);
+    }
     let base = normal(&from.parent()?.join(import))?;
     if let Some(file) = by_path.get(base.as_path()) {
         return Some(*file);
@@ -337,6 +362,37 @@ pub fn resolve_import(
         ENDINGS
             .iter()
             .find_map(|ending| by_path.get(Path::new(&format!("{start}{ending}"))).copied())
+    })
+}
+
+/// The file of a module, as `.a.b`, `..a` or `a.b`. A name without dots starts at the top of the
+/// project or at `src`: anything further is a matter of how the program is run, and is left out.
+fn python_module(from: &Path, import: &str, by_path: &HashMap<&Path, FileId>) -> Option<FileId> {
+    let module = import.trim_start_matches('.');
+    let dots = import.len() - module.len();
+    let roots: Vec<PathBuf> = if dots == 0 {
+        vec![PathBuf::new(), PathBuf::from("src")]
+    } else {
+        let mut base = from.parent()?;
+        for _ in 1..dots {
+            base = base.parent()?;
+        }
+        vec![base.to_path_buf()]
+    };
+    let inner: PathBuf = module.split('.').filter(|part| !part.is_empty()).collect();
+    roots.iter().find_map(|root| {
+        let path = root.join(&inner);
+        let package = |name: &str| by_path.get(path.join(name).as_path()).copied();
+        let file = |extension: &str| {
+            by_path
+                .get(path.with_extension(extension).as_path())
+                .copied()
+        };
+        (!module.is_empty())
+            .then(|| file("py").or_else(|| file("pyi")))
+            .flatten()
+            .or_else(|| package("__init__.py"))
+            .or_else(|| package("__init__.pyi"))
     })
 }
 
@@ -360,6 +416,37 @@ fn normal(path: &Path) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_python_module_finds_its_file() {
+        let (a, b, c, d, e) = (
+            FileId::new(1),
+            FileId::new(2),
+            FileId::new(3),
+            FileId::new(4),
+            FileId::new(5),
+        );
+        let by_path: HashMap<&Path, FileId> = [
+            (Path::new("pkg/a.py"), a),
+            (Path::new("pkg/__init__.py"), b),
+            (Path::new("pkg/sub/c.pyi"), c),
+            (Path::new("top.py"), d),
+            (Path::new("src/lib/__init__.py"), e),
+        ]
+        .into_iter()
+        .collect();
+        let from = Path::new("pkg/sub/x.py");
+        assert_eq!(resolve_import(from, ".c", &by_path), Some(c));
+        assert_eq!(resolve_import(from, "..a", &by_path), Some(a));
+        assert_eq!(resolve_import(from, "..", &by_path), Some(b));
+        assert_eq!(resolve_import(from, "pkg.a", &by_path), Some(a));
+        assert_eq!(resolve_import(from, "pkg", &by_path), Some(b));
+        assert_eq!(resolve_import(from, "top", &by_path), Some(d));
+        assert_eq!(resolve_import(from, "lib", &by_path), Some(e));
+        assert_eq!(resolve_import(from, "missing", &by_path), None);
+        assert_eq!(resolve_import(from, ".", &by_path), None);
+        assert_eq!(resolve_import(from, "....far", &by_path), None);
+    }
 
     #[test]
     fn a_relative_import_finds_its_file() {

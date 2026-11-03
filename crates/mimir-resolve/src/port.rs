@@ -21,6 +21,12 @@ pub trait SemanticSource: Send + Sync {
 
     /// Give up whatever is held for the next edit, if unused for `idle`.
     fn stop_if_idle(&self, idle: Duration);
+
+    /// What a person should know about the answers for this project, as that its packages are not
+    /// installed. It returns at once.
+    fn notes(&self, _project: &Path) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 /// Syntax rules only.
@@ -74,6 +80,13 @@ impl SemanticSource for SemanticSources {
         for source in &self.sources {
             source.stop_if_idle(idle);
         }
+    }
+
+    fn notes(&self, project: &Path) -> Vec<String> {
+        self.sources
+            .iter()
+            .flat_map(|source| source.notes(project))
+            .collect()
     }
 }
 

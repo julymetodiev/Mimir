@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""How does a running tsrs compare with a scip-typescript index, site by site?
+"""How does a running language server compare with a SCIP index, site by site?
 
-A site is a place the index reports a reference. tsrs is asked for its definition, and the target is
+A site is a place the index reports a reference. The server is asked for its definition, and the target is
 compared by file and line, or by package and file when it lies outside the project. Every other
 identifier is asked too, which shows what the index leaves out and how many calls get no answer.
-Reads the project as text, runs none of it. See docs/TYPESCRIPT.md, section 7.
+Reads the project as text, runs none of it. See section 7 of docs/TYPESCRIPT.md and docs/PYTHON.md.
 
-Usage: ts_compare.py PROJECT INDEX.scip --tsrs BIN [--prefix DIR/] [--reverse] [--one-by-one] [--limit N] --out OUT.json
-       ts_compare.py --same A.json B.json     (do two runs give the same answers?)
+Usage: scip_compare.py PROJECT INDEX.scip --server "BIN ARGS" [--prefix DIR/] [--reverse] [--one-by-one] [--limit N] --out OUT.json
+       scip_compare.py --same A.json B.json     (do two runs give the same answers?)
 
 --prefix keeps other files as targets and asks about these only. --reverse opens files in the opposite
 order. --one-by-one keeps one file open at a time. A target that differs from the index is asked again
@@ -19,12 +19,14 @@ from collections import Counter, defaultdict
 
 KEYWORDS = set(
     "if for while switch catch function return await typeof new super import else do case in of "
-    "yield void delete throw constructor get set".split()
+    "yield void delete throw constructor get set def class lambda not and or is elif with print".split()
 )
 TOKEN = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*")
 COMMENT = re.compile(r"//.*?$|/\*.*?\*/", re.S | re.M)
+PYTHON_COMMENT = re.compile(r"#.*?$", re.M)
 LANGUAGES = {".ts": "typescript", ".mts": "typescript", ".cts": "typescript", ".tsx": "typescriptreact",
-             ".js": "javascript", ".mjs": "javascript", ".cjs": "javascript", ".jsx": "javascriptreact"}
+             ".js": "javascript", ".mjs": "javascript", ".cjs": "javascript", ".jsx": "javascriptreact",
+             ".py": "python", ".pyi": "python"}
 
 
 def varint(b, i):
@@ -97,8 +99,8 @@ def read_index(path, prefix):
 
 
 class Server:
-    def __init__(self, binary, root, log):
-        self.process = subprocess.Popen([binary, "--lsp", "-stdio"], stdin=subprocess.PIPE,
+    def __init__(self, command, root, log):
+        self.process = subprocess.Popen(command.split(), stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE, stderr=open(log, "wb"), cwd=root)
         self.next = 0
         self.lock = threading.Lock()
@@ -171,9 +173,10 @@ class Server:
 
 def package_of(path):
     path = path.replace("%40", "@")
-    if "node_modules/" not in path:
+    folder = "node_modules/" if "node_modules/" in path else "site-packages/" if "site-packages/" in path else None
+    if folder is None:
         return "?"
-    tail = path.rsplit("node_modules/", 1)[1].split("/")
+    tail = path.rsplit(folder, 1)[1].split("/")
     name = "/".join(tail[:2]) if tail[0].startswith("@") else tail[0]
     return "typescript" if name.startswith("@tsrs/") else name
 
@@ -182,9 +185,9 @@ def verdict_of(symbol, want, got, docs):
     inside = {t for t in got if t[0] in docs}
     if not want:
         if inside:
-            return "index_none_tsrs_inside"
+            return "index_none_server_inside"
         if not got:
-            return "outside_tsrs_nothing"
+            return "outside_server_nothing"
         parts = symbol.split(" ")
         if len(parts) <= 3 or parts[2] not in {package_of(t[0]) for t in got}:
             return "outside_other_package"
@@ -193,20 +196,33 @@ def verdict_of(symbol, want, got, docs):
     if want & got:
         return "agree"
     if not got:
-        return "tsrs_nothing"
-    return "differ" if inside else "tsrs_outside"
+        return "server_nothing"
+    return "differ" if inside else "server_outside"
+
+
+def module_named(path, name):
+    """Whether this file is the module of that name, as `a/__init__.py` or `a.py`."""
+    stem = os.path.splitext(os.path.basename(path))[0]
+    return name == (os.path.basename(os.path.dirname(path)) if stem == "__init__" else stem)
 
 
 def class_of(symbol, name, want_lines, got_line, got_name):
     """The named class of a site that still differs after asking again (docs/TYPESCRIPT.md, section 7).
 
-    The lines are the source at the index's targets and at where tsrs ended. Whatever fits none stays
+    The lines are the source at the index's targets and at where the server ended. Whatever fits none stays
     unclassified, to be read: TS2 asks for 0 of those."""
-    if "<constructor>" in symbol or "constructor" in got_line or any("constructor" in w for w in want_lines):
+    if any(word in text for word in ("<constructor>", "constructor", "__init__", "__new__")
+           for text in [symbol, got_line, *want_lines]):
         return "constructor"
     if name in ("exports", "module"):
         return "CommonJS exports"
-    # `var get = UTIF.decode._get`: tsrs goes on to the function, and the index stops at the variable.
+    # `models.TextChoices("Medal", "GOLD")` builds an enum: tsrs and ty answer with what runs.
+    if got_name == "__call__":
+        return "metaclass call"
+    # `from .a import __all__ as a_all`.
+    if got_name == "__all__":
+        return "alias followed"
+    # `var get = UTIF.decode._get`: the server goes on to the function, and the index stops at the variable.
     if got_name and got_name != name and any(
             re.search(r"(?<![\w$])" + re.escape(got_name) + r"(?![\w$])", w) for w in want_lines):
         return "alias followed"
@@ -214,7 +230,7 @@ def class_of(symbol, name, want_lines, got_line, got_name):
     if named and named.search(got_line):
         if any(named.search(w) for w in want_lines):
             return "same name, another declaration"
-        return "tsrs on the name, index elsewhere"
+        return "server on the name, index elsewhere"
     return "unclassified"
 
 
@@ -232,7 +248,8 @@ def compare(args):
 
     tokens, calls = [], set()
     for p in files:
-        masked = COMMENT.sub(lambda m: re.sub(r"[^\n]", " ", m.group()), text[p])
+        comment = PYTHON_COMMENT if p.endswith((".py", ".pyi")) else COMMENT
+        masked = comment.sub(lambda m: re.sub(r"[^\n]", " ", m.group()), text[p])
         for number, line in enumerate(masked.split("\n")):
             for m in TOKEN.finditer(line):
                 key = (p, number, m.start())
@@ -283,7 +300,7 @@ def compare(args):
         return [out[k] for k in keys]
 
     report = {"files": len(files), "sites": len(sites), "other_identifiers": len(tokens)}
-    server = Server(args.tsrs, root, args.out + ".err")
+    server = Server(args.server, root, args.out + ".err")
     server.call("initialize", {"processId": os.getpid(), "rootUri": "file://" + root,
                                "capabilities": {"textDocument": {"definition": {"linkSupport": True}}},
                                "workspaceFolders": [{"uri": "file://" + root, "name": "project"}]})
@@ -363,9 +380,14 @@ def compare(args):
             continue
         site_line = text[p].split("\n")[key[1]]
         token = TOKEN.match(site_line, key[2])
-        got_line = source_line(here[0][0], here[0][1]) if here else ""
+        # Where it first answered: asking again from a field lands on `self`, which says nothing.
+        first = spots[key][:1]
+        if first and first[0][1] == 0 and token and module_named(first[0][0], token.group()):
+            still["module position"] += 1
+            continue
+        got_line = source_line(first[0][0], first[0][1]) if first else ""
         want_lines = [source_line(w[0], w[1]) for w in sorted(want)[:3]]
-        got_token = TOKEN.match(got_line, here[0][2]) if here else None
+        got_token = TOKEN.match(got_line, first[0][2]) if first else None
         named = class_of(refs[key], token.group() if token else "", want_lines, got_line,
                          got_token.group() if got_token else "")
         still[named] += 1
@@ -424,7 +446,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("project")
     parser.add_argument("index")
-    parser.add_argument("--tsrs", required=True)
+    parser.add_argument("--server", required=True)
     parser.add_argument("--prefix", default="")
     parser.add_argument("--reverse", action="store_true")
     parser.add_argument("--one-by-one", action="store_true")

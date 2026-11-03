@@ -3,11 +3,12 @@
 use anyhow::Result;
 use mimir_client::Client;
 use mimir_parse_core::LanguageAdapter;
+use mimir_parse_python::PythonAdapter;
 use mimir_parse_rust::RustAdapter;
 use mimir_parse_ts::ScriptAdapter;
 use mimir_resolve::{NoSemanticSource, SemanticSource, SemanticSources};
+use mimir_resolve_lsp::{tsrs, ty};
 use mimir_resolve_ra::RustAnalyzer;
-use mimir_resolve_tsrs::Tsrs;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -22,7 +23,8 @@ pub async fn run() -> Result<()> {
     } else {
         Arc::new(SemanticSources::new(vec![
             Arc::new(RustAnalyzer::default()),
-            Arc::new(Tsrs::default()),
+            Arc::new(tsrs()),
+            Arc::new(ty()),
         ]))
     };
     let languages: Vec<Arc<dyn LanguageAdapter>> = vec![
@@ -30,6 +32,7 @@ pub async fn run() -> Result<()> {
         Arc::new(ScriptAdapter::typescript()),
         Arc::new(ScriptAdapter::tsx()),
         Arc::new(ScriptAdapter::javascript()),
+        Arc::new(PythonAdapter),
     ];
     mimir_daemon::run(std::env::current_dir()?, DAEMON_IDLE, languages, semantics).await?;
     Ok(())

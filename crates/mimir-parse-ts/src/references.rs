@@ -4,10 +4,9 @@ use std::collections::HashSet;
 
 use mimir_parse_core::ParsedTree;
 use mimir_parse_core::extracted::{CallForm, ExtractedReference};
+use mimir_parse_core::nodes::{MAX_DEPTH, range_of, span_of, text};
 use mimir_types::{Confidence, ReferenceKind};
 use tree_sitter::Node;
-
-use crate::{MAX_DEPTH, range_of, span_of, text};
 
 mod forms;
 mod names;

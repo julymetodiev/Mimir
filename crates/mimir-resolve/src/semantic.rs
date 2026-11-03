@@ -195,7 +195,7 @@ pub fn resolve(
                 continue;
             };
             covered.insert(file.file_id);
-            if Language::from_path(path).family() == Language::TypeScript {
+            if Language::from_path(path).family() != Language::Rust {
                 script::resolve_answers(table, file, document, &by_path, edges, constant_uses);
             } else {
                 resolve_live(table, file, document, &by_path, edges, constant_uses);

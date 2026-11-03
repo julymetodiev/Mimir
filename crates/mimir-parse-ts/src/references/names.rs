@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use tree_sitter::Node;
 
-use crate::{MAX_DEPTH, text};
+use mimir_parse_core::nodes::{MAX_DEPTH, text};
 
 /// Whether a type's name is where it is declared, not where it is used.
 pub fn is_declared_name(node: &Node) -> bool {

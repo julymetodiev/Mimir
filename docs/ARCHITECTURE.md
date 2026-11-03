@@ -47,12 +47,13 @@ Dependencies point inwards. IO lives at the edge.
   client        mimir-client                           connect, start the daemon, one call per command
   wire          mimir-protocol                         requests and responses, typed
   application   mimir-engine                           the one writer: sync, watch, query, edit
-  adapters      mimir-resolve-ra, mimir-resolve-tsrs,  rust-analyzer, tsrs, a language server, files on disk
+  adapters      mimir-resolve-ra, mimir-resolve-lsp,   rust-analyzer, tsrs, ty, a language server, files on disk
                 mimir-lsp,
                 mimir-edit
   ports + rules mimir-resolve                          linking rules and the port for a semantic source
   domain        mimir-graph, mimir-parse-core,         pure: no IO, no async, no clock, no environment
-                mimir-parse-rust, mimir-parse-ts, mimir-types
+                mimir-parse-rust, mimir-parse-ts, mimir-parse-python,
+                mimir-types
 ```
 
 | Crate | Layer | Owns |
@@ -61,10 +62,11 @@ Dependencies point inwards. IO lives at the edge.
 | `mimir-parse-core` | domain | the language adapter trait and what it extracts |
 | `mimir-parse-rust` | domain | Rust through tree-sitter |
 | `mimir-parse-ts` | domain | TypeScript and JavaScript through tree-sitter |
+| `mimir-parse-python` | domain | Python through tree-sitter |
 | `mimir-graph` | domain | symbols, edges and queries over them |
 | `mimir-resolve` | rules + port | turning references into edges; syntax rules; the port `SemanticSource` |
 | `mimir-resolve-ra` | adapter | the SCIP index and the running `rust-analyzer` |
-| `mimir-resolve-tsrs` | adapter | the running `tsrs`, for TypeScript and JavaScript |
+| `mimir-resolve-lsp` | adapter | a language server as a semantic source: asking about each site, saving the answers; one module for each server, as `tsrs` and `ty` |
 | `mimir-lsp` | adapter | a running language server: starting it, its messages, file URIs |
 | `mimir-edit` | adapter | applying edits to files, with conflict detection |
 | `mimir-engine` | application | the actor; scanning, watching, editing, reading source, saving the graph for measurements |
@@ -173,6 +175,7 @@ reads and never writes: rule 4 stands, and the page has no way to ask for an edi
 
 ## 8. Other languages
 
-Built for JavaScript and TypeScript, and the targets of section 2 are measured for Rust only. JavaScript and TypeScript come first:
-parsed through tree-sitter and resolved by a running `tsrs`, behind the same port as Rust. The
-specification is [TYPESCRIPT.md](TYPESCRIPT.md). Python and Go follow, and have no specification yet.
+Built for JavaScript, TypeScript and Python, and the targets of section 2 are measured for Rust only. Each is
+parsed through tree-sitter and resolved by a running language server, behind the same port as Rust: `tsrs`, in
+[TYPESCRIPT.md](TYPESCRIPT.md), and `ty`, in [PYTHON.md](PYTHON.md). Go comes next, and has no specification
+yet. A language server is installed apart, and is never linked.

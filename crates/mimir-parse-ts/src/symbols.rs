@@ -5,13 +5,11 @@ use std::collections::HashSet;
 
 use mimir_parse_core::ParsedTree;
 use mimir_parse_core::extracted::ExtractedSymbol;
-use mimir_types::{Language, QualifiedName, Range, Span, SymbolKind, Visibility};
+use mimir_parse_core::nodes::{MAX_DEPTH, module_symbol, range_of, span_of, text};
+use mimir_types::{Language, QualifiedName, SymbolKind, Visibility};
 use tree_sitter::Node;
 
-use crate::{MAX_DEPTH, is_function, range_of, span_of, text};
-
-/// The name of a file's own symbol, which no name in code can be.
-const MODULE_NAME: &str = "<module>";
+use crate::is_function;
 
 /// Extract the symbols of a parse tree.
 pub fn extract_symbols(tree: &ParsedTree, language: Language) -> Vec<ExtractedSymbol> {
@@ -25,19 +23,6 @@ pub fn extract_symbols(tree: &ParsedTree, language: Language) -> Vec<ExtractedSy
     let mut symbols = walk.finish();
     symbols.push(module_symbol(tree, language));
     symbols
-}
-
-/// What runs when a file is loaded: the caller of code outside any function. A parser is not told
-/// the file's path, and the file is where a symbol is shown to be anyway.
-fn module_symbol(tree: &ParsedTree, language: Language) -> ExtractedSymbol {
-    let end = tree.root_node().end_position();
-    ExtractedSymbol::new(
-        MODULE_NAME.to_string(),
-        SymbolKind::Module,
-        language,
-        Range::new(1, 0, end.row as u32 + 1, end.column as u32),
-        Span::new(0, tree.source_bytes().len() as u32),
-    )
 }
 
 /// Where a walk is.

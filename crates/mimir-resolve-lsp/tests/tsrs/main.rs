@@ -8,7 +8,7 @@ use mimir_graph::{CodeGraph, EdgeKind};
 use mimir_parse_core::LanguageAdapter;
 use mimir_parse_ts::ScriptAdapter;
 use mimir_resolve::{ProjectFile, Refresh, SemanticSource, link};
-use mimir_resolve_tsrs::Tsrs;
+use mimir_resolve_lsp::{AskedSource, tsrs};
 use mimir_types::{FileId, IdGenerator, Language, Symbol};
 
 const SOURCES: [&str; 5] = ["types.ts", "lib.ts", "main.ts", "widget.tsx", "plain.js"];
@@ -24,7 +24,7 @@ fn adapter(path: &str) -> ScriptAdapter {
 }
 
 fn root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixture/project")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/tsrs/project")
 }
 
 fn build(root: &Path) -> (CodeGraph, Vec<ProjectFile>) {
@@ -96,7 +96,7 @@ fn tsrs_is_there() -> bool {
     there
 }
 
-fn linked(root: &Path, source: &Tsrs) -> (CodeGraph, Vec<ProjectFile>) {
+fn linked(root: &Path, source: &AskedSource) -> (CodeGraph, Vec<ProjectFile>) {
     let (graph, files) = build(root);
     // What is saved must stay out of the project: it is tracked by git here.
     let cache = tempfile::TempDir::new().unwrap();
@@ -110,7 +110,7 @@ fn every_row_of_the_table_holds() {
     if !tsrs_is_there() {
         return;
     }
-    let (graph, files) = linked(&root(), &Tsrs::default());
+    let (graph, files) = linked(&root(), &tsrs());
 
     let calls = list(&[
         ("Circle.constructor", "Base"),
@@ -175,7 +175,7 @@ fn a_read_runs_the_getter_and_a_write_the_setter() {
     if !tsrs_is_there() {
         return;
     }
-    let (graph, files) = linked(&root(), &Tsrs::default());
+    let (graph, files) = linked(&root(), &tsrs());
     let targets = |from: &str| -> BTreeSet<u32> {
         files
             .iter()
@@ -225,8 +225,8 @@ fn an_edit_is_seen_by_the_files_that_import_it() {
     write_lib(
         "export class A {\n  go() {}\n}\nexport class B {\n  go() {}\n}\nexport function make(): A {\n  return new A();\n}\n",
     );
-    let source = Tsrs::default();
-    let calls = |source: &Tsrs| {
+    let source = tsrs();
+    let calls = |source: &AskedSource| {
         let (graph, files) = linked(&root, source);
         edges(&graph, &files, EdgeKind::Calls)
             .into_iter()
@@ -244,7 +244,7 @@ fn an_edit_is_seen_by_the_files_that_import_it() {
     assert_eq!(calls(&source), names(&["B.go", "make"]));
 
     // And it is what a clean start gives.
-    assert_eq!(calls(&Tsrs::default()), names(&["B.go", "make"]));
+    assert_eq!(calls(&tsrs()), names(&["B.go", "make"]));
 }
 
 #[test]

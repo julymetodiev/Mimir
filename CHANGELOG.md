@@ -6,6 +6,14 @@ All notable changes to Mimir are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Python**, resolved by a running `ty`, with its answers saved beside the graph.
+
+### Changed
+
+- Answers saved by 0.3.0 are asked for once again, because their format has a new name.
+
 ## [0.3.0] - 2026-11-03
 
 ### Added

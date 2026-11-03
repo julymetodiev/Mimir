@@ -15,14 +15,14 @@ Left out: `.vue`, `.svelte`, `.astro`, code inside HTML, and any other file that
 ```
   mimir-parse-ts ── symbols and references, through tree-sitter
   mimir-resolve  ── the same rules and the same port
-  mimir-resolve-tsrs ── the port, over a running `tsrs --lsp -stdio`
+  mimir-resolve-lsp ── the port, over a running language server such as `tsrs --lsp -stdio`
   mimir-lsp      ── starting a language server, its messages, file URIs
 ```
 
 | Crate | Layer | Owns |
 |---|---|---|
 | `mimir-parse-ts` | domain | TypeScript and JavaScript through `tree-sitter-typescript` and `tree-sitter-javascript` |
-| `mimir-resolve-tsrs` | adapter | the running `tsrs`, the saved answers, which sites to ask about |
+| `mimir-resolve-lsp` | adapter | the running server, the saved answers, which sites to ask about; what is `tsrs`'s own is the module `tsrs.rs`; Python uses it too |
 | `mimir-lsp` | adapter | what `mimir-resolve-ra/src/live/lsp.rs` holds that no one language needs; both adapters use it (rule 9) |
 
 - **More than one source.** `SemanticSources`, in `mimir-resolve`, holds a list and is itself a
@@ -101,9 +101,10 @@ itself, so a name in TypeScript never lands on a name in Rust.
 
 - It is found on `PATH`, never in the project's `node_modules`, because a repository must not choose
   what the daemon runs.
-- One exact version is the tested one, a constant in `mimir-resolve-tsrs`, and `scripts/check-deps.py`
+- One exact version is the tested one, a constant in `mimir-resolve-lsp/src/tsrs.rs`, and `scripts/check-deps.py`
   compares it with the newest on npm (rule 10). Another version still runs, and the daemon's log says so.
-- Without it only syntax rules apply, and `sync` reports how many files that covers.
+- Without it only syntax rules apply, and `sync` reports how many files that covers. A `package.json` without
+  `node_modules` gets a note from `sync`, since less is answered.
 - It stops after 10 idle minutes, like the analyzer.
 - It is a separate process and is never linked: its crates are unpublished, with no stable Rust API.
 
@@ -113,7 +114,7 @@ Added to section 2 of the architecture when they hold, each checked by `scripts/
 
 | # | Target |
 |---|---|
-| TS1 | Every entry of the hand-written list in `crates/mimir-resolve-tsrs/tests/fixture/main.rs` holds, covering each row of the table in section 3 |
+| TS1 | Every entry of the hand-written list in `crates/mimir-resolve-lsp/tests/tsrs/main.rs` holds, covering each row of the table in section 3 |
 | TS2 | Against `scip-typescript`: every disagreement falls in a named class of section 7; unclassified 0 |
 | TS3 | After edits, the graph equals the graph from a clean start with no saved answers: 0 differences |
 | TS4 | T1, T2, T3 and T4 hold on a TypeScript project of 20 000 symbols |
@@ -127,16 +128,16 @@ Where they stand, measured through `mimir` on an M1 Pro:
 | TS2 | Holds on hono, nest and three.js: unclassified 0. Not repeated on VS Code, which had 368 disagreements before these classes |
 | TS3 | Holds on hono and nest, 0 differences in every kind of edge. Comment edits, and the fixture for a changed type |
 | TS4 | Not measured as `scripts/bench` does. T4 below |
-| TS5 | Holds on three projects: hono 12 497 symbols 12 s, nest 27 854 symbols 47 s, three.js 27 387 symbols 43 s |
+| TS5 | Holds on three projects: hono 12 497 symbols 11 s, nest 27 854 symbols 48 s, three.js 27 387 symbols 45 s |
 
 | Daemon | hono | nest | three.js |
 |---|---|---|---|
-| After asking | 107 MB | 228 MB | 410 MB |
-| After a restart with nothing changed | 94 MB | 187 MB | 317 MB |
+| After asking | 121 MB | 187 MB | 373 MB |
+| After a restart with nothing changed | 106 MB | 206 MB | 339 MB |
 | That restart takes, without starting `tsrs` | 1.0 s | 2.9 s | 4.2 s |
 | Saved answers | 1.0 MB | 2.3 MB | 4.9 MB |
 
-`tsrs` itself used 0.7 to 1.9 GB while it ran. An edit near the bottom of the imports re-asks most of a project: 30 s on nest for `packages/common/index.ts`.
+Those are with `tsrs` 0.21.0, and every edge of the three graphs is the same as with 0.20.1. Between runs the daemon moved by up to 45 MB, up to 426 MB on three.js. `tsrs` itself used 0.6 to 2.5 GB while it ran. An edit near the bottom of the imports re-asks most of a project: 30 s on nest for `packages/common/index.ts`.
 
 ## 6. Machine checks
 
@@ -145,11 +146,11 @@ Where they stand, measured through `mimir` on an M1 Pro:
 - `scripts/check-deps.py`: the `tsrs` version, as in section 4.
 - `cargo test`: the fixture of TS1, skipped with a message when `tsrs` is not installed, as the
   `rust-analyzer` tests are.
-- `scripts/bench`: TS2 to TS5, with `ts_compare.py` for TS2.
+- `scripts/bench`: TS2 to TS5, with `scip_compare.py` for TS2.
 
 ## 7. What was measured
 
-`tsrs` 0.20.1 against `scip-typescript` 0.6.1, 2026-11-03, on an M1 Pro, with `scripts/bench/ts_compare.py`.
+`tsrs` 0.20.1 against `scip-typescript` 0.6.1, 2026-11-03, on an M1 Pro, with `scripts/bench/scip_compare.py`.
 A site is a place the index reports a reference; its target is compared by file and line, or by package
 and file outside the project. Packages were installed with `--ignore-scripts`, except for VS Code and
 three.js, so targets in their libraries are not covered. The index for express comes from a copy without packages, because the
@@ -200,7 +201,7 @@ Classes of disagreement, by what was read:
 | Global declared twice | 26 | `URL` in `esbuild` against `lib.dom`. Both outside |
 | Locals of a package | 40 | The index has no package to compare. Not a fault of either |
 
-What still differs after asking again, as `ts_compare.py` sorts it by the source at both targets:
+What still differs after asking again, as `scip_compare.py` sorts it by the source at both targets:
 
 | Class | hono | nest | three.js | Meaning |
 |---|---|---|---|---|
@@ -210,7 +211,7 @@ What still differs after asking again, as `ts_compare.py` sorts it by the source
 | Constructor | 0 | 24 | 5 | `new X` at the class, where the index gives the constructor |
 | CommonJS exports | 0 | 0 | 125 | `exports.x`: the index gives what is assigned |
 | Alias followed | 0 | 0 | 28 | `var get = a.b.get`: `tsrs` goes on to the function, the index stops at the variable |
-| `tsrs` on the name, index elsewhere | 0 | 0 | 6 | `Foo.prototype = {`: the index gives the function |
+| The server on the name, index elsewhere | 0 | 0 | 6 | `Foo.prototype = {`: the index gives the function |
 | Unclassified | 0 | 0 | 0 | |
 
 A class says what a disagreement looks like, not which side is right. "Same name, another declaration"
@@ -236,7 +237,7 @@ stops at `.d.ts`. Outside targets give no edge, so this changes nothing.
 5. **All sites of a very large project.** Estimated, not measured: about 15 minutes for all of VS Code if
    every reference were asked about. The parser's sites are fewer. TS5 decides.
 6. **An edit near the bottom of the imports** re-asks most of a project: 30 s on nest. Until it ends those files give syntax answers, marked partial.
-7. **Memory after asking** is 410 MB on three.js, of 27 387 symbols, against T4's 400 MB at 20 000.
+7. **Memory after asking** is 373 to 426 MB on three.js, of 27 387 symbols, against T4's 400 MB at 20 000.
 8. **Accuracy on real projects** is known only as agreement with an index; TS1 is a small hand-written list.
 9. **How `tsrs` is installed.** The npm package needs Node for its launcher; the native binary is inside
    a platform package. Whether Homebrew or a release can provide it is not checked.
@@ -253,6 +254,6 @@ stops at `.d.ts`. Outside targets give no edge, so this changes nothing.
 2. `mimir-lsp`, taken out of `mimir-resolve-ra`, with no change in behaviour: T5 and T6 still hold. Done.
 3. `SemanticSources` and the adapter list, still only Rust. Done.
 4. `mimir-parse-ts`, with syntax rules only. Done.
-5. `mimir-resolve-tsrs`, with the fixture of TS1. Done.
+5. The source over `tsrs`, with the fixture of TS1. Done.
 6. Saved answers and edits, with TS3. Done.
 7. README and the MCP instructions. Done. The targets move to the architecture once TS4 is measured.

@@ -143,6 +143,9 @@ pub struct SyncResult {
     /// Where the graph was saved, when it was.
     #[serde(default)]
     pub saved_to: Option<PathBuf>,
+    /// What a person should know about the answers, as that a project's packages are missing.
+    #[serde(default)]
+    pub notes: Vec<String>,
 }
 
 /// How edges were resolved.
@@ -184,6 +187,7 @@ impl SyncResult {
             duration_ms: 0,
             link: None,
             saved_to: None,
+            notes: Vec::new(),
         }
     }
 }

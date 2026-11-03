@@ -54,9 +54,11 @@ $(entry "      " x86_64-unknown-linux-gnu)
 
   def caveats
     <<~EOS
-      For exact answers, Mimir needs rust-analyzer for Rust, and tsrs for TypeScript and JavaScript:
+      For exact answers, Mimir needs rust-analyzer for Rust, tsrs for TypeScript and JavaScript,
+      and ty for Python:
         rustup component add rust-analyzer rust-src
         npm install -g tsrs
+        pipx install ty
 
       In Claude Code:
         /plugin marketplace add julymetodiev/Mimir

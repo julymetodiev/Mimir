@@ -34,6 +34,9 @@ pub async fn execute(full: bool) -> Result<()> {
         println!("Uses of types: {}", link.type_uses);
         println!("Uses of fields: {}", link.field_uses);
     }
+    for note in &result.notes {
+        println!("Note: {note}");
+    }
     if let Some(path) = result.saved_to {
         println!("Graph saved to {}", path.display());
     }

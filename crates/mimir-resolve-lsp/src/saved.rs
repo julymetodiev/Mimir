@@ -2,12 +2,12 @@
 //! at a time, in and out, so a big project needs no second copy in memory to read or write them.
 //!
 //! ```text
-//! mimir-tsrs-answers 3
+//! mimir-lsp-answers 1
 //! P <hash> <name>            a configuration or lock file
 //! T <path>                   a path targets name by their number, in order
 //! F <hash> <path>            a file, followed by its sites
 //! S <line> <column>          a site, followed by its targets
-//! A <path number> <line> <name>   a target; its name is what `tsrs` marked, spaces and all
+//! A <path number> <line> <name>   a target; its name is what the server marked, spaces and all
 //! ```
 
 use std::collections::{HashMap, HashSet};
@@ -21,8 +21,7 @@ use mimir_types::ContentHash;
 use tracing::warn;
 
 /// A file of another version is not read.
-const HEADER: &str = "mimir-tsrs-answers 3";
-const FILE: &str = "tsrs-answers.txt";
+const HEADER: &str = "mimir-lsp-answers 1";
 
 /// What is known of a project.
 pub type Known = HashMap<PathBuf, (ContentHash, Arc<LiveDocument>)>;
@@ -57,8 +56,8 @@ impl Shared {
 }
 
 /// What was saved, if anything, with the project files it was asked under.
-pub fn read(cache_dir: &Path) -> Option<(Known, ProjectFiles)> {
-    let path = cache_dir.join(FILE);
+pub fn read(cache_dir: &Path, name: &str) -> Option<(Known, ProjectFiles)> {
+    let path = cache_dir.join(name);
     let file = File::open(&path).ok()?;
     let parsed = parse(BufReader::new(file));
     if parsed.is_none() {
@@ -129,14 +128,14 @@ fn fits(path: &Path) -> Option<&str> {
 
 /// Save what is known. Failing costs only asking again, so it is reported and goes on. A file with a
 /// line break in its path is left out, and so asked about by the next daemon.
-pub fn write(cache_dir: &Path, known: &Known, project: &ProjectFiles) {
-    let (path, temporary) = (cache_dir.join(FILE), cache_dir.join(format!("{FILE}.tmp")));
+pub fn write(cache_dir: &Path, name: &str, known: &Known, project: &ProjectFiles) {
+    let (path, temporary) = (cache_dir.join(name), cache_dir.join(format!("{name}.tmp")));
     let written = std::fs::create_dir_all(cache_dir)
         .and_then(|()| File::create(&temporary))
         .and_then(|file| write_to(BufWriter::new(file), known, project))
         .and_then(|()| std::fs::rename(&temporary, &path));
     if let Err(e) = written {
-        warn!("Cannot save the answers of tsrs: {e}");
+        warn!("Cannot save {name}: {e}");
     }
 }
 
@@ -179,6 +178,8 @@ fn write_to(mut out: impl Write, known: &Known, project: &ProjectFiles) -> std::
 mod tests {
     use super::*;
 
+    const FILE: &str = "answers.txt";
+
     #[test]
     fn what_is_saved_is_read_back() {
         let dir = tempfile::TempDir::new().unwrap();
@@ -191,7 +192,7 @@ mod tests {
                     line: 2,
                     name: Arc::from("#run"),
                 },
-                // `tsrs` marks a whole declaration when it fits on the line.
+                // A server may mark a whole declaration when it fits on the line.
                 Target {
                     path: Arc::from(Path::new("a b/ü.ts")),
                     line: 3,
@@ -203,8 +204,8 @@ mod tests {
         let known = Known::from([(PathBuf::from("c d.ts"), (hash, Arc::new(document)))]);
         let project = vec![(PathBuf::from("/a b/tsconfig.json"), hash)];
 
-        write(dir.path(), &known, &project);
-        let (read_known, read_project) = read(dir.path()).unwrap();
+        write(dir.path(), FILE, &known, &project);
+        let (read_known, read_project) = read(dir.path(), FILE).unwrap();
 
         assert_eq!(read_project, project);
         let (read_hash, read_document) = &read_known[Path::new("c d.ts")];
@@ -220,11 +221,11 @@ mod tests {
     #[test]
     fn nothing_saved_or_another_version_gives_nothing() {
         let dir = tempfile::TempDir::new().unwrap();
-        assert!(read(dir.path()).is_none());
-        std::fs::write(dir.path().join(FILE), "mimir-tsrs-answers 0\n").unwrap();
-        assert!(read(dir.path()).is_none());
+        assert!(read(dir.path(), FILE).is_none());
+        std::fs::write(dir.path().join(FILE), "mimir-lsp-answers 0\n").unwrap();
+        assert!(read(dir.path(), FILE).is_none());
         std::fs::write(dir.path().join(FILE), format!("{HEADER}\nA 0 1 x\n")).unwrap();
-        assert!(read(dir.path()).is_none());
+        assert!(read(dir.path(), FILE).is_none());
     }
 
     #[test]

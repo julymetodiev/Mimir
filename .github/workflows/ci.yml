@@ -51,8 +51,10 @@ jobs:
         with:
           components: rust-analyzer, rust-src
       - uses: Swatinem/rust-cache@v2
-      - name: tsrs, or its tests are skipped
-        run: npm install -g tsrs
+      - name: tsrs and ty, or their tests are skipped
+        run: |
+          npm install -g tsrs
+          pipx install ty
       - name: Tests
         run: cargo test --workspace --all-features --no-fail-fast
 

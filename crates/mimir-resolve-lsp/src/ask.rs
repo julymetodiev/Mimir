@@ -1,4 +1,4 @@
-//! Asking `tsrs` about the sites of a file, and which files to ask about after a change.
+//! Asking a language server about the sites of a file, and which files to ask about after a change.
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -7,9 +7,10 @@ use std::path::{Path, PathBuf};
 use mimir_lsp::{Location, LspError, Server};
 use mimir_parse_core::ExtractedReference;
 use mimir_resolve::{LiveDocument, ProjectFile, Target, resolve_import};
-use mimir_types::{FileId, Language, ReferenceKind};
+use mimir_types::{FileId, ReferenceKind};
 use tracing::debug;
 
+use crate::AskedLanguage;
 use crate::saved::{Known, Shared};
 
 /// How many times an answer on an import is asked again.
@@ -64,21 +65,10 @@ pub fn with_importers(
     stale
 }
 
-fn language_id(path: &Path) -> &'static str {
-    match (
-        Language::from_path(path),
-        path.extension().and_then(|e| e.to_str()),
-    ) {
-        (Language::Tsx, _) => "typescriptreact",
-        (_, Some("jsx")) => "javascriptreact",
-        (Language::JavaScript, _) => "javascript",
-        _ => "typescript",
-    }
-}
-
 /// The answers for these files, each opened only while it is asked about.
 pub fn answers(
     server: &mut Server,
+    language: &AskedLanguage,
     project: &Path,
     files: &[ProjectFile],
     stale: &[PathBuf],
@@ -109,7 +99,7 @@ pub fn answers(
             continue;
         };
         let absolute = project.join(path);
-        server.update(&absolute, language_id(path), &file.source)?;
+        server.update(&absolute, (language.language_id)(path), &file.source)?;
         let document = asking.document(server, &absolute, file)?;
         server.close(&absolute)?;
         documents.insert(path.clone(), document);
@@ -250,6 +240,8 @@ impl Asking<'_> {
             .split('\n')
             .nth(found.line as usize)?
             .get(found.column as usize..found.end_column as usize)?;
+        // `ty` marks a field with its object: `self.x`, where the symbol is `x`.
+        let name = name.rsplit('.').next().unwrap_or(name);
         let mut shared = self.shared.borrow_mut();
         Some(Target {
             path: shared.path(path),

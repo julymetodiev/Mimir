@@ -8,6 +8,7 @@
 
 mod adapter;
 pub mod extracted;
+pub mod nodes;
 mod registry;
 mod tree;
 

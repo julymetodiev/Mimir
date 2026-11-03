@@ -104,7 +104,7 @@ fn link_family(
     report: &mut LinkReport,
 ) {
     let table = lookup::SymbolTable::new(graph, files);
-    let script = family == Language::TypeScript;
+    let script = family != Language::Rust;
     let count = |edges: &EdgeSet, kind| edges.count(kind);
     let before = |edges: &EdgeSet| {
         [
