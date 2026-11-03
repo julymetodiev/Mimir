@@ -30,7 +30,9 @@ Text, comments and non-Rust files: use your usual tools.
   never conclude that something has no callers from a provisional answer.
 - `others_with_this_name` means several symbols share the name and you got the likeliest. Check
   `at`, and pass `file` for another.
-- No caller can still mean it is called from outside the project, or from a test behind a `cfg`.
+- No caller does not prove a function is dead. It can be called from outside the project, from a
+  test behind a `cfg`, or by name in an attribute, as in `#[serde(skip_serializing_if = "is_zero")]`.
+  Search the text before deleting one.
 
 ## Editing
 
