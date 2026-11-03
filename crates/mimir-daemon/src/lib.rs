@@ -40,6 +40,9 @@ fn io_error(action: &'static str, path: &Path) -> impl FnOnce(std::io::Error) ->
     }
 }
 
+/// How often the daemon looks whether it is idle and whether its project is still there.
+const CHECK_EVERY: Duration = Duration::from_secs(5);
+
 /// Time of the last request, shared by the connections and the idle timer.
 struct LastUsed {
     started: Instant,
@@ -107,10 +110,7 @@ pub async fn run(
 
     let last_used = Arc::new(LastUsed::new());
     let (shutdown, mut stop) = broadcast::channel(1);
-    let mut tick = tokio::time::interval(
-        idle.min(Duration::from_secs(60))
-            .max(Duration::from_millis(50)),
-    );
+    let mut tick = tokio::time::interval(idle.min(CHECK_EVERY).max(Duration::from_millis(50)));
     loop {
         tokio::select! {
             accepted = listener.accept() => match accepted {
@@ -132,6 +132,10 @@ pub async fn run(
             _ = tick.tick() => {
                 if last_used.idle() >= idle {
                     info!("Idle for {idle:?}, stopping");
+                    break;
+                }
+                if !root.exists() {
+                    info!("{} is gone, stopping", root.display());
                     break;
                 }
             }
