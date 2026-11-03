@@ -60,6 +60,79 @@ pub const CONSTANT_READS: &[(&str, &str)] = &[
     ("alpha::uses_limit_here", "alpha::LIMIT"),
 ];
 
+/// Every use of a type, trait, alias or variant of the fixture, written by name.
+pub const TYPE_USES: &[(&str, &str)] = &[
+    ("alpha::Alias", "alpha::Config"),
+    ("alpha::Disk::eq", "alpha::Disk"),
+    ("alpha::Disk::new", "alpha::Disk"),
+    ("alpha::is_shape", "alpha::Kind"),
+    ("alpha::is_shape", "alpha::Kind::Shape"),
+    ("alpha::Memory::default", "alpha::Memory"),
+    ("alpha::Memory::new", "alpha::Memory"),
+    ("alpha::String::from", "alpha::Disk"),
+    ("alpha::impl Config", "alpha::Config"),
+    ("alpha::impl Default for Memory", "alpha::Memory"),
+    ("alpha::impl Disk", "alpha::Disk"),
+    ("alpha::impl From<Disk> for String", "alpha::Disk"),
+    ("alpha::impl Memory", "alpha::Memory"),
+    ("alpha::impl Named for Disk", "alpha::Disk"),
+    ("alpha::impl Named for Disk", "alpha::Named"),
+    ("alpha::impl PartialEq for Disk", "alpha::Disk"),
+    ("alpha::impl Store for Disk", "alpha::Disk"),
+    ("alpha::impl Store for Disk", "alpha::Store"),
+    ("alpha::impl Store for Memory", "alpha::Memory"),
+    ("alpha::impl Store for Memory", "alpha::Store"),
+    ("alpha::impl std::fmt::Display for Disk", "alpha::Disk"),
+    ("beta::Holder::inner", "alpha::Config"),
+    ("beta::builds_other", "alpha::Other"),
+    ("beta::by_type", "alpha::Memory"),
+    ("beta::destructures", "alpha::Config"),
+    ("beta::dyn_method_as_value", "alpha::Store"),
+    ("beta::field_in_macro", "alpha::Config"),
+    ("beta::forwarding", "alpha::Disk"),
+    ("beta::impl Renamed for Aliased", "alpha::Named"),
+    ("beta::impl Renamed for Aliased", "beta::Aliased"),
+    ("beta::impl Store for Own", "beta::local::Own"),
+    ("beta::impl Store for Own", "beta::local::Store"),
+    ("beta::in_macro", "alpha::Disk"),
+    ("beta::method_as_value", "alpha::Disk"),
+    ("beta::operators", "alpha::Disk"),
+    ("beta::other_type", "alpha::Disk"),
+    ("beta::picks_mode", "alpha::Mode"),
+    ("beta::picks_mode", "alpha::Mode::Fast"),
+    ("beta::picks_mode", "alpha::Mode::Slow"),
+    ("beta::reads_field", "alpha::Config"),
+    ("beta::shorthand", "beta::Spec"),
+    ("beta::shorthand_field", "alpha::Other"),
+    ("beta::shorthand_local", "beta::Spec"),
+    ("beta::through_alias", "alpha::Alias"),
+    ("beta::through_trait", "alpha::Store"),
+    ("beta::trait_method_as_value", "alpha::Disk"),
+    ("beta::trait_method_as_value", "alpha::Store"),
+];
+
+/// Every use of a named field of the fixture.
+pub const FIELD_USES: &[(&str, &str)] = &[
+    ("alpha::Config::own_limit", "alpha::Config::limit"),
+    ("beta::reads_field", "alpha::Config::limit"),
+    ("beta::builds_other", "alpha::Other::limit"),
+    ("beta::shorthand_field", "alpha::Other::limit"),
+    ("beta::destructures", "alpha::Config::name"),
+    ("beta::field_in_macro", "alpha::Config::name"),
+    ("beta::through_alias", "alpha::Config::name"),
+    ("beta::shorthand", "beta::Spec::helper"),
+    ("beta::shorthand_local", "beta::Spec::helper"),
+];
+
+/// Those syntax links: a type of the same file, a variant of its enum, and `self.field`.
+pub const DATA_USES_BY_SYNTAX: &[(&str, &str)] = &[
+    ("alpha::Disk::new", "alpha::Disk"),
+    ("alpha::Config::own_limit", "alpha::Config::limit"),
+    ("alpha::impl Config", "alpha::Config"),
+    ("beta::shorthand", "beta::Spec"),
+    ("alpha::is_shape", "alpha::Kind::Shape"),
+];
+
 pub const VALUES: &[(&str, &str)] = &[
     ("beta::as_value", "beta::helper"),
     ("beta::method_as_value", "alpha::Disk::get"),

@@ -36,8 +36,11 @@ Outside the project, use your usual tools: Mimir reads only the project's files.
   never conclude that something has no callers from a provisional answer.
 - `others_with_this_name` means several symbols share the name and you got the likeliest. Check
   `at`, and pass `file` for another.
-- For a constant or static, `callers` are the symbols that read it. A function's `callees` do not
-  list the plain constants it reads.
+- For a constant, type, trait, variant or field, `callers` are the symbols that use it, including
+  `impl` blocks and the fields of other types. A read and a write of a field are not told apart.
+  A function's `callees` do not list the constants, types or fields it uses. When several share a
+  name, pass `file` or a qualified name such as `Config::limit`.
+- A constant named only inside a format string, as in `format!("{NAME}")`, shows no reader.
 - No caller does not prove a function is dead. It can be called from outside the project, from a
   test behind a `cfg`, or by name in an attribute, as in `#[serde(skip_serializing_if = "is_zero")]`.
   Search the text before deleting one.

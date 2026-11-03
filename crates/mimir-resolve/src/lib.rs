@@ -3,6 +3,7 @@
 //! A file a [`SemanticSource`] knows about gets its call edges from that source; any other file
 //! from syntax rules, which leave a call out rather than guess its target.
 
+mod definitions;
 mod edges;
 mod lookup;
 mod port;
@@ -50,6 +51,10 @@ pub struct LinkReport {
     pub function_values: usize,
     /// Edges from a symbol to a plain constant it reads.
     pub constant_uses: usize,
+    /// Edges from a symbol to a type, trait or variant it names.
+    pub type_uses: usize,
+    /// Edges from a symbol to a field it uses.
+    pub field_uses: usize,
     /// Import edges.
     pub imports: usize,
     /// Files covered by a semantic index.
@@ -77,6 +82,9 @@ pub fn link(graph: &CodeGraph, files: &[ProjectFile], indexes: &[ScipIndex]) -> 
     add_uses_of_function_holders(graph, &mut edges, &constant_uses);
     let function_values = edges.count(EdgeKind::UsesAsValue);
     let constant_uses = edges.count(EdgeKind::UsesConstant);
+    syntax::resolve_data_uses(&table, files, &covered, &mut edges);
+    let type_uses = edges.count(EdgeKind::UsesType);
+    let field_uses = edges.count(EdgeKind::UsesField);
     let linked_calls = edges.len();
     syntax::resolve_imports(&table, files, &mut edges);
     let imports = edges.len() - linked_calls;
@@ -93,6 +101,8 @@ pub fn link(graph: &CodeGraph, files: &[ProjectFile], indexes: &[ScipIndex]) -> 
         implementations,
         function_values,
         constant_uses,
+        type_uses,
+        field_uses,
         imports,
         semantic_files,
         live_files: indexes.iter().map(|index| index.live.len()).sum(),

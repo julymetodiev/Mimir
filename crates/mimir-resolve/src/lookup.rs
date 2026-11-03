@@ -13,6 +13,24 @@ pub fn is_callable(symbol: &Symbol) -> bool {
     matches!(symbol.kind, SymbolKind::Function | SymbolKind::Method)
 }
 
+/// Whether a symbol is a type, trait, alias, variant or field.
+pub fn is_data(symbol: &Symbol) -> bool {
+    matches!(
+        symbol.kind,
+        SymbolKind::Struct
+            | SymbolKind::Enum
+            | SymbolKind::EnumVariant
+            | SymbolKind::Union
+            | SymbolKind::TypeAlias
+            | SymbolKind::Trait
+            | SymbolKind::Field
+    )
+}
+
+fn is_constant(symbol: &Symbol) -> bool {
+    symbol.kind == SymbolKind::Constant
+}
+
 /// The type or trait a method belongs to: `Foo` for a method of `impl<T> Tr for a::Foo<T>`.
 pub fn owner_of(symbol: &Symbol) -> Option<&str> {
     if symbol.kind != SymbolKind::Method {
@@ -146,24 +164,111 @@ impl SymbolTable {
 
     /// The constant or static with this name declared on a line.
     pub fn constant_at(&self, file: FileId, line: u32, name: &str) -> Option<&Arc<Symbol>> {
-        self.all_by_file.get(&file)?.iter().find(|s| {
-            s.kind == SymbolKind::Constant
-                && s.name == name
-                && s.range.start_line <= line
-                && line <= s.range.end_line
-        })
+        self.declared_at(file, line, name, is_constant)
+    }
+
+    /// The type, trait, variant or field with this name declared on a line.
+    pub fn data_at(&self, file: FileId, line: u32, name: &str) -> Option<&Arc<Symbol>> {
+        self.declared_at(file, line, name, is_data)
+    }
+
+    fn declared_at(
+        &self,
+        file: FileId,
+        line: u32,
+        name: &str,
+        wanted: fn(&Symbol) -> bool,
+    ) -> Option<&Arc<Symbol>> {
+        self.all_by_file
+            .get(&file)?
+            .iter()
+            .filter(|s| {
+                wanted(s)
+                    && s.name == name
+                    && s.range.start_line <= line
+                    && line <= s.range.end_line
+            })
+            .min_by_key(|s| s.span.end - s.span.start)
     }
 
     /// The `n`th constant or static with this name in a file, in the order they are written.
     pub fn nth_constant(&self, file: FileId, name: &str, n: usize) -> Option<&Arc<Symbol>> {
+        self.nth_declared(file, name, n, is_constant)
+    }
+
+    /// The `n`th type, trait, variant or field with this name in a file, in the order written.
+    pub fn nth_data(&self, file: FileId, name: &str, n: usize) -> Option<&Arc<Symbol>> {
+        self.nth_declared(file, name, n, is_data)
+    }
+
+    fn nth_declared(
+        &self,
+        file: FileId,
+        name: &str,
+        n: usize,
+        wanted: fn(&Symbol) -> bool,
+    ) -> Option<&Arc<Symbol>> {
         let mut named: Vec<_> = self
             .all_by_file
             .get(&file)?
             .iter()
-            .filter(|s| s.kind == SymbolKind::Constant && s.name == name)
+            .filter(|s| wanted(s) && s.name == name)
             .collect();
         named.sort_by_key(|s| s.span.start);
         named.get(n).copied()
+    }
+
+    /// The type or trait a name without a path means at a byte offset, if syntax can tell: the only
+    /// one with this name in the same module of the file, and not inside a function elsewhere. An
+    /// import of the same name would not compile beside it, but one in another module could.
+    pub fn type_in_scope(&self, file: FileId, offset: u32, name: &str) -> Option<&Arc<Symbol>> {
+        let module = self.module_at(file, offset);
+        let found: Vec<_> = self
+            .named(name)
+            .iter()
+            .filter(|s| {
+                s.file_id == file
+                    && is_data(s)
+                    && !matches!(s.kind, SymbolKind::Field | SymbolKind::EnumVariant)
+                    && self.module_at(file, s.span.start) == module
+                    && self
+                        .callable_holding(file, s.span.start)
+                        .is_none_or(|f| f.span.start <= offset && offset <= f.span.end)
+            })
+            .collect();
+        match found.as_slice() {
+            [one] => Some(*one),
+            _ => None,
+        }
+    }
+
+    fn module_at(&self, file: FileId, offset: u32) -> Option<mimir_types::SymbolId> {
+        self.all_by_file
+            .get(&file)?
+            .iter()
+            .filter(|s| {
+                s.kind == SymbolKind::Module && s.span.start <= offset && offset <= s.span.end
+            })
+            .min_by_key(|s| s.span.end - s.span.start)
+            .map(|s| s.id)
+    }
+
+    fn callable_holding(&self, file: FileId, offset: u32) -> Option<&Arc<Symbol>> {
+        self.by_file
+            .get(&file)?
+            .iter()
+            .filter(|s| s.span.start <= offset && offset <= s.span.end)
+            .min_by_key(|s| s.span.end - s.span.start)
+    }
+
+    /// A field or variant of a type: the member with this name declared inside it.
+    pub fn member_of(&self, owner: &Symbol, name: &str, kind: SymbolKind) -> Option<&Arc<Symbol>> {
+        self.named(name).iter().find(|s| {
+            s.file_id == owner.file_id
+                && s.kind == kind
+                && owner.span.start <= s.span.start
+                && s.span.end <= owner.span.end
+        })
     }
 
     /// The only constant or static with this name: in this file first, then in the project.

@@ -174,6 +174,42 @@ pub fn only_std() -> usize {
     "abc".len()
 }
 
+pub fn reads_field(config: &alpha::Config) -> u32 {
+    config.limit
+}
+
+pub fn builds_other() -> alpha::Other {
+    alpha::Other { limit: 1 }
+}
+
+pub fn shorthand_field(limit: u32) -> alpha::Other {
+    alpha::Other { limit }
+}
+
+pub fn destructures(config: alpha::Config) -> u32 {
+    let alpha::Config { name, .. } = config;
+    name
+}
+
+pub fn field_in_macro(config: &alpha::Config) -> String {
+    format!("{}", config.name)
+}
+
+pub fn picks_mode(mode: alpha::Mode) -> u32 {
+    match mode {
+        alpha::Mode::Fast => 0,
+        alpha::Mode::Slow(n) => n,
+    }
+}
+
+pub fn through_alias(config: alpha::Alias) -> u32 {
+    config.name
+}
+
+pub struct Holder {
+    pub inner: alpha::Config,
+}
+
 /// Named like `Store` in alpha, so a lookup by name alone cannot tell them apart.
 pub mod local {
     pub trait Store {

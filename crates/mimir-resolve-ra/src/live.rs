@@ -108,7 +108,11 @@ fn resolve_documents(
         for reference in file.references.iter().filter(|r| {
             matches!(
                 r.kind,
-                ReferenceKind::Call | ReferenceKind::FunctionValue | ReferenceKind::Read
+                ReferenceKind::Call
+                    | ReferenceKind::FunctionValue
+                    | ReferenceKind::Read
+                    | ReferenceKind::TypeUse
+                    | ReferenceKind::FieldUse
             )
         }) {
             let (line, column) = site_of(reference);
@@ -117,6 +121,10 @@ fn resolve_documents(
                 .into_iter()
                 .filter_map(target)
                 .collect();
+            if reference.kind == ReferenceKind::FieldUse {
+                document.field_sites.insert((line, column), found);
+                continue;
+            }
             if let Some(found) = choose(found, &reference.name)
                 && (found.name == reference.name
                     || !FORWARDING_METHODS.contains(&reference.name.as_str()))

@@ -147,6 +147,8 @@ pub enum TraceRelation {
     CalleeByValue,
     /// Reads the constant being traced.
     Reader,
+    /// Uses the type or field being traced.
+    User,
 }
 
 /// Response for trace queries.

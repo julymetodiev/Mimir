@@ -7,6 +7,8 @@ use mimir_parse_core::extracted::{CallForm, ExtractedReference};
 use mimir_types::{Confidence, FileId, Range, ReferenceKind, Span};
 use tree_sitter::Node;
 
+use crate::{imports, uses};
+
 /// Extract references from a Rust parse tree.
 pub fn extract_references(tree: &ParsedTree, _file_id: FileId) -> Vec<ExtractedReference> {
     let mut references = Vec::new();
@@ -36,7 +38,7 @@ fn extract_from_node(
             }
         }
         "use_declaration" => {
-            references.extend(extract_use(node, source, container));
+            references.extend(imports::extract_use(node, source, container));
             return;
         }
         "function_item" => {
@@ -55,6 +57,10 @@ fn extract_from_node(
             if let Some(reference) = extract_constant_read(node, source, container) {
                 references.push(reference);
             }
+            references.extend(uses::use_at(node, source, container));
+        }
+        "type_identifier" | "field_identifier" | "shorthand_field_identifier" => {
+            references.extend(uses::use_at(node, source, container));
         }
         // Tokens that are not code of this function: a macro's own rules, and attributes.
         "macro_definition" | "attribute_item" | "inner_attribute_item" => return,
@@ -215,7 +221,7 @@ fn constant_read(
     Some(reference)
 }
 
-fn is_constant_name(name: &str) -> bool {
+pub fn is_constant_name(name: &str) -> bool {
     name.chars().any(char::is_uppercase) && !name.chars().any(char::is_lowercase)
 }
 
@@ -292,6 +298,7 @@ fn extract_from_tokens(
     let tokens: Vec<Node> = (0..node.child_count())
         .filter_map(|i| node.child(i))
         .collect();
+    uses::uses_in_tokens(&tokens, source, references, container);
     for (i, token) in tokens.iter().enumerate() {
         if token.kind() == "identifier"
             && let Some(reference) = constant_read(*token, source, container)
@@ -359,126 +366,7 @@ fn call_reference(
     reference
 }
 
-fn extract_use(node: &Node, source: &[u8], container: Option<&str>) -> Vec<ExtractedReference> {
-    let mut references = Vec::new();
-
-    if let Some(arg) = node.child_by_field_name("argument") {
-        extract_use_path(&arg, source, &mut references, container, None);
-    }
-
-    references
-}
-
-fn extract_use_path(
-    node: &Node,
-    source: &[u8],
-    references: &mut Vec<ExtractedReference>,
-    container: Option<&str>,
-    path_prefix: Option<&str>,
-) {
-    match node.kind() {
-        "identifier" => {
-            let name = node.utf8_text(source).unwrap_or("").to_string();
-            if !name.is_empty() {
-                let full_path = if let Some(prefix) = path_prefix {
-                    format!("{}::{}", prefix, name)
-                } else {
-                    name.clone()
-                };
-
-                let mut reference = ExtractedReference::new(
-                    name,
-                    ReferenceKind::Import,
-                    node_to_range(node),
-                    node_to_span(node),
-                )
-                .with_confidence(Confidence::Certain)
-                .with_context(full_path);
-
-                if let Some(c) = container {
-                    reference = reference.with_container(c.to_string());
-                }
-
-                references.push(reference);
-            }
-        }
-        "scoped_identifier" => {
-            // Get the full path
-            let path_text = node.utf8_text(source).unwrap_or("");
-            let name = node
-                .child_by_field_name("name")
-                .and_then(|n| n.utf8_text(source).ok())
-                .unwrap_or("");
-
-            if !name.is_empty() {
-                let mut reference = ExtractedReference::new(
-                    name.to_string(),
-                    ReferenceKind::Import,
-                    node_to_range(node),
-                    node_to_span(node),
-                )
-                .with_confidence(Confidence::Certain)
-                .with_context(path_text.to_string());
-
-                if let Some(c) = container {
-                    reference = reference.with_container(c.to_string());
-                }
-
-                references.push(reference);
-            }
-        }
-        "use_list" => {
-            for i in 0..node.named_child_count() as u32 {
-                if let Some(child) = node.named_child(i) {
-                    extract_use_path(&child, source, references, container, path_prefix);
-                }
-            }
-        }
-        "scoped_use_list" => {
-            let path = node
-                .child_by_field_name("path")
-                .and_then(|p| p.utf8_text(source).ok());
-
-            let new_prefix = match (path_prefix, path) {
-                (Some(prefix), Some(p)) => Some(format!("{}::{}", prefix, p)),
-                (None, Some(p)) => Some(p.to_string()),
-                (Some(prefix), None) => Some(prefix.to_string()),
-                (None, None) => None,
-            };
-
-            if let Some(list) = node.child_by_field_name("list") {
-                extract_use_path(&list, source, references, container, new_prefix.as_deref());
-            }
-        }
-        "use_as_clause" => {
-            if let Some(path) = node.child_by_field_name("path") {
-                let first = references.len();
-                extract_use_path(&path, source, references, container, path_prefix);
-                // The new name is part of the import too.
-                for reference in &mut references[first..] {
-                    reference.span = node_to_span(node);
-                }
-            }
-        }
-        "use_wildcard" => {
-            // For `use foo::*`, we just note the wildcard import
-            let path = path_prefix.unwrap_or("*");
-            let reference = ExtractedReference::new(
-                "*".to_string(),
-                ReferenceKind::Import,
-                node_to_range(node),
-                node_to_span(node),
-            )
-            .with_confidence(Confidence::Low)
-            .with_context(format!("{}::*", path));
-
-            references.push(reference);
-        }
-        _ => {}
-    }
-}
-
-fn node_to_range(node: &Node) -> Range {
+pub fn node_to_range(node: &Node) -> Range {
     let start = node.start_position();
     let end = node.end_position();
     Range::new(
@@ -489,6 +377,6 @@ fn node_to_range(node: &Node) -> Range {
     )
 }
 
-fn node_to_span(node: &Node) -> Span {
+pub fn node_to_span(node: &Node) -> Span {
     Span::new(node.start_byte() as u32, node.end_byte() as u32)
 }

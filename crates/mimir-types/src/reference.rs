@@ -47,6 +47,12 @@ pub enum ReferenceKind {
 
     /// A name bound in the function, read where a function could also be named.
     LocalRead,
+
+    /// A type, trait or variant named in code. What it is, a semantic source can say.
+    TypeUse,
+
+    /// A field read, written or named in a pattern.
+    FieldUse,
 }
 
 impl ReferenceKind {}
@@ -59,6 +65,8 @@ impl fmt::Display for ReferenceKind {
             Self::Import => "import",
             Self::Read => "read",
             Self::LocalRead => "local_read",
+            Self::TypeUse => "type_use",
+            Self::FieldUse => "field_use",
         };
         write!(f, "{}", s)
     }

@@ -72,7 +72,8 @@ impl From<&TraceNode> for Step {
                 TraceRelation::Root
                 | TraceRelation::Caller
                 | TraceRelation::Callee
-                | TraceRelation::Reader => None,
+                | TraceRelation::Reader
+                | TraceRelation::User => None,
             },
         }
     }

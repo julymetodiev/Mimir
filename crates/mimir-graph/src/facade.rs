@@ -179,10 +179,17 @@ impl CodeGraph {
             .into_iter()
             .filter(|(_, edge)| edge.kind == EdgeKind::UsesConstant)
             .map(|(reader, _)| (reader, TraceRelationship::Reader));
+        let users = self
+            .relations
+            .incoming(symbol_id)
+            .into_iter()
+            .filter(|(_, edge)| matches!(edge.kind, EdgeKind::UsesType | EdgeKind::UsesField))
+            .map(|(user, _)| (user, TraceRelationship::User));
         let callers: Vec<_> = direct
             .chain(by_value)
             .chain(via_trait)
             .chain(readers)
+            .chain(users)
             .collect();
 
         for (caller_id, relationship) in callers {

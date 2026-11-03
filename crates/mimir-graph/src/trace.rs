@@ -49,6 +49,8 @@ pub enum TraceRelationship {
     CalleeByValue,
     /// Reads the constant above it.
     Reader,
+    /// Uses the type or field above it.
+    User,
 }
 
 /// Result of a trace operation.

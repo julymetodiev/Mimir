@@ -47,6 +47,9 @@ pub struct Target {
 pub struct LiveDocument {
     /// By a reference's start: 1-based line, 0-based column.
     pub sites: HashMap<(u32, u32), Target>,
+    /// Every answer for a site that may be a field. In `Config { name }` the name is a field and a
+    /// variable at once, and the server gives both.
+    pub field_sites: HashMap<(u32, u32), Vec<Target>>,
     /// The trait of each `impl Tr for T`, by the line of the `impl`.
     pub traits: HashMap<u32, Target>,
 }

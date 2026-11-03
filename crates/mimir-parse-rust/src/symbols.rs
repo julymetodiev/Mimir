@@ -42,6 +42,20 @@ fn extract_from_node(
                 extract_struct_fields(node, source, symbols, &name);
             }
         }
+        "union_item" => {
+            if let Some(mut sym) = extract_struct(node, source, parent) {
+                sym.kind = SymbolKind::Union;
+                let name = sym.name.clone();
+                symbols.push(sym);
+                extract_struct_fields(node, source, symbols, &name);
+            }
+        }
+        "type_item" => {
+            if let Some(mut sym) = extract_struct(node, source, parent) {
+                sym.kind = SymbolKind::TypeAlias;
+                symbols.push(sym);
+            }
+        }
         "enum_item" => {
             if let Some(sym) = extract_enum(node, source, parent) {
                 let name = sym.name.clone();
@@ -105,7 +119,7 @@ fn extract_nested_items(function: &Node, source: &[u8], symbols: &mut Vec<Extrac
             };
             match child.kind() {
                 "function_item" | "impl_item" | "trait_item" | "struct_item" | "enum_item"
-                | "mod_item" => {
+                | "union_item" | "type_item" | "mod_item" => {
                     extract_from_node(&child, source, symbols, None);
                 }
                 _ => stack.push(child),
@@ -134,6 +148,11 @@ fn extract_trait_methods(
                 symbols.push(sym);
             }
             extract_nested_items(&child, source, symbols);
+        } else if child.kind() == "associated_type"
+            && let Some(mut sym) = extract_struct(&child, source, Some(trait_name))
+        {
+            sym.kind = SymbolKind::TypeAlias;
+            symbols.push(sym);
         }
     }
 }

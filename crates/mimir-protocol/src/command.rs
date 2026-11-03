@@ -158,6 +158,10 @@ pub struct LinkSummary {
     pub function_values: usize,
     /// Edges from a symbol to a plain constant it reads.
     pub constant_uses: usize,
+    /// Edges from a symbol to a type, trait or variant it names.
+    pub type_uses: usize,
+    /// Edges from a symbol to a field it uses.
+    pub field_uses: usize,
     /// Import edges.
     pub imports: usize,
     /// Files covered by a semantic index.

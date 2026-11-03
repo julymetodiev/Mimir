@@ -101,3 +101,37 @@ pub const LIMIT: u32 = 2;
 pub fn uses_limit_here() -> u32 {
     LIMIT
 }
+
+/// Two structs share a field's name, so a lookup by name alone cannot tell them apart.
+pub struct Config {
+    pub limit: u32,
+    pub name: u32,
+}
+
+pub struct Other {
+    pub limit: u32,
+}
+
+impl Config {
+    pub fn own_limit(&self) -> u32 {
+        self.limit
+    }
+}
+
+pub enum Mode {
+    Fast,
+    Slow(u32),
+}
+
+pub type Alias = Config;
+
+/// A variant named like a struct, written among a macro's tokens.
+pub struct Shape;
+
+pub enum Kind {
+    Shape,
+}
+
+pub fn is_shape(kind: Kind) -> bool {
+    matches!(kind, Kind::Shape)
+}

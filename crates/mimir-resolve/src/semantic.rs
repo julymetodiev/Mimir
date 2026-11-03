@@ -6,15 +6,15 @@ use std::path::Path;
 use std::sync::Arc;
 
 use mimir_graph::EdgeKind;
-use mimir_types::{Confidence, FileId, ReferenceKind, Span, Symbol};
+use mimir_types::{Confidence, FileId, ReferenceKind, Span, Symbol, SymbolKind};
 
 use crate::ProjectFile;
+use crate::definitions::{
+    Definitions, ROLE_DEFINITION, ROLE_IMPORT, is_data, is_function, is_term,
+};
 use crate::edges::{ConstantUse, EdgeSet, files_by_path};
 use crate::lookup::{SymbolTable, trait_of};
 use crate::port::{LiveDocument, Occurrence, ScipIndex};
-
-const ROLE_DEFINITION: u64 = 1;
-const ROLE_IMPORT: u64 = 2;
 
 /// Add an edge for each call and each function named as a value in the indexes.
 /// Returns the files they cover.
@@ -39,69 +39,31 @@ pub fn resolve(
 
         let mut definitions = Definitions::default();
         let mut constants = Definitions::default();
+        let mut data = Definitions::default();
         for (file, lines, occurrences) in &documents {
             if !index.unanswered.contains(&file.path) {
                 covered.insert(file.file_id);
             }
+            let id = file.file_id;
             if index.is_edited(&file.path) {
-                // The positions are old, so find each function again by name and order.
-                let mut seen: HashMap<&str, usize> = HashMap::new();
-                let mut own: Vec<_> = occurrences
-                    .iter()
-                    .filter(|o| o.roles & ROLE_DEFINITION != 0 && is_function(&o.symbol))
-                    .collect();
-                own.sort_by_key(|o| (o.line, o.column));
-                for o in own {
-                    let name = symbol_name(&o.symbol);
-                    let n = seen.entry(name).or_default();
-                    if let Some(symbol) = table.nth_definition(file.file_id, name, *n) {
-                        definitions.add(o.symbol.as_str(), symbol);
-                    }
-                    *n += 1;
-                }
-                let mut seen: HashMap<&str, usize> = HashMap::new();
-                let mut own: Vec<_> = occurrences
-                    .iter()
-                    .filter(|o| o.roles & ROLE_DEFINITION != 0 && is_term(&o.symbol))
-                    .collect();
-                own.sort_by_key(|o| (o.line, o.column));
-                for o in own {
-                    let name = symbol_name(&o.symbol);
-                    let n = seen.entry(name).or_default();
-                    if let Some(symbol) = table.nth_constant(file.file_id, name, *n) {
-                        constants.add(o.symbol.as_str(), symbol);
-                    }
-                    *n += 1;
-                }
+                definitions.add_by_order(occurrences, is_function, |name, n| {
+                    table.nth_definition(id, name, n)
+                });
+                constants.add_by_order(occurrences, is_term, |name, n| {
+                    table.nth_constant(id, name, n)
+                });
+                data.add_by_order(occurrences, is_data, |name, n| table.nth_data(id, name, n));
                 continue;
             }
-            for o in occurrences
-                .iter()
-                .filter(|o| o.roles & ROLE_DEFINITION != 0 && is_term(&o.symbol))
-            {
-                let name = lines
-                    .get(o.line as usize)
-                    .and_then(|l| l.get(o.column as usize..o.end_column as usize));
-                if let Some(symbol) =
-                    name.and_then(|name| table.constant_at(file.file_id, o.line + 1, name))
-                {
-                    constants.add(o.symbol.as_str(), symbol);
-                }
-            }
-            for o in occurrences
-                .iter()
-                .filter(|o| o.roles & ROLE_DEFINITION != 0 && is_function(&o.symbol))
-            {
-                let Some(name) = lines
-                    .get(o.line as usize)
-                    .and_then(|l| l.get(o.column as usize..o.end_column as usize))
-                else {
-                    continue;
-                };
-                if let Some(symbol) = table.definition_at(file.file_id, o.line + 1, name) {
-                    definitions.add(o.symbol.as_str(), symbol);
-                }
-            }
+            definitions.add_by_position(occurrences, lines, is_function, |line, name| {
+                table.definition_at(id, line, name)
+            });
+            constants.add_by_position(occurrences, lines, is_term, |line, name| {
+                table.constant_at(id, line, name)
+            });
+            data.add_by_position(occurrences, lines, is_data, |line, name| {
+                table.data_at(id, line, name)
+            });
         }
 
         for (file, lines, occurrences) in documents
@@ -178,6 +140,7 @@ pub fn resolve(
                     });
                 }
             }
+            add_data_uses(table, file, lines, occurrences, &data, &imports, edges);
         }
 
         for (file, lines, occurrences) in documents
@@ -221,32 +184,49 @@ pub fn resolve(
     covered
 }
 
-/// Functions by SCIP symbol. A symbol can name several: a package's test binaries are crates
-/// of their own, yet `main` or a helper in each gets the same symbol.
-#[derive(Default)]
-struct Definitions<'a> {
-    by_symbol: HashMap<&'a str, Vec<Arc<Symbol>>>,
+/// Add an edge for each use in a file of a type or field of the project.
+fn add_data_uses(
+    table: &SymbolTable,
+    file: &ProjectFile,
+    lines: &[&str],
+    occurrences: &[Occurrence],
+    data: &Definitions<'_>,
+    imports: &[Span],
+    edges: &mut EdgeSet,
+) {
+    for o in occurrences
+        .iter()
+        .filter(|o| o.roles & (ROLE_DEFINITION | ROLE_IMPORT) == 0 && is_data(&o.symbol))
+    {
+        let Some(target) = data.get(o.symbol.as_str(), file.file_id) else {
+            continue;
+        };
+        let start = byte_offset(lines, o.line, o.column);
+        // `Self` is written only inside the type it stands for, and says nothing about who uses it.
+        let is_self = lines
+            .get(o.line as usize)
+            .and_then(|l| l.get(o.column as usize..o.end_column as usize))
+            == Some("Self");
+        if is_self || imports.iter().any(|i| i.start <= start && start < i.end) {
+            continue;
+        }
+        if let Some(from) = table.any_at(file.file_id, start) {
+            let span = Span::new(start, byte_offset(lines, o.end_line, o.end_column));
+            add_data_use(from, target, span, edges);
+        }
+    }
 }
 
-impl<'a> Definitions<'a> {
-    fn add(&mut self, symbol: &'a str, definition: &Arc<Symbol>) {
-        self.by_symbol
-            .entry(symbol)
-            .or_default()
-            .push(definition.clone());
+fn add_data_use(from: &Symbol, target: &Symbol, span: Span, edges: &mut EdgeSet) {
+    if from.id == target.id {
+        return;
     }
-
-    /// What a symbol means in a file: the one defined there, or else the only one there is.
-    fn get(&self, symbol: &str, file: FileId) -> Option<&Arc<Symbol>> {
-        let found = self.by_symbol.get(symbol)?;
-        found
-            .iter()
-            .find(|s| s.file_id == file)
-            .or(match found.as_slice() {
-                [one] => Some(one),
-                _ => None,
-            })
-    }
+    let kind = if target.kind == SymbolKind::Field {
+        EdgeKind::UsesField
+    } else {
+        EdgeKind::UsesType
+    };
+    edges.add(from.id, target.id, kind, span, Confidence::Certain);
 }
 
 /// Edges of an edited file, from a running analyzer's answers.
@@ -260,19 +240,46 @@ fn resolve_live(
 ) {
     for reference in &file.references {
         let (line, column) = (reference.range.start_line, reference.range.start_col);
-        if reference.kind == ReferenceKind::Read {
-            let constant = document.sites.get(&(line, column)).and_then(|t| {
-                table.constant_at(by_path.get(t.path.as_path())?.file_id, t.line, &t.name)
-            });
-            if let (Some(constant), Some(from)) =
-                (constant, table.any_at(file.file_id, reference.span.start))
+        if reference.kind == ReferenceKind::FieldUse {
+            let field = document
+                .field_sites
+                .get(&(line, column))
+                .into_iter()
+                .flatten()
+                .find_map(|t| {
+                    let defined_in = by_path.get(t.path.as_path())?.file_id;
+                    table
+                        .data_at(defined_in, t.line, &t.name)
+                        .filter(|s| s.kind == SymbolKind::Field)
+                });
+            if let (Some(field), Some(from)) =
+                (field, table.any_at(file.file_id, reference.span.start))
             {
+                add_data_use(from, field, reference.span, edges);
+            }
+            continue;
+        }
+        if matches!(reference.kind, ReferenceKind::Read | ReferenceKind::TypeUse) {
+            // What a site is, only the answer says: `Kind::A` looks like a constant.
+            let answer = document.sites.get(&(line, column)).and_then(|t| {
+                let defined_in = by_path.get(t.path.as_path())?.file_id;
+                Some((defined_in, t))
+            });
+            let Some(from) = table.any_at(file.file_id, reference.span.start) else {
+                continue;
+            };
+            let Some((defined_in, target)) = answer else {
+                continue;
+            };
+            if let Some(constant) = table.constant_at(defined_in, target.line, &target.name) {
                 constant_uses.push(ConstantUse {
                     from: from.id,
                     constant: constant.id,
                     span: reference.span,
                     confidence: Confidence::Certain,
                 });
+            } else if let Some(data) = table.data_at(defined_in, target.line, &target.name) {
+                add_data_use(from, data, reference.span, edges);
             }
             continue;
         }
@@ -379,28 +386,6 @@ fn byte_offset(lines: &[&str], line: u32, column: u32) -> u32 {
     before as u32 + column
 }
 
-/// The name in a function's SCIP symbol: `run` for `a 0.1.0 impl#[T]run().`.
-fn symbol_name(symbol: &str) -> &str {
-    let descriptor = symbol
-        .strip_suffix("().")
-        .or_else(|| symbol.strip_suffix('.'))
-        .unwrap_or(symbol);
-    let start = descriptor
-        .rfind(['/', '#', ']', ' '])
-        .map_or(0, |at| at + 1);
-    &descriptor[start..]
-}
-
-/// In SCIP's symbol syntax a constant, static or field ends in a plain `.`.
-fn is_term(symbol: &str) -> bool {
-    symbol.ends_with('.') && !symbol.ends_with("().") && !symbol.starts_with("local ")
-}
-
-/// In SCIP's symbol syntax a function or method ends in `().`.
-fn is_function(symbol: &str) -> bool {
-    symbol.ends_with("().") && !symbol.starts_with("local ")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -415,23 +400,5 @@ mod tests {
         assert!(!is_call(", other)"));
         assert!(!is_call("::<u32>)"));
         assert!(!is_call(""));
-    }
-
-    #[test]
-    fn finds_the_name_in_a_symbol() {
-        assert_eq!(symbol_name("rust-analyzer cargo a 0.1.0 run()."), "run");
-        assert_eq!(symbol_name("rust-analyzer cargo a 0.1.0 m/T#run()."), "run");
-        assert_eq!(
-            symbol_name("rust-analyzer cargo a 0.1.0 m/impl#[T]run()."),
-            "run"
-        );
-        assert_eq!(symbol_name("rust-analyzer cargo a 0.1.0 m/TABLE."), "TABLE");
-    }
-
-    #[test]
-    fn locals_are_not_functions() {
-        assert!(is_function("rust-analyzer cargo a 0.1.0 foo()."));
-        assert!(!is_function("local 3"));
-        assert!(!is_function("rust-analyzer cargo a 0.1.0 Foo#"));
     }
 }

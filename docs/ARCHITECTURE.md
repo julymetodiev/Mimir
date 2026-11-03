@@ -32,7 +32,7 @@ Each is a number `scripts/bench` can check, on a project of 20 000 symbols. All 
 | T2 | A query after an edit: first answer under 1 s, marked partial until complete |
 | T3 | From no daemon to a first answer, with the index written: under 5 s |
 | T4 | Daemon idle, without the analyzer: under 400 MB |
-| T5 | Call edges: nothing lost against the SCIP index; every entry of the hand-written list in `crates/mimir-resolve-ra/tests/fixture.rs` holds |
+| T5 | Call edges: nothing lost against the SCIP index; every entry of the hand-written list in `crates/mimir-resolve-ra/tests/fixture/expected.rs` holds |
 | T6 | After edits, the graph equals the graph from a new index: 0 differences |
 
 ## 3. Layers
@@ -109,8 +109,11 @@ running analyzer too. Without `rust-analyzer` only syntax rules apply, and `sync
 files that covers.
 
 Edge kinds: `Calls` is exact. `UsesAsValue` (function values, constants holding functions) and
-`Implements` are possible targets. `UsesConstant` is a read of any other constant, shown when tracing
-the constant and not the reader. Syntax rules link a call only when its form allows one target.
+`Implements` are possible targets. `UsesConstant` is a read of any other constant. `UsesType` names a
+type, trait, alias or variant, and `UsesField` reads, writes or destructures a field; an index does
+not tell those apart. All three show when tracing what is used, and not the user. Syntax rules link
+a call only when its form allows one target, a type only when it is in the same module, and a field
+only as `self.field` in a method of such a type.
 
 ## 6. Checks
 

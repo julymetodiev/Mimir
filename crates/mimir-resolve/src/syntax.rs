@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use mimir_graph::EdgeKind;
 use mimir_parse_core::extracted::CallForm;
-use mimir_types::{Confidence, FileId, ReferenceKind, Symbol};
+use mimir_types::{Confidence, FileId, ReferenceKind, Symbol, SymbolKind};
 
 use crate::ProjectFile;
 use crate::edges::{ConstantUse, EdgeSet};
@@ -162,6 +162,46 @@ pub fn resolve_constant_uses(
                     span: reference.span,
                     confidence: Confidence::High,
                 });
+            }
+        }
+    }
+}
+
+/// Add edges for uses of types and fields in files not in `covered`, where syntax leaves no doubt:
+/// a type of this module named without a path, a variant of such an enum, and `self.field` in a
+/// method of such a type. What a longer path or another receiver leads to takes types to know.
+pub fn resolve_data_uses(
+    table: &SymbolTable,
+    files: &[ProjectFile],
+    covered: &HashSet<FileId>,
+    edges: &mut EdgeSet,
+) {
+    for file in files.iter().filter(|f| !covered.contains(&f.file_id)) {
+        for reference in &file.references {
+            let Some(from) = table.any_at(file.file_id, reference.span.start) else {
+                continue;
+            };
+            let offset = reference.span.start;
+            let owner = |name: &str| table.type_in_scope(file.file_id, offset, name);
+            let context = reference.context.as_deref();
+            let (target, kind) = match (reference.kind, context) {
+                (ReferenceKind::TypeUse, None) => (owner(&reference.name), EdgeKind::UsesType),
+                (ReferenceKind::TypeUse, Some(path)) if !path.contains("::") => (
+                    owner(path).and_then(|enumeration| {
+                        table.member_of(enumeration, &reference.name, SymbolKind::EnumVariant)
+                    }),
+                    EdgeKind::UsesType,
+                ),
+                (ReferenceKind::FieldUse, Some("self")) => (
+                    owner_of(from).and_then(owner).and_then(|structure| {
+                        table.member_of(structure, &reference.name, SymbolKind::Field)
+                    }),
+                    EdgeKind::UsesField,
+                ),
+                _ => continue,
+            };
+            if let Some(target) = target.filter(|target| target.id != from.id) {
+                edges.add(from.id, target.id, kind, reference.span, Confidence::High);
             }
         }
     }

@@ -2,144 +2,23 @@
 //! resolver is graded by itself. `fixtures/resolve-workspace` holds the traps: same names
 //! across types and crates, calls inside macros, trait methods, nested functions.
 
+mod edits;
 mod expected;
+mod support;
 
 use expected::{
-    CALLS, CONSTANT_READS, IMPLEMENTS, IMPLEMENTS_BY_SYNTAX, NEEDS_TYPES, SOURCES, VALUES,
-    VALUES_NEED_TYPES,
+    CALLS, CONSTANT_READS, DATA_USES_BY_SYNTAX, FIELD_USES, IMPLEMENTS, IMPLEMENTS_BY_SYNTAX,
+    NEEDS_TYPES, SOURCES, TYPE_USES, VALUES, VALUES_NEED_TYPES,
 };
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
 
-use mimir_graph::EdgeKind;
-use mimir_graph::{CodeGraph, TraceOptions, TraceRelationship};
-use mimir_parse_core::LanguageAdapter;
-use mimir_parse_rust::RustAdapter;
-use mimir_resolve::{ProjectFile, Refresh, ScipIndex, link};
+use mimir_graph::{EdgeKind, TraceRelationship};
+use mimir_resolve::{Refresh, ScipIndex, link};
 use mimir_resolve_ra::{Analyzers, load_or_generate};
-use mimir_types::{FileId, IdGenerator, Symbol, SymbolId, SymbolKind};
-
-type Edge = (String, String);
-
-fn workspace() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/resolve-workspace")
-}
-
-fn expected(calls: &[(&str, &str)]) -> BTreeSet<Edge> {
-    calls
-        .iter()
-        .map(|(a, b)| (a.to_string(), b.to_string()))
-        .collect()
-}
-
-fn index() -> (CodeGraph, Vec<ProjectFile>) {
-    index_at(&workspace())
-}
-
-fn index_at(workspace: &Path) -> (CodeGraph, Vec<ProjectFile>) {
-    let (graph, ids) = (CodeGraph::new(), IdGenerator::new());
-    let adapter = RustAdapter::new();
-    let mut files = Vec::new();
-    for path in SOURCES {
-        let source = std::fs::read_to_string(workspace.join(path)).unwrap();
-        let file_id: FileId = ids.next();
-        let tree = adapter.parse(&source).unwrap();
-        for s in adapter.extract_symbols(&tree, file_id) {
-            graph.add_symbol(Symbol {
-                id: ids.next(),
-                name: s.name,
-                qualified_name: s.qualified_name,
-                kind: s.kind,
-                language: s.language,
-                file_id,
-                range: s.range,
-                span: s.span,
-                signature: s.signature,
-                visibility: s.visibility,
-                doc: s.doc,
-            });
-        }
-        files.push(ProjectFile {
-            file_id,
-            path: PathBuf::from(path),
-            references: adapter.extract_references(&tree, file_id),
-            source: source.as_str().into(),
-        });
-    }
-    (graph, files)
-}
-
-/// `crate::owner::name` of a symbol.
-fn label(symbol: &Symbol, files: &[ProjectFile]) -> String {
-    let file = files.iter().find(|f| f.file_id == symbol.file_id).unwrap();
-    let krate = file
-        .path
-        .components()
-        .next()
-        .unwrap()
-        .as_os_str()
-        .to_string_lossy()
-        .into_owned();
-    let segments = symbol.qualified_name.segments();
-    match segments.len().checked_sub(2).map(|i| segments[i].as_str()) {
-        Some(parent) => {
-            let parent = parent.strip_prefix("impl ").unwrap_or(parent);
-            let owner = parent.rsplit(" for ").next().unwrap();
-            format!("{krate}::{owner}::{}", symbol.name)
-        }
-        None => format!("{krate}::{}", symbol.name),
-    }
-}
-
-fn trace_options(include_callers: bool, include_callees: bool, max_depth: usize) -> TraceOptions {
-    TraceOptions {
-        max_depth: Some(max_depth),
-        include_callers,
-        include_callees,
-    }
-}
-
-fn callees_of(
-    graph: &CodeGraph,
-    id: mimir_types::SymbolId,
-) -> Vec<std::sync::Arc<mimir_types::Symbol>> {
-    graph
-        .relations()
-        .callees(id)
-        .into_iter()
-        .filter_map(|callee| graph.get_symbol(callee))
-        .collect()
-}
-
-fn call_edges(graph: &CodeGraph, files: &[ProjectFile]) -> BTreeSet<Edge> {
-    let mut edges = BTreeSet::new();
-    for file in files {
-        for symbol in graph.symbols_in_file(file.file_id) {
-            for callee in callees_of(graph, symbol.id) {
-                edges.insert((label(&symbol, files), label(&callee, files)));
-            }
-        }
-    }
-    edges
-}
-
-fn implementation_edges(graph: &CodeGraph, files: &[ProjectFile]) -> BTreeSet<Edge> {
-    edges_of_kind(graph, files, EdgeKind::Implements)
-}
-
-fn edges_of_kind(graph: &CodeGraph, files: &[ProjectFile], kind: EdgeKind) -> BTreeSet<Edge> {
-    let mut edges = BTreeSet::new();
-    for file in files {
-        for symbol in graph.symbols_in_file(file.file_id) {
-            for (target, edge) in graph.get_outgoing(symbol.id) {
-                if edge.kind == kind {
-                    edges.insert((label(&symbol, files), label(&target, files)));
-                }
-            }
-        }
-    }
-    edges
-}
+use support::{
+    call_edges, callees_of, edges_of_kind, expected, find, implementation_edges, index, label,
+    trace_options, workspace,
+};
 
 #[test]
 fn syntax_rules_never_guess() {
@@ -180,6 +59,22 @@ fn syntax_rules_never_guess() {
         "two constants could be meant: {reads:?}"
     );
     assert!(reads.contains(&("beta::uses_plain".to_string(), "beta::PLAIN".to_string())));
+    // Types and fields: what syntax links is right, and what it cannot know it leaves out.
+    let data: BTreeSet<_> = edges_of_kind(&graph, &files, EdgeKind::UsesType)
+        .union(&edges_of_kind(&graph, &files, EdgeKind::UsesField))
+        .cloned()
+        .collect();
+    let all_data: BTreeSet<_> = expected(TYPE_USES)
+        .union(&expected(FIELD_USES))
+        .cloned()
+        .collect();
+    let wrong: Vec<_> = data.difference(&all_data).collect();
+    assert!(wrong.is_empty(), "uses that are not there: {wrong:#?}");
+    let reached: Vec<_> = expected(DATA_USES_BY_SYNTAX)
+        .into_iter()
+        .filter(|edge| !data.contains(edge))
+        .collect();
+    assert!(reached.is_empty(), "uses syntax should reach: {reached:#?}");
     assert_eq!(report.semantic_files, 0);
     assert_eq!(report.syntax_files, SOURCES.len());
 }
@@ -228,6 +123,14 @@ fn semantic_index_finds_every_call() {
         edges_of_kind(&graph, &files, EdgeKind::UsesConstant),
         expected(CONSTANT_READS)
     );
+    assert_eq!(
+        edges_of_kind(&graph, &files, EdgeKind::UsesType),
+        expected(TYPE_USES)
+    );
+    assert_eq!(
+        edges_of_kind(&graph, &files, EdgeKind::UsesField),
+        expected(FIELD_USES)
+    );
 
     let plain = find(&graph, &files, "beta::PLAIN");
     let trace = graph.trace(plain, trace_options(true, false, 1)).unwrap();
@@ -242,6 +145,37 @@ fn semantic_index_finds_every_call() {
     let reader = find(&graph, &files, "beta::uses_plain");
     let trace = graph.trace(reader, trace_options(false, true, 1)).unwrap();
     assert!(trace.callees.is_empty(), "a read is not a callee");
+
+    // Two fields share a name, and each has its own users.
+    let users = |wanted: &str| {
+        let id = find(&graph, &files, wanted);
+        let trace = graph.trace(id, trace_options(true, false, 1)).unwrap();
+        let mut users: Vec<_> = trace
+            .callers
+            .iter()
+            .map(|n| {
+                assert_eq!(n.relationship, TraceRelationship::User);
+                label(&n.symbol, &files)
+            })
+            .collect();
+        users.sort();
+        users
+    };
+    assert_eq!(
+        users("alpha::Config::limit"),
+        ["alpha::Config::own_limit", "beta::reads_field"]
+    );
+    assert_eq!(
+        users("alpha::Other::limit"),
+        ["beta::builds_other", "beta::shorthand_field"]
+    );
+    assert_eq!(users("alpha::Alias"), ["beta::through_alias"]);
+    let holder = find(&graph, &files, "beta::reads_field");
+    let trace = graph.trace(holder, trace_options(false, true, 1)).unwrap();
+    assert!(
+        trace.callees.is_empty(),
+        "a type or a field is not a callee"
+    );
 
     let names = |nodes: &[mimir_graph::TraceNode], relationship| {
         let mut names: Vec<_> = nodes
@@ -306,123 +240,4 @@ fn semantic_index_finds_every_call() {
             "{holder} not in {reached:?}"
         );
     }
-}
-
-/// An edit answered by a running analyzer gives what a new index gives.
-#[test]
-fn edited_files_match_a_new_index() {
-    if std::process::Command::new("rust-analyzer")
-        .arg("--version")
-        .output()
-        .is_err()
-    {
-        eprintln!("skipped: rust-analyzer is not installed");
-        return;
-    }
-    let scratch = std::env::temp_dir().join(format!("mimir-resolve-edit-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&scratch);
-    for path in ["Cargo.toml", "alpha/Cargo.toml", "beta/Cargo.toml"]
-        .into_iter()
-        .chain(SOURCES)
-    {
-        std::fs::create_dir_all(scratch.join(path).parent().unwrap()).unwrap();
-        std::fs::copy(workspace().join(path), scratch.join(path)).unwrap();
-    }
-    let edit = |path: &str, from: &str, to: &str| {
-        let text = std::fs::read_to_string(scratch.join(path)).unwrap();
-        assert!(text.contains(from), "{from}");
-        std::fs::write(scratch.join(path), text.replacen(from, to, 1)).unwrap();
-    };
-    let edges = |graph: &CodeGraph, files: &[ProjectFile]| {
-        [
-            EdgeKind::Calls,
-            EdgeKind::UsesAsValue,
-            EdgeKind::UsesConstant,
-            EdgeKind::Implements,
-        ]
-        .map(|kind| edges_of_kind(graph, files, kind))
-    };
-
-    let cache = scratch.join("cache");
-    let mut analyzers = Analyzers::default();
-    let (_, files) = index_at(&scratch);
-    load_or_generate(&scratch, &cache, &files, &mut analyzers, Refresh::Edits);
-
-    // Lines move in both files, a function is added, and a call and a value change.
-    edit(
-        "alpha/src/lib.rs",
-        "pub struct Disk;",
-        "pub fn added() -> u32 {\n    helper()\n}\n\npub struct Disk;",
-    );
-    edit(
-        "beta/src/lib.rs",
-        "pub fn direct() -> u32 {\n    helper()",
-        "pub fn direct() -> u32 {\n    alpha::added()",
-    );
-    edit(
-        "beta/src/lib.rs",
-        "disks.iter().map(Disk::get)",
-        "disks.iter().map(Disk::load_value)",
-    );
-    edit(
-        "alpha/src/lib.rs",
-        "    fn read(&self) -> u32 {",
-        "    pub fn load_value(&self) -> u32 {\n        self.get()\n    }\n    fn read(&self) -> u32 {",
-    );
-
-    // Before any analyzer answers, syntax rules stand in for the edited files, and only those.
-    let (graph, files) = index_at(&scratch);
-    let indexes = load_or_generate(
-        &scratch,
-        &cache,
-        &files,
-        &mut Analyzers::default(),
-        Refresh::Saved,
-    );
-    let report = link(&graph, &files, &indexes);
-    assert_eq!((report.live_files, report.syntax_files), (0, 2));
-    let saved = edges(&graph, &files);
-
-    let (graph, files) = index_at(&scratch);
-    let indexes = load_or_generate(&scratch, &cache, &files, &mut analyzers, Refresh::Edits);
-    let report = link(&graph, &files, &indexes);
-    assert_eq!(report.live_files, 2, "both edited files go to the analyzer");
-    let live = edges(&graph, &files);
-
-    let (graph, files) = index_at(&scratch);
-    let indexes = load_or_generate(&scratch, &cache, &files, &mut analyzers, Refresh::Full);
-    let report = link(&graph, &files, &indexes);
-    assert_eq!(report.live_files, 0);
-    let full = edges(&graph, &files);
-    let _ = std::fs::remove_dir_all(&scratch);
-
-    let wrong: Vec<_> = saved[0].difference(&full[0]).collect();
-    assert!(wrong.is_empty(), "calls syntax got wrong: {wrong:#?}");
-    assert_eq!(live[0], full[0], "calls");
-    assert_eq!(live[2], full[2], "implementations");
-    // Only a value among a macro's tokens has to wait for the next index.
-    let missing: Vec<_> = full[1].difference(&live[1]).collect();
-    assert_eq!(
-        missing,
-        [&(
-            "beta::value_in_macro".to_string(),
-            "beta::helper".to_string()
-        )]
-    );
-    assert!(live[1].difference(&full[1]).next().is_none());
-}
-
-fn find(graph: &CodeGraph, files: &[ProjectFile], wanted: &str) -> SymbolId {
-    files
-        .iter()
-        .flat_map(|f| graph.symbols_in_file(f.file_id))
-        .find(|s| {
-            label(s, files) == wanted
-                && matches!(
-                    s.kind,
-                    SymbolKind::Function | SymbolKind::Method | SymbolKind::Constant
-                )
-        })
-        .unwrap_or_else(|| panic!("no symbol {wanted}"))
-        .id
 }

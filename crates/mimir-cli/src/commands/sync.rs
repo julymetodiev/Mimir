@@ -31,6 +31,8 @@ pub async fn execute(full: bool) -> Result<()> {
         println!("Trait method implementations: {}", link.implementations);
         println!("Functions used as values: {}", link.function_values);
         println!("Uses of constants: {}", link.constant_uses);
+        println!("Uses of types: {}", link.type_uses);
+        println!("Uses of fields: {}", link.field_uses);
     }
     if let Some(path) = result.saved_to {
         println!("Graph saved to {}", path.display());

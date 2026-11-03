@@ -14,6 +14,12 @@ pub enum EdgeKind {
     /// Reads a constant or static that holds no function. `trace` of the constant shows it, and
     /// `trace` of the reader does not: `MAX_SIZE` under every function would hide the rest.
     UsesConstant,
+    /// Names a type, trait, alias or variant. Like a read of a constant, only `trace` of what is
+    /// used shows it.
+    UsesType,
+    /// Reads, writes or destructures a field. An index does not tell these apart. Only `trace` of
+    /// the field shows it.
+    UsesField,
     /// Import relationship.
     Imports,
     /// Implements trait/interface.
@@ -27,6 +33,8 @@ impl EdgeKind {
             EdgeKind::Calls => "Calls",
             EdgeKind::UsesAsValue => "UsesAsValue",
             EdgeKind::UsesConstant => "UsesConstant",
+            EdgeKind::UsesType => "UsesType",
+            EdgeKind::UsesField => "UsesField",
             EdgeKind::Imports => "Imports",
             EdgeKind::Implements => "Implements",
         }
