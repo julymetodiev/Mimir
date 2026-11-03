@@ -1,62 +1,7 @@
-//! Commands for the graph actor.
+//! Options and results of graph operations.
 
-use mimir_types::{FileId, Language, SymbolId};
+use mimir_types::Language;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use tokio::sync::oneshot;
-
-use crate::response::{FindResponse, SearchResponse, StatsResponse, TraceResponse};
-
-/// Commands that can be sent to the graph actor.
-#[derive(Debug)]
-pub enum GraphCommand {
-    /// Add or update a file in the graph.
-    AddFile {
-        path: PathBuf,
-        content: String,
-        language: Language,
-        reply: oneshot::Sender<Result<FileId, mimir_error::GraphError>>,
-    },
-
-    /// Remove a file from the graph.
-    RemoveFile {
-        file_id: FileId,
-        reply: oneshot::Sender<Result<bool, mimir_error::GraphError>>,
-    },
-
-    /// Find symbols by name.
-    FindSymbol {
-        name: String,
-        options: FindOptions,
-        reply: oneshot::Sender<FindResponse>,
-    },
-
-    /// Trace a symbol's callers and callees.
-    Trace {
-        symbol_id: SymbolId,
-        options: TraceOptions,
-        reply: oneshot::Sender<TraceResponse>,
-    },
-
-    /// Get graph statistics.
-    Stats {
-        reply: oneshot::Sender<StatsResponse>,
-    },
-
-    /// Trigger a sync operation.
-    Sync {
-        reply: oneshot::Sender<Result<SyncResult, mimir_error::GraphError>>,
-    },
-
-    /// Search for symbols by pattern.
-    Search {
-        options: SearchOptions,
-        reply: oneshot::Sender<SearchResponse>,
-    },
-
-    /// Shutdown the actor.
-    Shutdown,
-}
 
 /// Options for finding symbols.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

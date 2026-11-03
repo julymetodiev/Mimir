@@ -1,13 +1,13 @@
 //! Daemon server - runs GraphActor + FileWatcher and accepts IPC connections.
 
 use anyhow::{Context, Result};
-use mimir_graph_actor::{FileWatcher, GraphActor, GraphHandle, WatcherConfig, WatcherHandle};
+use mimir_engine::{
+    FileWatcher, GraphActor, GraphHandle, WatcherConfig, WatcherHandle, command_channel,
+    event_channel,
+};
 use mimir_parse_core::AdapterRegistry;
 use mimir_parse_rust::RustAdapter;
-use mimir_protocol::{
-    IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult, command_channel, event_channel,
-    socket_path,
-};
+use mimir_protocol::{IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult, socket_path};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;

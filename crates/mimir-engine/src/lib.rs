@@ -28,8 +28,8 @@
 //! # Example
 //!
 //! ```ignore
-//! use mimir_graph_actor::{GraphActor, GraphHandle};
-//! use mimir_protocol::{command_channel, event_channel};
+//! use mimir_engine::{GraphActor, GraphHandle};
+//! use mimir_engine::{command_channel, event_channel};
 //! use std::path::PathBuf;
 //!
 //! #[tokio::main]
@@ -62,9 +62,20 @@
 //! ```
 
 mod actor;
+mod channel;
+mod command;
+mod event;
 mod handle;
+mod scanner;
 mod watcher;
 
 pub use actor::GraphActor;
+pub use channel::{
+    CommandReceiver, CommandSender, DEFAULT_COMMAND_BUFFER, DEFAULT_EVENT_CAPACITY, EventReceiver,
+    EventSender, command_channel, event_channel,
+};
+pub use command::GraphCommand;
+pub use event::{FileEvent, GraphEvent};
 pub use handle::GraphHandle;
+pub use scanner::{ScannedFile, Scanner};
 pub use watcher::{FileWatcher, WatcherConfig, WatcherHandle};

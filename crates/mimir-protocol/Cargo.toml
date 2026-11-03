@@ -10,10 +10,8 @@ repository.workspace = true
 
 [dependencies]
 mimir-types.workspace = true
-mimir-error.workspace = true
 
 serde.workspace = true
-tokio = { workspace = true, features = ["sync"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }

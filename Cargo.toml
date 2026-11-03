@@ -3,7 +3,6 @@ resolver = "2"
 members = [
     "crates/mimir-types",
     "crates/mimir-error",
-    "crates/mimir-files",
     # M2: Graph crates
     "crates/mimir-parse-core",
     "crates/mimir-parse-rust",
@@ -12,7 +11,7 @@ members = [
     # M3: Actor crates
     "crates/mimir-edit",
     "crates/mimir-protocol",
-    "crates/mimir-graph-actor",
+    "crates/mimir-engine",
     # CLI
     "crates/mimir-cli",
 ]
@@ -35,12 +34,11 @@ mimir-parse-core = { path = "crates/mimir-parse-core" }
 mimir-parse-rust = { path = "crates/mimir-parse-rust" }
 
 # Internal crates - Layer 3
-mimir-files = { path = "crates/mimir-files" }
 mimir-graph = { path = "crates/mimir-graph" }
 mimir-resolve = { path = "crates/mimir-resolve" }
 mimir-edit = { path = "crates/mimir-edit" }
 mimir-protocol = { path = "crates/mimir-protocol" }
-mimir-graph-actor = { path = "crates/mimir-graph-actor" }
+mimir-engine = { path = "crates/mimir-engine" }
 
 # Error handling
 thiserror = "2.0"

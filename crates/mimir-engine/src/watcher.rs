@@ -1,7 +1,6 @@
 //! File system watcher for automatic graph updates.
 
 use mimir_error::GraphError;
-use mimir_protocol::{CommandSender, GraphCommand};
 use mimir_types::Language;
 use notify::RecursiveMode;
 use notify_debouncer_mini::{DebouncedEventKind, new_debouncer};
@@ -13,6 +12,9 @@ use std::{
 };
 use tokio::sync::{RwLock, mpsc, oneshot};
 use tracing::{debug, error, info, warn};
+
+use crate::channel::CommandSender;
+use crate::command::GraphCommand;
 
 /// Default patterns to ignore when watching.
 pub const DEFAULT_IGNORE_PATTERNS: &[&str] = &[

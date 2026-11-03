@@ -1,12 +1,11 @@
 //! Graph actor implementation.
 
 use mimir_error::GraphError;
-use mimir_files::{ScannedFile, Scanner};
 use mimir_graph::{CodeGraph, TraceOptions as GraphTraceOptions, TraceRelationship};
 use mimir_parse_core::AdapterRegistry;
 use mimir_protocol::{
-    CommandReceiver, EventSender, FindResponse, GraphCommand, GraphEvent, SearchOptions,
-    SearchResponse, StatsResponse, SymbolInfo, SyncResult, TraceNode, TraceRelation, TraceResponse,
+    FindResponse, SearchOptions, SearchResponse, StatsResponse, SymbolInfo, SyncResult, TraceNode,
+    TraceRelation, TraceResponse,
 };
 use mimir_resolve::{Analyzers, ProjectFile, Refresh, ScipIndex, link, load_or_generate};
 use mimir_types::{ContentHash, FileId, IdGenerator, Language, Symbol, SymbolId, SymbolKind};
@@ -15,6 +14,11 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
+
+use crate::channel::{CommandReceiver, EventSender};
+use crate::command::GraphCommand;
+use crate::event::GraphEvent;
+use crate::scanner::{ScannedFile, Scanner};
 
 /// How long a running analyzer, which holds gigabytes, is kept for the next edit.
 const ANALYZER_IDLE: Duration = Duration::from_secs(600);
@@ -757,8 +761,8 @@ impl GraphActor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::channel::{command_channel, event_channel};
     use mimir_parse_rust::RustAdapter;
-    use mimir_protocol::{command_channel, event_channel};
     use tokio::sync::oneshot;
 
     fn create_test_registry() -> Arc<AdapterRegistry> {

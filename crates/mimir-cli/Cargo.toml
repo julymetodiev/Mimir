@@ -14,14 +14,13 @@ path = "src/main.rs"
 
 [dependencies]
 mimir-types = { workspace = true }
-mimir-files = { workspace = true }
 mimir-graph = { workspace = true }
 mimir-parse-core = { workspace = true }
 mimir-parse-rust = { workspace = true }
 mimir-resolve = { workspace = true }
 mimir-edit = { workspace = true }
 mimir-protocol = { workspace = true }
-mimir-graph-actor = { workspace = true }
+mimir-engine = { workspace = true }
 clap = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

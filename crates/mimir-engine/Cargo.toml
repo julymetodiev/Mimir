@@ -1,6 +1,6 @@
 [package]
-name = "mimir-graph-actor"
-description = "Actor-based graph management for Mimir"
+name = "mimir-engine"
+description = "The one writer of the Mimir graph: sync, watch, query"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,10 +16,12 @@ mimir-graph.workspace = true
 mimir-parse-core.workspace = true
 mimir-parse-rust.workspace = true
 mimir-resolve.workspace = true
-mimir-files.workspace = true
+chrono.workspace = true
+ignore.workspace = true
 
-tokio = { workspace = true, features = ["sync", "rt", "time", "macros"] }
+tokio = { workspace = true, features = ["sync", "rt", "time", "macros", "fs"] }
 tracing.workspace = true
+serde.workspace = true
 notify.workspace = true
 notify-debouncer-mini.workspace = true
 regex.workspace = true

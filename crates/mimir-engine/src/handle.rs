@@ -2,12 +2,15 @@
 
 use mimir_error::GraphError;
 use mimir_protocol::{
-    CommandSender, EventReceiver, EventSender, FindOptions, FindResponse, GraphCommand,
-    SearchOptions, SearchResponse, StatsResponse, SyncResult, TraceOptions, TraceResponse,
+    FindOptions, FindResponse, SearchOptions, SearchResponse, StatsResponse, SyncResult,
+    TraceOptions, TraceResponse,
 };
 use mimir_types::{FileId, Language, SymbolId};
 use std::path::PathBuf;
 use tokio::sync::oneshot;
+
+use crate::channel::{CommandSender, EventReceiver, EventSender};
+use crate::command::GraphCommand;
 
 /// A handle to communicate with the graph actor.
 ///
@@ -205,9 +208,9 @@ impl GraphHandle {
 mod tests {
     use super::*;
     use crate::actor::GraphActor;
+    use crate::channel::{command_channel, event_channel};
     use mimir_parse_core::AdapterRegistry;
     use mimir_parse_rust::RustAdapter;
-    use mimir_protocol::{command_channel, event_channel};
     use std::sync::Arc;
 
     fn create_test_registry() -> Arc<AdapterRegistry> {

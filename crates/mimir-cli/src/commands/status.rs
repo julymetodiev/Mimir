@@ -2,7 +2,7 @@
 
 use crate::app::{App, find_project_root};
 use anyhow::{Result, bail};
-use mimir_files::Scanner;
+use mimir_engine::Scanner;
 use std::collections::HashMap;
 
 /// Execute the status command.

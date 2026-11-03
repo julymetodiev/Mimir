@@ -1,9 +1,9 @@
-//! Integration tests for mimir-graph-actor.
+//! Integration tests for mimir-engine.
 
-use mimir_graph_actor::{GraphActor, GraphHandle};
+use mimir_engine::{GraphActor, GraphHandle};
+use mimir_engine::{command_channel, event_channel};
 use mimir_parse_core::AdapterRegistry;
 use mimir_parse_rust::RustAdapter;
-use mimir_protocol::{command_channel, event_channel};
 use mimir_types::Language;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -193,10 +193,7 @@ async fn test_add_file_directly() {
 
     // Check we received the event
     let event = event_rx.recv().await.unwrap();
-    assert!(matches!(
-        event,
-        mimir_protocol::GraphEvent::FileAdded { .. }
-    ));
+    assert!(matches!(event, mimir_engine::GraphEvent::FileAdded { .. }));
 
     // Find the symbols
     let fn_result = handle.find_symbol("test_fn").await.unwrap();

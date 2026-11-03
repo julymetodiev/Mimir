@@ -1,7 +1,7 @@
 //! Sync command - build the code graph from project files.
 
 use anyhow::{Context, Result};
-use mimir_files::Scanner;
+use mimir_engine::Scanner;
 use mimir_graph::CodeGraph;
 use mimir_graph::{EdgeData, EdgeKind};
 use mimir_parse_core::AdapterRegistry;
