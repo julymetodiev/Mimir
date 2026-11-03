@@ -8,6 +8,7 @@ All notable changes to Mimir are recorded here. The format follows
 
 ### Added
 
+- **Homebrew**: `brew install julymetodiev/tap/mimir`.
 - **`mimir view`**: a browser on the whole graph, which changes as the code and the agents do. Symbols
   are placed by crate and file and drawn on the GPU. Zoom, search, and choose a symbol to see what it
   calls, who calls it and its source. What a query or an edit touches lights up as it happens. It reads

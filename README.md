@@ -21,8 +21,17 @@ Rust only for now, on macOS and Linux.
 
 ## Install
 
-Download an archive for your platform from the
+With [Homebrew](https://brew.sh), on macOS and Linux:
+
+```bash
+brew install julymetodiev/tap/mimir
+```
+
+Or download an archive for your platform from the
 [latest release](https://github.com/julymetodiev/Mimir/releases/latest) and put `mimir` on your `PATH`.
+The binaries are not signed, so on macOS one downloaded in a browser may need
+`xattr -d com.apple.quarantine mimir`.
+
 Or build it, with Rust 1.95 or newer:
 
 ```bash

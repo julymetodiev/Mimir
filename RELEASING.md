@@ -27,8 +27,13 @@ GitHub release with archives, `SHA256SUMS` and the changelog's section as notes.
 
 ## After a release
 
-The Homebrew tap, [julymetodiev/homebrew-tap](https://github.com/julymetodiev/homebrew-tap), is
-updated by hand with the new URLs and checksums from `SHA256SUMS`.
+Once the release is published, put it in the Homebrew tap,
+[julymetodiev/homebrew-tap](https://github.com/julymetodiev/homebrew-tap). This takes the checksums from
+the release's `SHA256SUMS`:
+
+```bash
+scripts/update-tap.sh X.Y.Z --push
+```
 
 ## A version that is wrong
 
