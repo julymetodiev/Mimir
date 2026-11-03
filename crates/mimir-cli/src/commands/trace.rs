@@ -74,7 +74,7 @@ pub async fn execute(request: TraceRequest<'_>) -> Result<()> {
     );
     if trace.provisional {
         println!(
-            "Partial: rust-analyzer is still working, so some calls may be missing. Run this again shortly."
+            "Partial: analysis is still running, so some calls may be missing. Run this again shortly."
         );
     }
     Ok(())

@@ -6,8 +6,8 @@ exactly. If it is silent or contradicts what you need, open an issue before writ
 ## Set up
 
 You need Rust (the version in `rust-version` in `Cargo.toml`, or newer) on macOS or Linux, and
-`rustup component add rust-analyzer rust-src` for the tests that use a real index. Without it those
-tests skip themselves.
+`rustup component add rust-analyzer rust-src` and `npm install -g tsrs` for the tests that use them.
+Without them those tests skip themselves.
 
 ```bash
 git clone https://github.com/julymetodiev/Mimir.git

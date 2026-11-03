@@ -1106,7 +1106,7 @@ checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 
 [[package]]
 name = "mimir-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1135,7 +1135,7 @@ dependencies = [
 
 [[package]]
 name = "mimir-client"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mimir-protocol",
  "mimir-types",
@@ -1146,7 +1146,7 @@ dependencies = [
 
 [[package]]
 name = "mimir-daemon"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mimir-engine",
  "mimir-parse-core",
@@ -1162,7 +1162,7 @@ dependencies = [
 
 [[package]]
 name = "mimir-edit"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mimir-types",
  "serde",
@@ -1173,7 +1173,7 @@ dependencies = [
 
 [[package]]
 name = "mimir-engine"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "ignore",
@@ -1199,7 +1199,7 @@ dependencies = [
 
 [[package]]
 name = "mimir-graph"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "arc-swap",
  "dashmap",
@@ -1211,7 +1211,7 @@ dependencies = [
 
 [[package]]
 name = "mimir-lsp"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mimir-types",
  "serde_json",
@@ -1221,7 +1221,7 @@ dependencies = [
 
 [[package]]
 name = "mimir-mcp"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mimir-client",
  "mimir-protocol",
@@ -1235,7 +1235,7 @@ dependencies = [
 
 [[package]]
 name = "mimir-parse-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "dashmap",
  "mimir-types",
@@ -1246,7 +1246,7 @@ dependencies = [
 
 [[package]]
 name = "mimir-parse-rust"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mimir-parse-core",
  "mimir-types",
@@ -1257,7 +1257,7 @@ dependencies = [
 
 [[package]]
 name = "mimir-parse-ts"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mimir-parse-core",
  "mimir-types",
@@ -1268,7 +1268,7 @@ dependencies = [
 
 [[package]]
 name = "mimir-protocol"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mimir-types",
  "serde",
@@ -1279,7 +1279,7 @@ dependencies = [
 
 [[package]]
 name = "mimir-resolve"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mimir-graph",
  "mimir-parse-core",
@@ -1289,7 +1289,7 @@ dependencies = [
 
 [[package]]
 name = "mimir-resolve-ra"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mimir-graph",
  "mimir-lsp",
@@ -1304,7 +1304,7 @@ dependencies = [
 
 [[package]]
 name = "mimir-resolve-tsrs"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "mimir-graph",
  "mimir-lsp",
@@ -1319,7 +1319,7 @@ dependencies = [
 
 [[package]]
 name = "mimir-types"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "hex",
@@ -1329,7 +1329,7 @@ dependencies = [
 
 [[package]]
 name = "mimir-view"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "axum",
  "getrandom 0.4.3",
@@ -1345,7 +1345,7 @@ dependencies = [
 
 [[package]]
 name = "mimir-view-page"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bytemuck",
  "js-sys",
@@ -1358,7 +1358,7 @@ dependencies = [
 
 [[package]]
 name = "mimir-view-wire"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "thiserror",
 ]

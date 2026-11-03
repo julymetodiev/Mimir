@@ -1,7 +1,7 @@
 # JavaScript and TypeScript
 
 The specification for section 8 of [ARCHITECTURE.md](ARCHITECTURE.md). The rules, layers and targets
-there hold here too. **Status: approved, being built.** Section 9 says how far it has come.
+there hold here too. **Status: built.** Section 8 says what is open.
 
 ## 1. Scope
 
@@ -255,4 +255,4 @@ stops at `.d.ts`. Outside targets give no edge, so this changes nothing.
 4. `mimir-parse-ts`, with syntax rules only. Done.
 5. `mimir-resolve-tsrs`, with the fixture of TS1. Done.
 6. Saved answers and edits, with TS3. Done.
-7. README, MCP instructions and the targets moved to the architecture.
+7. README and the MCP instructions. Done. The targets move to the architecture once TS4 is measured.
