@@ -135,7 +135,7 @@ instructions, such as `AGENTS.md`.
 
 ## See it
 
-[Look at Mimir's own code this way](https://julymetodiev.github.io/Mimir/), in a browser with WebGPU. On
+[Look at Mimir's own code this way](https://mimir.369.is/), in a browser with WebGPU. On
 your project:
 
 ```bash
