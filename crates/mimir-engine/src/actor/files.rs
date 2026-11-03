@@ -17,6 +17,15 @@ impl GraphActor {
     ) -> Result<FileId, GraphError> {
         debug!("Adding file: {}", path.display());
 
+        // A watcher reports a file again after an edit that already took it in: the same text changes
+        // nothing, and replacing it would give its symbols new ids and start a new resolution.
+        let content_hash = ContentHash::compute(content.as_bytes());
+        if let Some(tracked) = self.files.get(&path)
+            && tracked.content_hash == content_hash
+        {
+            return Ok(tracked.file_id);
+        }
+
         // If file already exists, remove old version first (for updates)
         if let Some(tracked) = self.files.get(&path).cloned() {
             debug!(
@@ -28,7 +37,6 @@ impl GraphActor {
 
         // Store reverse mapping for file path lookup
         let relative_path = path.strip_prefix(&self.root).unwrap_or(&path).to_path_buf();
-        let content_hash = ContentHash::compute(content.as_bytes());
         let (file_id, _) =
             self.insert_file(path, relative_path, content, content_hash, language)?;
 

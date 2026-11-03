@@ -33,22 +33,10 @@ impl GraphActor {
     /// goes on in the background and the graph has what syntax rules give until it is done.
     /// Later queries pick up its result.
     pub async fn ensure_linked(&mut self) {
-        let cache_dir = self.root.join(".mimir").join("graph");
         if self.needs_link {
-            self.needs_link = false;
-            let files: Vec<ProjectFile> = self.sources.values().cloned().collect();
-            let (root, cache_dir, scan) = (self.root.clone(), cache_dir.clone(), files.clone());
-            let semantics = self.semantics.clone();
-            // Replacing an unfinished one leaves it to end alone; this one waits for it.
-            let indexes = tokio::task::spawn_blocking(move || {
-                semantics.load(&root, &cache_dir, &scan, Refresh::Edits)
-            });
-            self.pending = Some(PendingLink {
-                indexes,
-                files,
-                linked_by_syntax: false,
-            });
+            self.start_link(Refresh::Edits);
         }
+        let cache_dir = self.graph_dir();
         let Some(pending) = self.pending.as_mut() else {
             return;
         };
@@ -81,11 +69,33 @@ impl GraphActor {
         }
     }
 
+    /// Start resolving every edge of the files as they are now. An unfinished resolution is left
+    /// to end alone; this one waits for it.
+    fn start_link(&mut self, refresh: Refresh) {
+        self.needs_link = false;
+        let files: Vec<ProjectFile> = self.sources.values().cloned().collect();
+        let (root, cache_dir, scan) = (self.root.clone(), self.graph_dir(), files.clone());
+        let semantics = self.semantics.clone();
+        let indexes =
+            tokio::task::spawn_blocking(move || semantics.load(&root, &cache_dir, &scan, refresh));
+        self.pending = Some(PendingLink {
+            indexes,
+            files,
+            linked_by_syntax: false,
+        });
+    }
+
     /// Take in what semantic resolution found, and answer the syncs that wait for it.
     pub fn finish_link(&mut self, indexes: Result<Vec<ScipIndex>, tokio::task::JoinError>) {
         let Some(pending) = self.pending.take() else {
             return;
         };
+        // Files changed meanwhile: these edges would be those of files no longer in the graph, and a
+        // waiting sync is owed the files as they are.
+        if self.needs_link && !self.waiting_syncs.is_empty() {
+            self.start_link(Refresh::Edits);
+            return;
+        }
         let failure = indexes.as_ref().err().map(ToString::to_string);
         let indexes = indexes.unwrap_or_else(|e| {
             warn!("Semantic indexing failed: {}", e);
@@ -142,18 +152,7 @@ impl GraphActor {
         };
 
         // A link still running gives way: this one covers the same files or newer ones.
-        self.needs_link = false;
-        let files: Vec<ProjectFile> = self.sources.values().cloned().collect();
-        let (root, cache_dir, scan) = (self.root.clone(), self.graph_dir(), files.clone());
-        let semantics = self.semantics.clone();
-        let refresh = if full { Refresh::Full } else { Refresh::Edits };
-        let indexes =
-            tokio::task::spawn_blocking(move || semantics.load(&root, &cache_dir, &scan, refresh));
-        self.pending = Some(PendingLink {
-            indexes,
-            files,
-            linked_by_syntax: false,
-        });
+        self.start_link(if full { Refresh::Full } else { Refresh::Edits });
         self.waiting_syncs.push(WaitingSync {
             reply,
             result,

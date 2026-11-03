@@ -2,6 +2,7 @@
 
 use mimir_engine::start;
 use mimir_resolve::{NoSemanticSource, ProjectFile, Refresh, ScipIndex, SemanticSource};
+use mimir_types::Language;
 use std::path::Path;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
@@ -85,6 +86,64 @@ async fn test_queries_are_answered_during_a_sync_and_the_sync_still_ends() {
     let found = handle.find_symbol("callee").await.unwrap();
     let trace = handle.trace(found.symbols[0].id).await.unwrap();
     assert!(!trace.provisional);
+}
+
+/// A file that changes while a sync waits for its index is in what the sync ends with. Resolving
+/// the files as they were would lose every edge of the changed one.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_a_file_changed_during_a_sync_keeps_its_edges() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    std::fs::write(root.join("a.rs"), "fn caller() { callee(); }\n").unwrap();
+    std::fs::write(root.join("b.rs"), "fn callee() {}\n").unwrap();
+
+    let source = Arc::new(HeldIndex::default());
+    let engine = start(root.clone(), source.clone()).await;
+    let handle = engine.handle().clone();
+    handle.stats().await.unwrap();
+
+    let syncing = tokio::spawn({
+        let handle = handle.clone();
+        async move { handle.sync_complete(true).await }
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    handle
+        .write_file(
+            root.join("a.rs"),
+            "// changed\nfn caller() { callee(); }\n".to_string(),
+            true,
+        )
+        .await
+        .unwrap();
+    source.release();
+
+    let result = tokio::time::timeout(Duration::from_secs(10), syncing)
+        .await
+        .expect("the sync never ended")
+        .unwrap()
+        .unwrap();
+    let saved = std::fs::read_to_string(result.saved_to.unwrap()).unwrap();
+    let saved: serde_json::Value = serde_json::from_str(&saved).unwrap();
+    assert_eq!(saved["edges"].as_array().unwrap().len(), 1, "{saved}");
+}
+
+/// A file reported again with the same text changes nothing, so it starts no new resolution.
+#[tokio::test]
+async fn test_a_file_with_the_same_text_keeps_its_symbols() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    std::fs::write(root.join("a.rs"), "fn a() {}\n").unwrap();
+    let engine = start(root.clone(), Arc::new(NoSemanticSource)).await;
+    let handle = engine.handle();
+    let before = handle.find_symbol("a").await.unwrap().symbols[0].id;
+
+    let path = root.join("a.rs");
+    handle
+        .add_file(path, "fn a() {}\n".to_string(), Language::Rust)
+        .await
+        .unwrap();
+
+    assert_eq!(handle.find_symbol("a").await.unwrap().symbols[0].id, before);
 }
 
 /// A sync with nothing slow in it answers as before.
