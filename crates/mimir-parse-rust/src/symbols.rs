@@ -85,10 +85,9 @@ fn extract_from_node(
                 symbols.push(sym);
                 // Recurse into module body
                 if let Some(body) = node.child_by_field_name("body") {
-                    for i in 0..body.named_child_count() as u32 {
-                        if let Some(child) = body.named_child(i) {
-                            extract_from_node(&child, source, symbols, Some(&name));
-                        }
+                    let mut cursor = body.walk();
+                    for child in body.named_children(&mut cursor) {
+                        extract_from_node(&child, source, symbols, Some(&name));
                     }
                 }
             }
@@ -98,10 +97,10 @@ fn extract_from_node(
 
     // Recurse into children for top-level items
     if node.kind() == "source_file" {
-        for i in 0..node.named_child_count() as u32 {
-            if let Some(child) = node.named_child(i) {
-                extract_from_node(&child, source, symbols, parent);
-            }
+        // A cursor, as asking for a child by its index walks the siblings before it.
+        let mut cursor = node.walk();
+        for child in node.named_children(&mut cursor) {
+            extract_from_node(&child, source, symbols, parent);
         }
     }
 }

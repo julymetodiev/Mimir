@@ -6,6 +6,7 @@
 //! - Reference extraction for calls, imports, type uses, etc.
 
 mod adapter;
+mod format_reads;
 mod imports;
 mod references;
 mod symbols;

@@ -146,6 +146,49 @@ pub fn uses_limit_in_macro() -> String {
     format!("{}", LIMIT)
 }
 
+/// No index reports a constant named inside a format string.
+pub fn uses_limit_in_format_string(out: &mut String) -> std::fmt::Result {
+    use std::fmt::Write;
+    write!(out, "{LIMIT:>3}")
+}
+
+pub const SHOWN: u32 = 4;
+
+pub fn prints_shown() {
+    tracing_like::info!(target: "{LIMIT}", "{SHOWN}");
+}
+
+/// Each of these names something else, or nothing.
+pub fn not_the_constant<const LIMIT: usize>() -> String {
+    format!("{LIMIT}")
+}
+
+pub fn passed_by_name() -> String {
+    format!("{PLAIN}", PLAIN = 2)
+}
+
+pub fn local_constant() -> String {
+    const PLAIN: u32 = 3;
+    format!("{PLAIN}")
+}
+
+pub fn escaped_and_other_strings() -> String {
+    format!("{{PLAIN}} {}", "{PLAIN}")
+}
+
+pub fn not_a_format_macro() -> &'static str {
+    stringify!("{PLAIN}")
+}
+
+mod tracing_like {
+    macro_rules! info {
+        (target: $target:expr, $($rest:tt)*) => {
+            let _ = ($target, format!($($rest)*));
+        };
+    }
+    pub(crate) use info;
+}
+
 /// A parameter named like a function is not that function.
 pub fn shadowed(helper: fn() -> u32) -> Option<u32> {
     std::iter::once_with(helper).next()

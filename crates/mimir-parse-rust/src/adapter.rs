@@ -205,6 +205,22 @@ fn process() {
         assert!(references.iter().any(|r| r.name == "bar"));
     }
 
+    /// Asking for a child by its index walks the siblings before it, which over a long file took
+    /// tens of seconds. The bound is far above a cursor's few milliseconds, and far below that.
+    #[test]
+    fn test_a_file_of_many_top_level_items_takes_linear_time() {
+        let adapter = RustAdapter::new();
+        let source = format!("fn first() {{}}\n{}", "// filler\n".repeat(49_000));
+        let started = std::time::Instant::now();
+
+        let tree = adapter.parse(&source).expect("Failed to parse");
+        let symbols = adapter.extract_symbols(&tree, FileId::new(1));
+        adapter.extract_references(&tree, FileId::new(1));
+
+        assert_eq!(symbols.len(), 1);
+        assert!(started.elapsed().as_secs() < 5, "{:?}", started.elapsed());
+    }
+
     #[test]
     fn test_extract_use_statements() {
         let adapter = RustAdapter::new();

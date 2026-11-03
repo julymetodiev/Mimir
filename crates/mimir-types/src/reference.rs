@@ -45,6 +45,9 @@ pub enum ReferenceKind {
     /// Variable read.
     Read,
 
+    /// A constant named inside a format string, as in `format!("{NAME}")`, which no index reports.
+    FormatRead,
+
     /// A name bound in the function, read where a function could also be named.
     LocalRead,
 
@@ -64,6 +67,7 @@ impl fmt::Display for ReferenceKind {
             Self::FunctionValue => "fn_value",
             Self::Import => "import",
             Self::Read => "read",
+            Self::FormatRead => "format_read",
             Self::LocalRead => "local_read",
             Self::TypeUse => "type_use",
             Self::FieldUse => "field_use",

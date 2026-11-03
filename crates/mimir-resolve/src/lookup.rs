@@ -242,6 +242,42 @@ impl SymbolTable {
         }
     }
 
+    /// The constant or static with this name that is an item of the module holding `offset`, not
+    /// an associated one and not inside a function.
+    pub fn constant_in_module(
+        &self,
+        file: FileId,
+        offset: u32,
+        name: &str,
+    ) -> Option<&Arc<Symbol>> {
+        let module = self.module_at(file, offset);
+        let found: Vec<_> = self
+            .named(name)
+            .iter()
+            .filter(|s| {
+                s.file_id == file
+                    && is_constant(s)
+                    && self.module_at(file, s.span.start) == module
+                    && self.all_by_file.get(&file).is_some_and(|symbols| {
+                        !symbols.iter().any(|holder| {
+                            matches!(
+                                holder.kind,
+                                SymbolKind::Impl
+                                    | SymbolKind::Trait
+                                    | SymbolKind::Function
+                                    | SymbolKind::Method
+                            ) && holder.span.start <= s.span.start
+                                && s.span.end <= holder.span.end
+                        })
+                    })
+            })
+            .collect();
+        match found.as_slice() {
+            [one] => Some(*one),
+            _ => None,
+        }
+    }
+
     fn module_at(&self, file: FileId, offset: u32) -> Option<mimir_types::SymbolId> {
         self.all_by_file
             .get(&file)?

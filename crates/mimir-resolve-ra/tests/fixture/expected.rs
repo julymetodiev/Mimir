@@ -57,6 +57,8 @@ pub const CONSTANT_READS: &[(&str, &str)] = &[
     ("beta::uses_own_limit", "beta::LIMIT"),
     ("beta::uses_other_limit", "alpha::LIMIT"),
     ("beta::uses_limit_in_macro", "beta::LIMIT"),
+    ("beta::uses_limit_in_format_string", "beta::LIMIT"),
+    ("beta::prints_shown", "beta::SHOWN"),
     ("alpha::uses_limit_here", "alpha::LIMIT"),
 ];
 

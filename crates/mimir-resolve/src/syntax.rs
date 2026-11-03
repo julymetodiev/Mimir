@@ -167,6 +167,54 @@ pub fn resolve_constant_uses(
     }
 }
 
+/// Collect constants named inside format strings, in every file: no index reports them, and a
+/// running analyzer is not asked, so a file reads the same edited or not. A constant counts only
+/// if it is an item of this module, or the one of its name and imported here by a project path.
+/// What else the name could mean, the parser has left out; a glob import stays without an edge.
+pub fn resolve_format_reads(
+    table: &SymbolTable,
+    files: &[ProjectFile],
+    uses: &mut Vec<ConstantUse>,
+) {
+    for file in files {
+        let imported = |name: &str| {
+            file.references.iter().any(|r| {
+                r.kind == ReferenceKind::Import
+                    && r.name == name
+                    && r.context.as_deref().is_some_and(is_project_path)
+            })
+        };
+        for reference in file
+            .references
+            .iter()
+            .filter(|r| r.kind == ReferenceKind::FormatRead)
+        {
+            let name = reference.name.as_str();
+            let constant = table
+                .constant_in_module(file.file_id, reference.span.start, name)
+                .or_else(|| {
+                    table
+                        .only_constant(file.file_id, name, true)
+                        .filter(|_| imported(name))
+                });
+            let from = table.any_at(file.file_id, reference.span.start);
+            if let (Some(from), Some(constant)) = (from, constant) {
+                uses.push(ConstantUse {
+                    from: from.id,
+                    constant: constant.id,
+                    span: reference.span,
+                    confidence: Confidence::High,
+                });
+            }
+        }
+    }
+}
+
+/// Whether an import's path stays in this crate.
+fn is_project_path(path: &str) -> bool {
+    matches!(path.split("::").next(), Some("crate" | "self" | "super"))
+}
+
 /// Add edges for uses of types and fields in files not in `covered`, where syntax leaves no doubt:
 /// a type of this module named without a path, a variant of such an enum, and `self.field` in a
 /// method of such a type. What a longer path or another receiver leads to takes types to know.
@@ -244,11 +292,7 @@ pub fn resolve_imports(table: &SymbolTable, files: &[ProjectFile], edges: &mut E
             .iter()
             .filter(|r| r.kind == ReferenceKind::Import)
         {
-            let path = reference.context.as_deref().unwrap_or("");
-            if !["crate::", "self::", "super::"]
-                .iter()
-                .any(|p| path.starts_with(p))
-            {
+            if !reference.context.as_deref().is_some_and(is_project_path) {
                 continue;
             }
             let Some(from) = table.any_at(file.file_id, reference.span.start) else {

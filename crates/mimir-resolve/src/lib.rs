@@ -79,6 +79,7 @@ pub fn link(graph: &CodeGraph, files: &[ProjectFile], indexes: &[ScipIndex]) -> 
     syntax::resolve_implementations(&table, files, &covered, &mut edges);
     let implementations = edges.count(EdgeKind::Implements);
     syntax::resolve_constant_uses(&table, files, &covered, &mut constant_uses);
+    syntax::resolve_format_reads(&table, files, &mut constant_uses);
     add_uses_of_function_holders(graph, &mut edges, &constant_uses);
     let function_values = edges.count(EdgeKind::UsesAsValue);
     let constant_uses = edges.count(EdgeKind::UsesConstant);

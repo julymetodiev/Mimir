@@ -7,7 +7,7 @@ use mimir_parse_core::extracted::{CallForm, ExtractedReference};
 use mimir_types::{Confidence, FileId, Range, ReferenceKind, Span};
 use tree_sitter::Node;
 
-use crate::{imports, uses};
+use crate::{format_reads, imports, uses};
 
 /// Extract references from a Rust parse tree.
 pub fn extract_references(tree: &ParsedTree, _file_id: FileId) -> Vec<ExtractedReference> {
@@ -64,6 +64,18 @@ fn extract_from_node(
         }
         // Tokens that are not code of this function: a macro's own rules, and attributes.
         "macro_definition" | "attribute_item" | "inner_attribute_item" => return,
+        "macro_invocation" => {
+            let name = node
+                .child_by_field_name("macro")
+                .and_then(|n| n.utf8_text(source).ok());
+            let mut cursor = node.walk();
+            let tree = node
+                .children(&mut cursor)
+                .find(|n| n.kind() == "token_tree");
+            if let (Some(name), Some(tree)) = (name, tree) {
+                format_reads::extract(name, &tree, source, references, container);
+            }
+        }
         "token_tree" => {
             extract_from_tokens(node, source, references, container);
             return;
@@ -71,10 +83,10 @@ fn extract_from_node(
         _ => {}
     }
 
-    for i in 0..node.named_child_count() as u32 {
-        if let Some(child) = node.named_child(i) {
-            extract_from_node(&child, source, references, container, bound);
-        }
+    // A cursor, as asking for a child by its index walks the siblings before it.
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        extract_from_node(&child, source, references, container, bound);
     }
 }
 
@@ -257,7 +269,7 @@ fn in_value_position(node: &Node) -> bool {
 
 /// Every name a function binds: parameters, `let`, `for`, closures and match arms.
 /// Scopes are ignored, which can only leave a function value out, never add a wrong one.
-fn bound_names(function: &Node, source: &[u8]) -> HashSet<String> {
+pub fn bound_names(function: &Node, source: &[u8]) -> HashSet<String> {
     fn collect(node: &Node, source: &[u8], names: &mut HashSet<String>) {
         if matches!(node.kind(), "identifier" | "shorthand_field_identifier")
             && let Ok(name) = node.utf8_text(source)
@@ -300,7 +312,10 @@ fn extract_from_tokens(
         .collect();
     uses::uses_in_tokens(&tokens, source, references, container);
     for (i, token) in tokens.iter().enumerate() {
+        // `NAME = 1` among a macro's tokens is a name given to a value, not a read of `NAME`.
+        let named_here = tokens.get(i + 1).is_some_and(|next| next.kind() == "=");
         if token.kind() == "identifier"
+            && !named_here
             && let Some(reference) = constant_read(*token, source, container)
         {
             references.push(reference);
@@ -309,6 +324,12 @@ fn extract_from_tokens(
             continue;
         }
         extract_from_tokens(token, source, references, container);
+        if let [.., name, bang] = &tokens[..i]
+            && bang.kind() == "!"
+            && let Ok(name) = name.utf8_text(source)
+        {
+            format_reads::extract(name, token, source, references, container);
+        }
 
         let opens_with_paren = token.child(0).is_some_and(|c| c.kind() == "(");
         let Some(name_node) = i.checked_sub(1).map(|j| tokens[j]) else {
