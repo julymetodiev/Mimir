@@ -118,5 +118,6 @@ only as `self.field` in a method of such a type.
 ## 6. Checks
 
 Work is not done until `scripts/check.sh` passes: `scripts/check-architecture.sh` (and `--new HEAD`),
-`scripts/check-file-size.sh`, `scripts/check-deps.py`, `cargo fmt --check`,
+`scripts/check-file-size.sh`, `scripts/check-version.sh`, `scripts/check-deps.py`, `cargo deny check`,
+`cargo doc` with warnings as errors, `cargo fmt --check`,
 `cargo clippy --all-targets -- -D warnings`, `cargo test`. Budgets only go down, to 0.

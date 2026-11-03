@@ -15,8 +15,9 @@ cd Mimir
 scripts/check.sh
 ```
 
-`scripts/check.sh` runs every check CI runs for the code: architecture rules, file size, newest
-dependencies, formatting, clippy and tests.
+`scripts/check.sh` runs every check CI runs for the code: architecture rules, file size, one version
+everywhere, newest dependencies, advisories and licenses (`cargo install cargo-deny`), docs, formatting,
+clippy and tests.
 
 ## The rules
 
