@@ -1,9 +1,10 @@
 //! A long sync does not stop the answers.
 
 use mimir_engine::start;
+use mimir_protocol::{ActivityKind, GraphEvent, SnapshotEdgeKind, TraceOptions};
 use mimir_resolve::{NoSemanticSource, ProjectFile, Refresh, ScipIndex, SemanticSource};
 use mimir_types::Language;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 use tempfile::TempDir;
@@ -157,4 +158,70 @@ async fn test_a_sync_without_a_semantic_source_is_answered() {
     let result = engine.handle().sync_complete(false).await.unwrap();
 
     assert!(result.saved_to.is_some());
+}
+
+/// A watcher hears that files changed, and which symbols a query touched; a snapshot shows the graph
+/// and rises in generation as edges are resolved anew.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_a_watcher_hears_changes_and_activity() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    std::fs::write(
+        root.join("a.rs"),
+        "fn caller() { callee(); }\nfn callee() {}\n",
+    )
+    .unwrap();
+    let engine = start(root.clone(), Arc::new(NoSemanticSource)).await;
+    let handle = engine.handle().clone();
+    handle.stats().await.unwrap();
+
+    let snapshot = handle.snapshot().await.unwrap();
+    assert_eq!(snapshot.files, [PathBuf::from("a.rs")]);
+    assert_eq!(snapshot.symbols.len(), 2);
+    assert_eq!(snapshot.edges.len(), 1);
+    assert_eq!(snapshot.edges[0].kind, SnapshotEdgeKind::Call);
+    let before = snapshot.generation;
+
+    let mut events = handle.watch().await.unwrap();
+    let wait = Duration::from_secs(10);
+
+    handle
+        .trace_by_name("callee".to_string(), TraceOptions::default())
+        .await
+        .unwrap();
+    let event = tokio::time::timeout(wait, events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    let GraphEvent::Activity { symbols, kind } = event else {
+        panic!("{event:?}");
+    };
+    assert_eq!(kind, ActivityKind::Read);
+    assert_eq!(symbols.len(), 2, "the symbol and its caller");
+
+    handle
+        .write_file(
+            root.join("a.rs"),
+            "fn caller() { callee(); }\nfn callee() {}\nfn more() {}\n".to_string(),
+            true,
+        )
+        .await
+        .unwrap();
+    let mut told = false;
+    let mut activity = false;
+    while !(told && activity) {
+        match tokio::time::timeout(wait, events.recv())
+            .await
+            .unwrap()
+            .unwrap()
+        {
+            GraphEvent::GraphChanged { .. } => told = true,
+            GraphEvent::Activity { kind, .. } => activity = kind == ActivityKind::Edit,
+            GraphEvent::Lagged => panic!("fell behind"),
+        }
+    }
+
+    let snapshot = handle.snapshot().await.unwrap();
+    assert_eq!(snapshot.symbols.len(), 3);
+    assert!(snapshot.generation > before);
 }

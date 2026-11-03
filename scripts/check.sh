@@ -13,6 +13,8 @@ run architecture scripts/check-architecture.sh
 run new scripts/check-architecture.sh --new HEAD
 run file-size scripts/check-file-size.sh
 run version scripts/check-version.sh
+run page scripts/check-page.sh
+run page-clippy cargo clippy --target wasm32-unknown-unknown -p mimir-view-page --all-features -- -D warnings
 run deps scripts/check-deps.py
 run fmt cargo fmt --all -- --check
 run clippy cargo clippy --workspace --all-targets --all-features -- -D warnings

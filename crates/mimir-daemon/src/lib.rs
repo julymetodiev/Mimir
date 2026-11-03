@@ -2,17 +2,19 @@
 //! call. It stops when no request has come for a while; the next client starts it again.
 
 use mimir_engine::GraphHandle;
-use mimir_protocol::{IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult};
+use mimir_protocol::{GraphEvent, IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult};
 use mimir_resolve::SemanticSource;
 use std::fs::{self, File, TryLockError};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::broadcast;
+use tokio::sync::broadcast::error::RecvError;
 use tracing::{error, info, warn};
 
 /// How long a daemon that was told to go gets to let go of the project.
@@ -47,6 +49,8 @@ const CHECK_EVERY: Duration = Duration::from_secs(5);
 struct LastUsed {
     started: Instant,
     millis: AtomicU64,
+    /// Connections that watch: someone is looking, so the daemon is in use.
+    watching: AtomicUsize,
 }
 
 impl LastUsed {
@@ -54,6 +58,7 @@ impl LastUsed {
         Self {
             started: Instant::now(),
             millis: AtomicU64::new(0),
+            watching: AtomicUsize::new(0),
         }
     }
 
@@ -63,6 +68,9 @@ impl LastUsed {
     }
 
     fn idle(&self) -> Duration {
+        if self.watching.load(Ordering::Relaxed) > 0 {
+            return Duration::ZERO;
+        }
         let now = self.started.elapsed().as_millis() as u64;
         Duration::from_millis(now.saturating_sub(self.millis.load(Ordering::Relaxed)))
     }
@@ -172,6 +180,9 @@ async fn serve(
         last_used.touch();
 
         let (response, stopping) = match serde_json::from_str::<IpcRequest>(&line) {
+            Ok(request) if matches!(request.command, IpcCommand::Watch) => {
+                return watch(request.id, reader, writer, &handle, &last_used).await;
+            }
             Ok(request) => {
                 let stopping = matches!(request.command, IpcCommand::Shutdown);
                 (answer(request, &handle, &identity).await, stopping)
@@ -180,11 +191,7 @@ async fn serve(
         };
         last_used.touch();
 
-        let encoded = serde_json::to_string(&response)? + "\n";
-        writer
-            .write_all(encoded.as_bytes())
-            .await
-            .map_err(io_error("write", Path::new("socket")))?;
+        send(&mut writer, &response).await?;
         if stopping {
             // Nobody listening means the daemon is already going down.
             if shutdown.send(()).is_err() {
@@ -193,6 +200,59 @@ async fn serve(
             return Ok(());
         }
     }
+}
+
+/// Pass on what the engine announces, until the client goes away. An event a client fell behind on
+/// is replaced by saying so; the client catches up by asking for a snapshot.
+async fn watch(
+    id: u64,
+    mut reader: BufReader<OwnedReadHalf>,
+    mut writer: OwnedWriteHalf,
+    handle: &GraphHandle,
+    last_used: &LastUsed,
+) -> Result<(), DaemonError> {
+    let mut events = match handle.watch().await {
+        Ok(events) => events,
+        Err(e) => {
+            let refused = IpcResponse::err(id, e.to_string());
+            return send(&mut writer, &refused).await;
+        }
+    };
+    last_used.watching.fetch_add(1, Ordering::Relaxed);
+    let watched = async {
+        send(&mut writer, &IpcResponse::ok(id, IpcData::Watching)).await?;
+        let mut unread = String::new();
+        loop {
+            let event = tokio::select! {
+                event = events.recv() => event,
+                read = reader.read_line(&mut unread) => {
+                    if read.map_err(io_error("read", Path::new("socket")))? == 0 {
+                        return Ok(());
+                    }
+                    unread.clear();
+                    continue;
+                }
+            };
+            let event = match event {
+                Ok(event) => event,
+                Err(RecvError::Lagged(_)) => GraphEvent::Lagged,
+                Err(RecvError::Closed) => return Ok(()),
+            };
+            send(&mut writer, &IpcResponse::ok(id, IpcData::Event(event))).await?;
+        }
+    };
+    let ended = watched.await;
+    last_used.watching.fetch_sub(1, Ordering::Relaxed);
+    last_used.touch();
+    ended
+}
+
+async fn send(writer: &mut OwnedWriteHalf, response: &IpcResponse) -> Result<(), DaemonError> {
+    let encoded = serde_json::to_string(response)? + "\n";
+    writer
+        .write_all(encoded.as_bytes())
+        .await
+        .map_err(io_error("write", Path::new("socket")))
 }
 
 /// Map a request to its engine call and the result back.
@@ -229,6 +289,9 @@ async fn answer(request: IpcRequest, handle: &GraphHandle, identity: &str) -> Ip
             .edit(edits, preview, backup)
             .await
             .map(IpcData::Edited),
+        IpcCommand::Snapshot => handle.snapshot().await.map(IpcData::Snapshot),
+        // A connection that watches never gets here: `serve` hands it over first.
+        IpcCommand::Watch => Ok(IpcData::Watching),
         IpcCommand::Stats => handle.stats().await.map(IpcData::Stats),
         IpcCommand::Sync { full } => handle.sync_complete(full).await.map(IpcData::SyncResult),
         IpcCommand::Search { options } => handle.search(options).await.map(IpcData::SearchResult),

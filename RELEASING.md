@@ -20,7 +20,8 @@ Without `--push`, nothing has left your machine. To undo that: `git tag -d vX.Y.
 
 ## What the tag starts
 
-`.github/workflows/release.yml` checks that the tag matches the version and the changelog, builds
+`.github/workflows/release.yml` checks that the tag matches the version and the changelog, builds the
+page of `mimir view` anew from its sources, builds
 `mimir` for macOS and Linux on arm64 and x86-64, runs each binary its runner can run, and publishes a
 GitHub release with archives, `SHA256SUMS` and the changelog's section as notes.
 

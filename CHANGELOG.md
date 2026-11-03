@@ -6,6 +6,17 @@ All notable changes to Mimir are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`mimir view`**: a browser on the whole graph, which changes as the code and the agents do. Symbols
+  are placed by crate and file and drawn on the GPU. Zoom, search, and choose a symbol to see what it
+  calls, who calls it and its source. What a query or an edit touches lights up as it happens. It reads
+  and never writes, listens only on `127.0.0.1`, and needs a browser with WebGPU.
+
+### Fixed
+
+- A daemon someone is watching no longer stops as idle.
+
 ## [0.1.0] - 2026-11-03
 
 First public release: Rust projects, on macOS and Linux.

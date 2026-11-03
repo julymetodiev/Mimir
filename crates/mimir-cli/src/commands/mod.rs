@@ -40,6 +40,13 @@ pub enum Commands {
     /// Serve MCP on stdin and stdout, for coding agents.
     Mcp,
 
+    /// Open a browser on the graph, which changes as the code and the agents do.
+    View {
+        /// Only say the address, without opening a browser.
+        #[arg(long)]
+        no_open: bool,
+    },
+
     /// Initialize Mimir in the current directory.
     Init,
 

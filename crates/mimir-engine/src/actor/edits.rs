@@ -8,7 +8,7 @@ use crate::actor::GraphActor;
 use crate::error::GraphError;
 use crate::{edit, project_files, scanner, source};
 use mimir_edit::{EditError, EditOp, Editor};
-use mimir_protocol::{Edit, EditReport, EditTarget, FileEdit};
+use mimir_protocol::{ActivityKind, Edit, EditReport, EditTarget, FileEdit};
 use mimir_types::Language;
 
 impl GraphActor {
@@ -176,6 +176,11 @@ impl GraphActor {
                 self.handle_add_file(path, content, language)?;
             } else {
                 self.handle_remove_path(&path);
+            }
+            if let Some(tracked) = self.files.get(&self.root.join(&file.path)) {
+                let touched = self.graph.symbols_in_file(tracked.file_id);
+                let touched = touched.iter().map(|symbol| symbol.id).collect();
+                self.announce_activity(touched, ActivityKind::Edit);
             }
         }
         Ok(())

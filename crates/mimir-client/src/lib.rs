@@ -2,9 +2,10 @@
 //! starts the daemon when it is not running; a daemon that went away is started again.
 
 use mimir_protocol::{
-    Edit, EditReport, FileText, FilesResponse, FindOptions, FindResponse, GrepOptions,
-    GrepResponse, IpcCommand, IpcData, IpcRequest, IpcResponse, IpcResult, SearchOptions,
-    SearchResponse, StatsResponse, SymbolSource, SyncResult, TraceOptions, TraceResponse,
+    Edit, EditReport, FileText, FilesResponse, FindOptions, FindResponse, GraphEvent,
+    GraphSnapshot, GrepOptions, GrepResponse, IpcCommand, IpcData, IpcRequest, IpcResponse,
+    IpcResult, SearchOptions, SearchResponse, StatsResponse, SymbolSource, SyncResult,
+    TraceOptions, TraceResponse,
 };
 use mimir_types::SymbolId;
 use std::fs::{self, File};
@@ -323,12 +324,85 @@ impl Client {
         }
     }
 
+    /// The whole graph, for a view.
+    pub async fn snapshot(&mut self) -> Result<GraphSnapshot, ClientError> {
+        match self.call(IpcCommand::Snapshot).await? {
+            IpcData::Snapshot(snapshot) => Ok(snapshot),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Turn this connection into a stream of what the engine announces.
+    pub async fn watch(mut self) -> Result<EventStream, ClientError> {
+        let request = IpcRequest::new(self.next_id, IpcCommand::Watch);
+        let encoded = serde_json::to_string(&request)? + "\n";
+        self.stream
+            .write_all(encoded.as_bytes())
+            .await
+            .map_err(io_error("write to the daemon"))?;
+        let mut stream = EventStream {
+            reader: BufReader::new(self.stream),
+        };
+        match stream.next_data().await? {
+            IpcData::Watching => Ok(stream),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
     /// Stop the daemon and wait until it is gone.
     pub async fn shutdown(mut self) -> Result<(), ClientError> {
         self.exchange(&IpcCommand::Shutdown).await?;
         wait_until_gone(&self.socket).await;
         Ok(())
     }
+}
+
+/// What the engine announces, one event at a time.
+pub struct EventStream {
+    reader: BufReader<UnixStream>,
+}
+
+impl EventStream {
+    async fn next_data(&mut self) -> Result<IpcData, ClientError> {
+        let mut line = String::new();
+        let read = self
+            .reader
+            .read_line(&mut line)
+            .await
+            .map_err(io_error("read from the daemon"))?;
+        if read == 0 {
+            return Err(ClientError::Disconnected);
+        }
+        let response: IpcResponse = serde_json::from_str(&line)?;
+        match response.result {
+            IpcResult::Ok(data) => Ok(data),
+            IpcResult::Err(message) => Err(ClientError::Daemon(message)),
+        }
+    }
+
+    /// The next event. An error means the daemon is gone.
+    pub async fn next(&mut self) -> Result<GraphEvent, ClientError> {
+        match self.next_data().await? {
+            IpcData::Event(event) => Ok(event),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+}
+
+/// Open an address in the user's browser.
+pub fn open_in_browser(url: &str) -> Result<(), ClientError> {
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
+    Command::new(opener)
+        .arg(url)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(io_error("open the browser"))?;
+    Ok(())
 }
 
 fn socket_of(root: &Path) -> Result<PathBuf, ClientError> {

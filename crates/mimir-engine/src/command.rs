@@ -2,13 +2,13 @@
 
 use crate::error::GraphError;
 use mimir_protocol::{
-    Edit, EditReport, FileText, FilesResponse, FindOptions, FindResponse, GrepOptions,
-    GrepResponse, SearchOptions, SearchResponse, StatsResponse, SymbolSource, SyncResult,
-    TraceOptions, TraceResponse,
+    Edit, EditReport, FileText, FilesResponse, FindOptions, FindResponse, GraphEvent,
+    GraphSnapshot, GrepOptions, GrepResponse, SearchOptions, SearchResponse, StatsResponse,
+    SymbolSource, SyncResult, TraceOptions, TraceResponse,
 };
 use mimir_types::{FileId, Language, SymbolId};
 use std::path::PathBuf;
-use tokio::sync::oneshot;
+use tokio::sync::{broadcast, oneshot};
 
 /// Commands that can be sent to the graph actor.
 #[derive(Debug)]
@@ -29,6 +29,16 @@ pub enum GraphCommand {
 
     /// Forget a file, or everything under a directory, that is gone from the disk.
     RemovePath { path: PathBuf },
+
+    /// The whole graph, for a view.
+    Snapshot {
+        reply: oneshot::Sender<GraphSnapshot>,
+    },
+
+    /// Start hearing what the engine announces.
+    Watch {
+        reply: oneshot::Sender<broadcast::Receiver<GraphEvent>>,
+    },
 
     /// Find symbols by name.
     FindSymbol {

@@ -18,6 +18,7 @@ use crate::response::{
     FileText, FilesResponse, FindResponse, GrepResponse, SearchResponse, StatsResponse,
     SymbolSource, TraceResponse,
 };
+use crate::view::{GraphEvent, GraphSnapshot};
 
 /// Request ID for correlating responses.
 pub type RequestId = u64;
@@ -104,6 +105,13 @@ pub enum IpcCommand {
         overwrite: bool,
     },
 
+    /// The whole graph, for a view.
+    Snapshot,
+
+    /// Turn this connection into a stream of what the engine announces. The first answer says it
+    /// has begun; each later one is an event, until the client goes away.
+    Watch,
+
     /// Request daemon shutdown.
     Shutdown,
 }
@@ -148,6 +156,15 @@ impl IpcResult {}
 /// Data returned from IPC commands.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IpcData {
+    /// The whole graph.
+    Snapshot(GraphSnapshot),
+
+    /// Watching has begun.
+    Watching,
+
+    /// Something the engine announced.
+    Event(GraphEvent),
+
     /// Pong response, with the daemon's version.
     Pong { version: String },
 

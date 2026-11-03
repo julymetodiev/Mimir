@@ -13,6 +13,8 @@ def declared():
     tables = [root["workspace"]["dependencies"]]
     for manifest in pathlib.Path("crates").glob("*/Cargo.toml"):
         crate = tomllib.load(open(manifest, "rb"))
+        for target in crate.get("target", {}).values():
+            tables.append(target.get("dependencies", {}))
         tables += [crate.get(section, {}) for section in ("dependencies", "dev-dependencies", "build-dependencies")]
     for table in tables:
         for name, spec in table.items():

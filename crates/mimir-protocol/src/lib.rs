@@ -4,10 +4,15 @@
 mod command;
 pub mod ipc;
 mod response;
+mod view;
 
 pub use command::{
     Edit, EditChange, EditReport, EditTarget, FileEdit, FindOptions, GrepOptions, LinkSummary,
     SearchOptions, SyncResult, TraceOptions,
+};
+
+pub use view::{
+    ActivityKind, GraphEvent, GraphSnapshot, SnapshotEdge, SnapshotEdgeKind, SnapshotSymbol,
 };
 
 pub use response::{

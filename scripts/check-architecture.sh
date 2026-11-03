@@ -45,7 +45,10 @@ allowed() {
     mimir-daemon) echo "mimir-protocol mimir-engine mimir-resolve" ;;
     mimir-client) echo "mimir-types mimir-protocol" ;;
     mimir-mcp) echo "mimir-protocol mimir-client" ;;
-    mimir-cli) echo "mimir-types mimir-protocol mimir-client mimir-daemon mimir-mcp mimir-resolve mimir-resolve-ra" ;;
+    mimir-view-wire) echo "" ;;
+    mimir-view) echo "mimir-types mimir-protocol mimir-client mimir-view-wire" ;;
+    mimir-view-page) echo "mimir-view-wire" ;;
+    mimir-cli) echo "mimir-types mimir-protocol mimir-client mimir-daemon mimir-mcp mimir-view mimir-resolve mimir-resolve-ra" ;;
     *) echo "NOT-IN-SPEC" ;;
   esac
 }
@@ -69,7 +72,7 @@ unused_deps() { # dependencies declared but not named in the crate's source
   echo "$n"
 }
 DOMAIN='crates/mimir-types crates/mimir-graph crates/mimir-parse-core crates/mimir-parse-rust'
-TRANSPORT='crates/mimir-cli crates/mimir-mcp crates/mimir-daemon crates/mimir-client'
+TRANSPORT='crates/mimir-cli crates/mimir-mcp crates/mimir-daemon crates/mimir-client crates/mimir-view'
 
 now() {
   case "$1" in

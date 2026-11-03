@@ -65,6 +65,7 @@ impl GraphActor {
                 let report = link(&self.graph, &pending.files, &saved);
                 debug!("Linked for now: {:?}", report);
                 pending.linked_by_syntax = true;
+                self.announce_new_edges();
             }
         }
     }
@@ -73,6 +74,7 @@ impl GraphActor {
     /// to end alone; this one waits for it.
     fn start_link(&mut self, refresh: Refresh) {
         self.needs_link = false;
+        self.announced_change = false;
         let files: Vec<ProjectFile> = self.sources.values().cloned().collect();
         let (root, cache_dir, scan) = (self.root.clone(), self.graph_dir(), files.clone());
         let semantics = self.semantics.clone();
@@ -103,6 +105,7 @@ impl GraphActor {
         });
         let report = link(&self.graph, &pending.files, &indexes);
         debug!("Linked: {:?}", report);
+        self.announce_new_edges();
 
         for waiting in std::mem::take(&mut self.waiting_syncs) {
             let answered = match &failure {

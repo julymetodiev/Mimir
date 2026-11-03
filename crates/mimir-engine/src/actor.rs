@@ -10,6 +10,7 @@ mod link;
 mod queries;
 #[cfg(test)]
 mod tests;
+mod view;
 
 use crate::channel::CommandReceiver;
 use crate::command::GraphCommand;
@@ -17,14 +18,14 @@ use crate::error::GraphError;
 use crate::project_files;
 use mimir_graph::CodeGraph;
 use mimir_parse_core::AdapterRegistry;
-use mimir_protocol::SymbolInfo;
+use mimir_protocol::{ActivityKind, GraphEvent, SymbolInfo};
 use mimir_resolve::{ProjectFile, ScipIndex, SemanticSource};
 use mimir_types::{ContentHash, FileId, IdGenerator, Symbol};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::oneshot;
+use tokio::sync::{broadcast, oneshot};
 use tracing::{debug, info};
 
 use crate::actor::link::{PendingLink, WaitingSync};
@@ -38,6 +39,9 @@ const ANALYZER_IDLE: Duration = Duration::from_secs(600);
 /// How long a query waits for semantic resolution. A running analyzer is usually done by then;
 /// a new index or a first load is not, and the query goes on with syntax rules.
 const QUERY_WAIT: Duration = Duration::from_millis(500);
+
+/// How many events a watcher may fall behind by before it is told that it did.
+const EVENTS_KEPT: usize = 256;
 
 /// Tracked file info.
 #[derive(Clone)]
@@ -67,6 +71,12 @@ pub struct GraphActor {
     /// What knows more than syntax about the files.
     semantics: Arc<dyn SemanticSource>,
     pending: Option<PendingLink>,
+    /// What the engine announces, to whoever watches.
+    events: broadcast::Sender<GraphEvent>,
+    /// Rises each time the edges are resolved anew.
+    generation: u64,
+    /// A watcher was told of the files changed since edges were last resolved.
+    announced_change: bool,
     /// Syncs answered when `pending` ends.
     waiting_syncs: Vec<WaitingSync>,
     query_wait: Duration,
@@ -127,6 +137,9 @@ impl GraphActor {
             needs_link: false,
             semantics,
             pending: None,
+            events: broadcast::channel(EVENTS_KEPT).0,
+            generation: 0,
+            announced_change: false,
             waiting_syncs: Vec::new(),
             query_wait: QUERY_WAIT,
         }
@@ -146,7 +159,7 @@ impl GraphActor {
             let waited_for = self
                 .pending
                 .as_mut()
-                .filter(|_| !self.waiting_syncs.is_empty());
+                .filter(|_| !self.waiting_syncs.is_empty() || self.events.receiver_count() > 0);
             let cmd = match next(&mut commands, self.semantics.as_ref(), waited_for).await {
                 Next::Command(Some(cmd)) => cmd,
                 Next::Command(None) => break,
@@ -175,6 +188,15 @@ impl GraphActor {
                     self.handle_remove_path(&path);
                 }
 
+                GraphCommand::Snapshot { reply } => {
+                    self.ensure_linked().await;
+                    answer(reply, self.handle_snapshot());
+                }
+
+                GraphCommand::Watch { reply } => {
+                    answer(reply, self.events.subscribe());
+                }
+
                 GraphCommand::FindSymbol {
                     name,
                     options,
@@ -201,6 +223,13 @@ impl GraphActor {
                 } => {
                     self.ensure_linked().await;
                     let response = self.handle_trace_by_name(&name, &options);
+                    if let Ok(trace) = &response {
+                        let around = trace.callers.iter().chain(&trace.callees);
+                        let touched = std::iter::once(trace.root.id)
+                            .chain(around.map(|node| node.symbol.id))
+                            .collect();
+                        self.announce_activity(touched, ActivityKind::Read);
+                    }
                     answer(reply, response);
                 }
 
@@ -291,6 +320,7 @@ impl GraphActor {
                     break;
                 }
             }
+            self.announce_changed_files();
         }
 
         Ok(())

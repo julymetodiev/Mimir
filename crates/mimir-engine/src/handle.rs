@@ -2,13 +2,13 @@
 
 use crate::error::GraphError;
 use mimir_protocol::{
-    Edit, EditReport, FileText, FilesResponse, FindOptions, FindResponse, GrepOptions,
-    GrepResponse, SearchOptions, SearchResponse, StatsResponse, SymbolSource, SyncResult,
-    TraceOptions, TraceResponse,
+    Edit, EditReport, FileText, FilesResponse, FindOptions, FindResponse, GraphEvent,
+    GraphSnapshot, GrepOptions, GrepResponse, SearchOptions, SearchResponse, StatsResponse,
+    SymbolSource, SyncResult, TraceOptions, TraceResponse,
 };
 use mimir_types::{FileId, Language, SymbolId};
 use std::path::PathBuf;
-use tokio::sync::oneshot;
+use tokio::sync::{broadcast, oneshot};
 use tracing::{info, warn};
 
 use crate::channel::CommandSender;
@@ -315,6 +315,26 @@ impl GraphHandle {
             .await
             .map_err(|_| GraphError::EngineStopped)?;
         answer.await.map_err(|_| GraphError::EngineStopped)?
+    }
+
+    /// The whole graph, for a view.
+    pub async fn snapshot(&self) -> Result<GraphSnapshot, GraphError> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(GraphCommand::Snapshot { reply })
+            .await
+            .map_err(|_| GraphError::EngineStopped)?;
+        answer.await.map_err(|_| GraphError::EngineStopped)
+    }
+
+    /// Start hearing what the engine announces.
+    pub async fn watch(&self) -> Result<broadcast::Receiver<GraphEvent>, GraphError> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(GraphCommand::Watch { reply })
+            .await
+            .map_err(|_| GraphError::EngineStopped)?;
+        answer.await.map_err(|_| GraphError::EngineStopped)
     }
 
     /// Search for symbols by pattern.

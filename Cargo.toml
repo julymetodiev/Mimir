@@ -15,6 +15,9 @@ members = [
     "crates/mimir-daemon",
     "crates/mimir-client",
     "crates/mimir-mcp",
+    "crates/mimir-view-wire",
+    "crates/mimir-view",
+    "crates/mimir-view-page",
     # CLI
     "crates/mimir-cli",
 ]
@@ -45,6 +48,8 @@ mimir-engine = { path = "crates/mimir-engine" }
 mimir-daemon = { path = "crates/mimir-daemon" }
 mimir-client = { path = "crates/mimir-client" }
 mimir-mcp = { path = "crates/mimir-mcp" }
+mimir-view = { path = "crates/mimir-view" }
+mimir-view-wire = { path = "crates/mimir-view-wire" }
 
 # MCP
 rmcp = { version = "3.8", features = ["server", "macros", "transport-io"] }

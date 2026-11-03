@@ -5,8 +5,8 @@ use crate::error::GraphError;
 use crate::{grep, source};
 use mimir_graph::{TraceOptions as GraphTraceOptions, TraceRelationship};
 use mimir_protocol::{
-    FindResponse, GrepOptions, GrepResponse, SearchOptions, SearchResponse, StatsResponse,
-    SymbolInfo, SymbolSource, TraceNode, TraceRelation, TraceResponse,
+    ActivityKind, FindResponse, GrepOptions, GrepResponse, SearchOptions, SearchResponse,
+    StatsResponse, SymbolInfo, SymbolSource, TraceNode, TraceRelation, TraceResponse,
 };
 use mimir_types::{FileId, Language, Symbol, SymbolId, SymbolKind};
 use std::collections::HashMap;
@@ -192,6 +192,7 @@ impl GraphActor {
         })?;
         let mut source = self.source_lines(best, before, after, None)?;
         source.matches = found.len();
+        self.announce_activity(vec![best.id], ActivityKind::Read);
         Ok(source)
     }
 

@@ -46,3 +46,42 @@ async fn test_stops_when_its_project_is_gone() {
         .unwrap();
     assert!(!socket.exists());
 }
+
+/// Someone watching is using the daemon, so it does not stop as idle; when they go, it does.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_a_watcher_keeps_the_daemon_until_it_goes() {
+    use mimir_protocol::{IpcCommand, IpcRequest};
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    let project = TempDir::new().unwrap();
+    let root = project.path().canonicalize().unwrap();
+    let socket = mimir_protocol::socket_path(&root).unwrap();
+    let served = tokio::spawn(mimir_daemon::run(
+        root.clone(),
+        Duration::from_millis(200),
+        Arc::new(mimir_resolve::NoSemanticSource),
+    ));
+    // The socket's file comes a moment before it listens.
+    let mut stream = loop {
+        match tokio::net::UnixStream::connect(&socket).await {
+            Ok(stream) => break stream,
+            Err(_) => tokio::time::sleep(Duration::from_millis(5)).await,
+        }
+    };
+    let request = serde_json::to_string(&IpcRequest::new(1, IpcCommand::Watch)).unwrap() + "\n";
+    stream.write_all(request.as_bytes()).await.unwrap();
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader.read_line(&mut line).await.unwrap();
+    assert!(line.contains("Watching"), "{line}");
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert!(!served.is_finished(), "stopped although someone watches");
+
+    drop(reader);
+    tokio::time::timeout(Duration::from_secs(20), served)
+        .await
+        .expect("the daemon did not stop")
+        .unwrap()
+        .unwrap();
+}

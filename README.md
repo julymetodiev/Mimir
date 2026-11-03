@@ -124,6 +124,18 @@ Any other MCP client: run `mimir mcp` over stdio in the project's directory. To 
 use the tools, put [the skill's text](integrations/claude-code/skills/mimir-code/SKILL.md) in its
 instructions, such as `AGENTS.md`.
 
+## See it
+
+```bash
+mimir view
+```
+
+A browser opens on the whole graph, which changes as the code and the agents do. Symbols are placed by
+crate and file. Zoom in, search, or choose a symbol to see what it calls, who calls it and its source.
+What a query or an edit touches lights up as it happens, blue for a read and red for an edit, so you can
+watch an agent work. It only reads, loads nothing from the network, and listens on `127.0.0.1` with a
+private token in the address. It needs a browser with WebGPU; it has been tried in Chrome.
+
 ## What an answer means
 
 - A call in `trace` is exact. A call Mimir cannot be sure of is left out, never guessed.
@@ -148,7 +160,7 @@ On a copy of a project with 1311 Rust files and 20 260 symbols, on a laptop:
 | A complete answer after the first edit | 8 to 12 s, then under 1 s |
 | From no daemon to a first answer | 3.2 to 3.8 s, with the index already written |
 | A first index | 1 to 2 minutes, at a peak of about 6 GB |
-| Memory | daemon about 270 MB idle; `rust-analyzer` about 2.2 GB while in use, stopped after 10 idle minutes |
+| Memory | daemon about 370 MB idle; `rust-analyzer` about 2.2 GB while in use, stopped after 10 idle minutes |
 
 ## Accuracy
 
