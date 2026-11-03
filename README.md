@@ -17,7 +17,7 @@ to the `get` of `x`'s type, because `rust-analyzer` resolves it, where a text se
 It also has the tools an agent needs instead of Grep, Glob, Read, Edit and Write, so the graph stays up
 to date as the agent works.
 
-Rust only for now, on macOS and Linux.
+Rust for now, on macOS and Linux. Python, JavaScript/TypeScript and Go are in the works.
 
 <p align="center">
   <a href="https://mimir.369.is/"><img src="docs/images/graph.jpg" alt="Mimir's own code as a graph: symbols grouped by crate and file, joined by calls and uses"></a>
@@ -214,7 +214,7 @@ lines in 3 files. These are measurements of one project, not a guarantee for you
 Known limits: only Rust. A proc macro that fails silently while the index is written loses its calls;
 one that says so is handled. A read and a write of a field are not told apart. A constant inside a format string has a read only in macros known to take one, and only if it is an item of the same module or imported by a project path: an attribute such as `#[error("{NAME}")]`, a glob import or a renamed import leaves it out. A function named in an attribute, as in `#[serde(skip_serializing_if = "name")]`, has no call. Replacing a file by renaming breaks a hard link to it.
 
-Left out on purpose for now: telling a read of a field from a write; languages other than Rust; keeping hard links when a file is written.
+Left out on purpose for now: telling a read of a field from a write; keeping hard links when a file is written.
 
 ## Develop
 
