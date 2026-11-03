@@ -19,6 +19,11 @@ impl ContentHash {
     pub fn to_hex(&self) -> String {
         hex::encode(self.0)
     }
+
+    /// Read what [`Self::to_hex`] wrote.
+    pub fn from_hex(text: &str) -> Option<Self> {
+        Some(Self(hex::decode(text).ok()?.try_into().ok()?))
+    }
 }
 
 impl fmt::Debug for ContentHash {

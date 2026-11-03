@@ -197,6 +197,27 @@ def verdict_of(symbol, want, got, docs):
     return "differ" if inside else "tsrs_outside"
 
 
+def class_of(symbol, name, want_lines, got_line, got_name):
+    """The named class of a site that still differs after asking again (docs/TYPESCRIPT.md, section 7).
+
+    The lines are the source at the index's targets and at where tsrs ended. Whatever fits none stays
+    unclassified, to be read: TS2 asks for 0 of those."""
+    if "<constructor>" in symbol or "constructor" in got_line or any("constructor" in w for w in want_lines):
+        return "constructor"
+    if name in ("exports", "module"):
+        return "CommonJS exports"
+    # `var get = UTIF.decode._get`: tsrs goes on to the function, and the index stops at the variable.
+    if got_name and got_name != name and any(
+            re.search(r"(?<![\w$])" + re.escape(got_name) + r"(?![\w$])", w) for w in want_lines):
+        return "alias followed"
+    named = re.compile(r"(?<![\w$])" + re.escape(name) + r"(?![\w$])") if name else None
+    if named and named.search(got_line):
+        if any(named.search(w) for w in want_lines):
+            return "same name, another declaration"
+        return "tsrs on the name, index elsewhere"
+    return "unclassified"
+
+
 def compare(args):
     root = os.path.realpath(args.project)
     defs, refs, docs = read_index(args.index, args.prefix)
@@ -305,6 +326,16 @@ def compare(args):
 
     # The rule of section 4: what still differs after asking again from where the answer landed.
     still, followed = Counter(), 0
+
+    def source_line(path, line):
+        whole = os.path.join(root, path) if not os.path.isabs(path) else path
+        try:
+            with open(whole, encoding="utf-8", errors="replace") as f:
+                lines = f.read().split("\n")
+        except OSError:
+            return ""
+        return lines[line] if line < len(lines) else ""
+
     for example in examples.get("differ", []):
         if example["symbol"].endswith("`/"):
             still["module position"] += 1
@@ -327,9 +358,19 @@ def compare(args):
             here = next_here[:1]
             followed += 1
         hit = bool(here) and (here[0][0], here[0][1]) in want
-        still["reached the index's target" if hit else "still differs"] += 1
-        if not hit:
-            example["after_asking_again"] = here
+        if hit:
+            still["reached the index's target"] += 1
+            continue
+        site_line = text[p].split("\n")[key[1]]
+        token = TOKEN.match(site_line, key[2])
+        got_line = source_line(here[0][0], here[0][1]) if here else ""
+        want_lines = [source_line(w[0], w[1]) for w in sorted(want)[:3]]
+        got_token = TOKEN.match(got_line, here[0][2]) if here else None
+        named = class_of(refs[key], token.group() if token else "", want_lines, got_line,
+                         got_token.group() if got_token else "")
+        still[named] += 1
+        example["after_asking_again"] = here
+        example["class"] = named
     report["differ_after_asking_again"] = dict(still)
     report["steps_followed"] = followed
 

@@ -7,4 +7,5 @@ class Old {
     second();
   }
 }
+second();
 module.exports = { Old };

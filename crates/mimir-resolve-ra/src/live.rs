@@ -97,9 +97,9 @@ fn resolve_documents(
             .get(found.column as usize..found.end_column as usize)?
             .to_string();
         Some(Target {
-            path,
+            path: path.into(),
             line: found.line + 1,
-            name,
+            name: name.into(),
         })
     };
 
@@ -128,7 +128,7 @@ fn resolve_documents(
                 continue;
             }
             if let Some(found) = choose(found, &reference.name)
-                && (found.name == reference.name
+                && (*found.name == *reference.name
                     || !FORWARDING_METHODS.contains(&reference.name.as_str()))
             {
                 document.sites.insert((line, column), found);
@@ -153,10 +153,10 @@ fn resolve_documents(
 fn choose(found: Vec<Target>, name: &str) -> Option<Target> {
     let mut found = found.into_iter();
     let first = found.next()?;
-    if first.name == name {
+    if &*first.name == name {
         return Some(first);
     }
-    found.find(|t| t.name == name).or(Some(first))
+    found.find(|t| &*t.name == name).or(Some(first))
 }
 
 fn site_of(reference: &ExtractedReference) -> (u32, u32) {
@@ -224,9 +224,9 @@ mod tests {
     #[test]
     fn chooses_the_answer_with_the_name_at_the_site() {
         let target = |name: &str| Target {
-            path: PathBuf::from("a.rs"),
+            path: Path::new("a.rs").into(),
             line: 1,
-            name: name.to_string(),
+            name: name.into(),
         };
         let chosen = |found: &[&str], name| {
             choose(found.iter().map(|n| target(n)).collect(), name).map(|t| t.name)

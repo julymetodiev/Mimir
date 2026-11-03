@@ -80,10 +80,10 @@ impl SemanticSource for SemanticSources {
 /// What a position in an edited file refers to. `line` is 1-based.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Target {
-    /// Path relative to the project.
-    pub path: PathBuf,
+    /// Path relative to the project. Most answers name a path and a name many others do.
+    pub path: Arc<Path>,
     pub line: u32,
-    pub name: String,
+    pub name: Arc<str>,
 }
 
 /// The answers for one edited file.
@@ -116,7 +116,7 @@ pub struct SemanticIndex {
     pub documents: HashMap<PathBuf, Vec<Occurrence>>,
     /// Files a running language server answered for, by path relative to the project: for Rust those
     /// edited since the index, and for a language with no index, every file.
-    pub answers: HashMap<PathBuf, LiveDocument>,
+    pub answers: HashMap<PathBuf, Arc<LiveDocument>>,
     /// Files edited since the index with no answers yet, which syntax rules resolve for now.
     pub unanswered: HashSet<PathBuf>,
 }

@@ -98,7 +98,9 @@ fn tsrs_is_there() -> bool {
 
 fn linked(root: &Path, source: &Tsrs) -> (CodeGraph, Vec<ProjectFile>) {
     let (graph, files) = build(root);
-    let indexes = source.load(root, root, &files, Refresh::Edits);
+    // What is saved must stay out of the project: it is tracked by git here.
+    let cache = tempfile::TempDir::new().unwrap();
+    let indexes = source.load(root, cache.path(), &files, Refresh::Edits);
     link(&graph, &files, &indexes);
     (graph, files)
 }
@@ -125,6 +127,9 @@ fn every_row_of_the_table_holds() {
         ("both", "Circle.size"),
         ("second", "first"),
         ("Old.run", "second"),
+        ("make", "Square"),
+        ("made", "make"),
+        ("<module>", "second"),
     ]);
     assert_eq!(edges(&graph, &files, EdgeKind::Calls), calls);
 
@@ -136,6 +141,8 @@ fn every_row_of_the_table_holds() {
         ("chain", "Circle.area"),
         ("either", "Square.area"),
         ("chain", "Square.area"),
+        ("made", "Circle.area"),
+        ("made", "Square.area"),
     ]);
     let found = edges(&graph, &files, EdgeKind::UsesAsValue);
     assert_eq!(found, values, "values");

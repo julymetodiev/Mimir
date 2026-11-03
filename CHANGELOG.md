@@ -9,6 +9,7 @@ All notable changes to Mimir are recorded here. The format follows
 ### Added
 
 - **`mimir view --export DIR`**: the view as files for a static host, with the graph and its source.
+- **TypeScript and JavaScript**, resolved by a running `tsrs`, with its answers saved beside the graph.
 
 ## [0.2.0] - 2026-11-03
 

@@ -21,7 +21,7 @@ pub fn extract_references(tree: &ParsedTree) -> Vec<ExtractedReference> {
         found: Vec::new(),
         bound: Vec::new(),
     };
-    walk.children(&tree.root_node(), None, 0);
+    walk.children(&tree.root_node(), 0);
     walk.found
 }
 
@@ -33,13 +33,13 @@ struct Walk<'a> {
 }
 
 impl<'a> Walk<'a> {
-    fn children(&mut self, node: &Node<'a>, container: Option<&'a str>, depth: usize) {
+    fn children(&mut self, node: &Node<'a>, depth: usize) {
         if depth >= MAX_DEPTH {
             return;
         }
         let mut cursor = node.walk();
         for child in node.named_children(&mut cursor) {
-            self.visit(&child, container, depth + 1);
+            self.visit(&child, depth + 1);
         }
     }
 
@@ -47,7 +47,6 @@ impl<'a> Walk<'a> {
         &mut self,
         kind: ReferenceKind,
         at: &Node<'a>,
-        container: Option<&'a str>,
         form: Option<CallForm>,
         context: Option<&str>,
     ) {
@@ -57,9 +56,6 @@ impl<'a> Walk<'a> {
         let mut reference =
             ExtractedReference::new(name.to_string(), kind, range_of(at), span_of(at))
                 .with_confidence(Confidence::Low);
-        if let Some(container) = container {
-            reference = reference.with_container(container.to_string());
-        }
         if let Some(form) = form {
             reference = reference.with_call_form(form);
         }
@@ -86,6 +82,16 @@ impl<'a> Walk<'a> {
         let name = object.and_then(|object| match object.kind() {
             "identifier" => Some(*object),
             "member_expression" => object.child_by_field_name("property"),
+            // Asked at a function's name, the answer is the type it returns.
+            "call_expression" => {
+                object
+                    .child_by_field_name("function")
+                    .and_then(|f| match f.kind() {
+                        "identifier" => Some(f),
+                        "member_expression" => f.child_by_field_name("property"),
+                        _ => None,
+                    })
+            }
             _ => None,
         });
         let at = name.map(|n| {
@@ -105,35 +111,29 @@ impl<'a> Walk<'a> {
     }
 
     /// A call of `callee`, which is `f`, `a.f` or anything else, of which no name can be said.
-    fn callee(
-        &mut self,
-        kind: ReferenceKind,
-        callee: &Node<'a>,
-        container: Option<&'a str>,
-        depth: usize,
-    ) {
+    fn callee(&mut self, kind: ReferenceKind, callee: &Node<'a>, depth: usize) {
         match callee.kind() {
             "identifier" => {
                 let form = self.plain_form(callee);
-                self.add(kind, callee, container, Some(form), None);
+                self.add(kind, callee, Some(form), None);
             }
-            "super" => self.add(kind, callee, container, Some(CallForm::Method), None),
+            "super" => self.add(kind, callee, Some(CallForm::Method), None),
             "member_expression" => {
                 let object = callee.child_by_field_name("object");
                 if let Some(property) = callee.child_by_field_name("property") {
                     let receiver = object.as_ref().and_then(|o| self.receiver(o));
-                    self.add(kind, &property, container, Some(CallForm::Method), receiver);
+                    self.add(kind, &property, Some(CallForm::Method), receiver);
                     self.mark_receiver(object.as_ref());
                 }
                 if let Some(object) = object {
-                    self.visit(&object, container, depth + 1);
+                    self.visit(&object, depth + 1);
                 }
             }
-            _ => self.visit(callee, container, depth + 1),
+            _ => self.visit(callee, depth + 1),
         }
     }
 
-    fn visit(&mut self, node: &Node<'a>, container: Option<&'a str>, depth: usize) {
+    fn visit(&mut self, node: &Node<'a>, depth: usize) {
         if depth >= MAX_DEPTH {
             return;
         }
@@ -141,18 +141,18 @@ impl<'a> Walk<'a> {
             "comment" => {}
             "call_expression" => {
                 if let Some(function) = node.child_by_field_name("function") {
-                    self.callee(ReferenceKind::Call, &function, container, depth);
+                    self.callee(ReferenceKind::Call, &function, depth);
                 }
                 if let Some(arguments) = node.child_by_field_name("arguments") {
-                    self.visit(&arguments, container, depth + 1);
+                    self.visit(&arguments, depth + 1);
                 }
             }
             "new_expression" => {
                 if let Some(constructor) = node.child_by_field_name("constructor") {
-                    self.callee(ReferenceKind::Call, &constructor, container, depth);
+                    self.callee(ReferenceKind::Call, &constructor, depth);
                 }
                 if let Some(arguments) = node.child_by_field_name("arguments") {
-                    self.visit(&arguments, container, depth + 1);
+                    self.visit(&arguments, depth + 1);
                 }
             }
             "decorator" => {
@@ -160,83 +160,79 @@ impl<'a> Walk<'a> {
                 let inner: Vec<_> = node.named_children(&mut cursor).collect();
                 for child in inner {
                     if child.kind() == "call_expression" {
-                        self.visit(&child, container, depth + 1);
+                        self.visit(&child, depth + 1);
                     } else {
-                        self.callee(ReferenceKind::Call, &child, container, depth);
+                        self.callee(ReferenceKind::Call, &child, depth);
                     }
                 }
             }
-            "import_statement" => self.import(node, container),
-            "export_statement" => self.export(node, container, depth),
-            "variable_declarator" => self.declarator(node, container, depth),
-            "jsx_opening_element" | "jsx_self_closing_element" => self.jsx(node, container, depth),
+            "import_statement" => self.import(node),
+            "export_statement" => self.export(node, depth),
+            "variable_declarator" => self.declarator(node, depth),
+            "jsx_opening_element" | "jsx_self_closing_element" => self.jsx(node, depth),
             "jsx_closing_element" => {}
-            "member_expression" => self.member(node, container, depth, false),
+            "member_expression" => self.member(node, depth, false),
             "assignment_expression" | "augmented_assignment_expression" => {
-                self.assignment(node, container, depth)
+                self.assignment(node, depth)
             }
+            // A name the function binds is nearly always its own, and the most common thing in
+            // code: a function it hides further in is what is lost by leaving them out.
             "identifier" => {
-                let form = self.plain_form(node);
-                self.add(
-                    ReferenceKind::FunctionValue,
-                    node,
-                    container,
-                    Some(form),
-                    None,
-                );
+                if self.plain_form(node) == CallForm::Plain {
+                    self.add(
+                        ReferenceKind::FunctionValue,
+                        node,
+                        Some(CallForm::Plain),
+                        None,
+                    );
+                }
             }
             "shorthand_property_identifier" => {
                 self.add(
                     ReferenceKind::FunctionValue,
                     node,
-                    container,
                     Some(CallForm::Shorthand),
                     None,
                 );
             }
             "type_identifier" => {
                 if !is_declared_name(node) {
-                    self.add(ReferenceKind::TypeUse, node, container, None, None);
+                    self.add(ReferenceKind::TypeUse, node, None, None);
                 }
             }
             "nested_type_identifier" => {
                 if let Some(name) = node.child_by_field_name("name") {
-                    self.add(ReferenceKind::TypeUse, &name, container, None, None);
+                    self.add(ReferenceKind::TypeUse, &name, None, None);
                 }
             }
-            "extends_clause" | "implements_clause" | "class_heritage" => {
-                self.heritage(node, container, depth)
-            }
+            "extends_clause" | "implements_clause" | "class_heritage" => self.heritage(node, depth),
             "function_declaration"
             | "generator_function_declaration"
             | "method_definition"
             | "function_signature"
             | "method_signature"
             | "abstract_method_signature" => {
-                let name = node
-                    .child_by_field_name("name")
-                    .and_then(|n| text(&n, self.source));
-                self.function(node, name.or(container), depth);
+                self.function(node, depth);
             }
             "arrow_function" | "function_expression" | "function" | "generator_function" => {
-                self.function(node, container, depth)
+                self.function(node, depth)
             }
             "object_pattern" | "array_pattern" | "rest_pattern" | "formal_parameters" => {
-                self.pattern(node, container, depth)
+                self.pattern(node, depth)
             }
             "required_parameter" | "optional_parameter" => {
                 if let Some(value) = node.child_by_field_name("value") {
-                    self.visit(&value, container, depth + 1);
+                    self.visit(&value, depth + 1);
                 }
-                self.parameter(node, container, depth)
+                self.parameter(node, depth)
             }
             "statement_identifier" | "property_identifier" | "private_property_identifier" => {}
-            _ => self.children(node, container, depth),
+            _ => self.children(node, depth),
         }
     }
 
     /// Only what is computed inside a pattern is a reference, and its type.
-    fn pattern(&mut self, node: &Node<'a>, container: Option<&'a str>, depth: usize) {
+    fn pattern(&mut self, node: &Node<'a>, depth: usize) {
         if depth >= MAX_DEPTH {
             return;
         }
@@ -246,25 +242,25 @@ impl<'a> Walk<'a> {
                 "identifier" | "shorthand_property_identifier_pattern" => {}
                 "assignment_pattern" | "object_assignment_pattern" => {
                     if let Some(right) = child.child_by_field_name("right") {
-                        self.visit(&right, container, depth + 1);
+                        self.visit(&right, depth + 1);
                     }
                 }
                 "type_annotation" | "decorator" | "accessibility_modifier" => {
-                    self.visit(&child, container, depth + 1)
+                    self.visit(&child, depth + 1)
                 }
                 "required_parameter" | "optional_parameter" => {
                     if let Some(value) = child.child_by_field_name("value") {
-                        self.visit(&value, container, depth + 1);
+                        self.visit(&value, depth + 1);
                     }
-                    self.parameter(&child, container, depth + 1);
+                    self.parameter(&child, depth + 1);
                 }
-                _ => self.pattern(&child, container, depth + 1),
+                _ => self.pattern(&child, depth + 1),
             }
         }
     }
 
     /// A parameter's pattern and type. Its default value is visited by the caller.
-    fn parameter(&mut self, node: &Node<'a>, container: Option<&'a str>, depth: usize) {
+    fn parameter(&mut self, node: &Node<'a>, depth: usize) {
         let value = node.child_by_field_name("value");
         let mut cursor = node.walk();
         for child in node.named_children(&mut cursor) {
@@ -273,13 +269,13 @@ impl<'a> Walk<'a> {
             }
             match child.kind() {
                 "identifier" => {}
-                "type_annotation" | "decorator" => self.visit(&child, container, depth + 1),
-                _ => self.pattern(&child, container, depth + 1),
+                "type_annotation" | "decorator" => self.visit(&child, depth + 1),
+                _ => self.pattern(&child, depth + 1),
             }
         }
     }
 
-    fn function(&mut self, node: &Node<'a>, container: Option<&'a str>, depth: usize) {
+    fn function(&mut self, node: &Node<'a>, depth: usize) {
         let mut names = HashSet::new();
         if let Some(parameters) = node
             .child_by_field_name("parameters")
@@ -294,20 +290,20 @@ impl<'a> Walk<'a> {
         let mut cursor = node.walk();
         for child in node.named_children(&mut cursor) {
             match child.kind() {
-                "formal_parameters" => self.pattern(&child, container, depth + 1),
+                "formal_parameters" => self.pattern(&child, depth + 1),
                 "identifier"
                 | "property_identifier"
                 | "private_property_identifier"
                 | "computed_property_name"
                 | "type_identifier" => {}
-                _ => self.visit(&child, container, depth + 1),
+                _ => self.visit(&child, depth + 1),
             }
         }
         self.bound.pop();
     }
 
     /// `const a = require('./a')` is an import.
-    fn member(&mut self, node: &Node<'a>, container: Option<&'a str>, depth: usize, write: bool) {
+    fn member(&mut self, node: &Node<'a>, depth: usize, write: bool) {
         let object = node.child_by_field_name("object");
         if let Some(property) = node.child_by_field_name("property") {
             let receiver = object.as_ref().and_then(|o| self.receiver(o));
@@ -316,30 +312,30 @@ impl<'a> Walk<'a> {
             } else {
                 ReferenceKind::FieldUse
             };
-            self.add(kind, &property, container, None, receiver);
+            self.add(kind, &property, None, receiver);
             self.mark_receiver(object.as_ref());
         }
         if let Some(object) = object {
-            self.visit(&object, container, depth + 1);
+            self.visit(&object, depth + 1);
         }
     }
 
-    fn assignment(&mut self, node: &Node<'a>, container: Option<&'a str>, depth: usize) {
+    fn assignment(&mut self, node: &Node<'a>, depth: usize) {
         if let Some(left) = node.child_by_field_name("left") {
             if left.kind() == "member_expression" {
-                self.member(&left, container, depth, true);
+                self.member(&left, depth, true);
                 // `a.x += 1` reads it as well.
                 if node.kind() == "augmented_assignment_expression"
                     && let Some(property) = left.child_by_field_name("property")
                 {
-                    self.add(ReferenceKind::FieldUse, &property, container, None, None);
+                    self.add(ReferenceKind::FieldUse, &property, None, None);
                 }
             } else if left.kind() != "identifier" {
-                self.visit(&left, container, depth + 1);
+                self.visit(&left, depth + 1);
             }
         }
         if let Some(right) = node.child_by_field_name("right") {
-            self.visit(&right, container, depth + 1);
+            self.visit(&right, depth + 1);
         }
     }
 }

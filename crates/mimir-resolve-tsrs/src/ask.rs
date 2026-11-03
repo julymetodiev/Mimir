@@ -1,5 +1,6 @@
 //! Asking `tsrs` about the sites of a file, and which files to ask about after a change.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -9,7 +10,7 @@ use mimir_resolve::{LiveDocument, ProjectFile, Target, resolve_import};
 use mimir_types::{FileId, Language, ReferenceKind};
 use tracing::debug;
 
-use crate::saved::Known;
+use crate::saved::{Known, Shared};
 
 /// How many times an answer on an import is asked again.
 const MAX_STEPS: usize = 8;
@@ -42,7 +43,7 @@ pub fn with_importers(
         }
         if let Some((_, document)) = known.get(&file.path) {
             for target in document.all_sites.values().flatten() {
-                if let Some((used, _)) = by_path.get_key_value(target.path.as_path()) {
+                if let Some((used, _)) = by_path.get_key_value(&*target.path) {
                     users.entry(*used).or_default().insert(file.path.as_path());
                 }
             }
@@ -100,6 +101,7 @@ pub fn answers(
         project,
         by_path: &by_path,
         import_lines: &import_lines,
+        shared: RefCell::new(Shared::default()),
     };
     let mut documents = HashMap::new();
     for path in stale {
@@ -130,6 +132,7 @@ struct Asking<'a> {
     project: &'a Path,
     by_path: &'a HashMap<&'a Path, &'a ProjectFile>,
     import_lines: &'a HashMap<&'a Path, HashSet<u32>>,
+    shared: RefCell<Shared>,
 }
 
 impl Asking<'_> {
@@ -185,8 +188,11 @@ impl Asking<'_> {
             for location in locations {
                 self.follow(server, location, &mut targets)?;
             }
-            let site = (reference.range.start_line, reference.range.start_col);
-            document.all_sites.insert(site, targets);
+            // Most sites name what is outside the project, which gives no edge.
+            if !targets.is_empty() {
+                let site = (reference.range.start_line, reference.range.start_col);
+                document.all_sites.insert(site, targets);
+            }
         }
         Ok(document)
     }
@@ -243,12 +249,12 @@ impl Asking<'_> {
             .source
             .split('\n')
             .nth(found.line as usize)?
-            .get(found.column as usize..found.end_column as usize)?
-            .to_string();
+            .get(found.column as usize..found.end_column as usize)?;
+        let mut shared = self.shared.borrow_mut();
         Some(Target {
-            path: path.to_path_buf(),
+            path: shared.path(path),
             line: found.line + 1,
-            name,
+            name: shared.name(name),
         })
     }
 }

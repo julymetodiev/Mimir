@@ -56,7 +56,11 @@ implementation are one symbol, at the implementation; with none, at the first si
 
 A call through an interface or abstract method is a `Calls` edge to that method; what implements it
 is a possible target, as with a trait. A caller is the innermost named function around the site. An
-unnamed function belongs to the one around it.
+unnamed function belongs to the one around it. Code outside any function belongs to the constant that
+holds it, or else to `<module>`, a symbol every file has.
+
+A name a function binds, as a parameter or a local, is no `FunctionValue`: it names no function of its
+own. A call through it is still asked about.
 
 ## 4. Resolution
 
@@ -120,12 +124,19 @@ Where they stand, measured through `mimir` on an M1 Pro:
 | | State |
 |---|---|
 | TS1 | Holds |
-| TS2 | Not met: disagreements remain unclassified on nest, three.js and VS Code |
-| TS3 | Holds on hono and nest, 3 files edited each, 0 differences in every kind of edge. Comment edits, and the fixture for a changed type |
-| TS4 | Not measured as `scripts/bench` does. T4: nest 356 MB after a restart with nothing changed; 523 MB after asking, three.js 834 MB |
-| TS5 | Holds on three projects: hono 12 038 symbols 11 s, nest 25 571 symbols 44 s, three.js 25 628 symbols 51 s |
+| TS2 | Holds on hono, nest and three.js: unclassified 0. Not repeated on VS Code, which had 368 disagreements before these classes |
+| TS3 | Holds on hono and nest, 0 differences in every kind of edge. Comment edits, and the fixture for a changed type |
+| TS4 | Not measured as `scripts/bench` does. T4 below |
+| TS5 | Holds on three projects: hono 12 497 symbols 12 s, nest 27 854 symbols 47 s, three.js 27 387 symbols 43 s |
 
-`tsrs` used 0.9 to 2.1 GB while it ran. An edit near the bottom of the imports re-asks most of a project: 30 s on nest for `packages/common/index.ts`. A restart with nothing changed took 2.6 s and did not start `tsrs`.
+| Daemon | hono | nest | three.js |
+|---|---|---|---|
+| After asking | 107 MB | 228 MB | 410 MB |
+| After a restart with nothing changed | 94 MB | 187 MB | 317 MB |
+| That restart takes, without starting `tsrs` | 1.0 s | 2.9 s | 4.2 s |
+| Saved answers | 1.0 MB | 2.3 MB | 4.9 MB |
+
+`tsrs` itself used 0.7 to 1.9 GB while it ran. An edit near the bottom of the imports re-asks most of a project: 30 s on nest for `packages/common/index.ts`.
 
 ## 6. Machine checks
 
@@ -189,10 +200,22 @@ Classes of disagreement, by what was read:
 | Global declared twice | 26 | `URL` in `esbuild` against `lib.dom`. Both outside |
 | Locals of a package | 40 | The index has no package to compare. Not a fault of either |
 
-Asking again helps differently by project: 74 of 84 on hono, 39 of 127 on three.js, 0 of 138 on nest.
-What remains on nest and three.js, by the samples read: members of a discriminated union, `new X` at the
-class where the index gives the constructor, and on three.js a field assigned in a subclass where the
-index gives the base class's setter. Not all are classified, here or among VS Code's 368.
+What still differs after asking again, as `ts_compare.py` sorts it by the source at both targets:
+
+| Class | hono | nest | three.js | Meaning |
+|---|---|---|---|---|
+| Module position | 242 | 1 101 | 1 148 | As above |
+| Reached by asking again | 74 | 0 | 66 | As above |
+| Same name, another declaration | 10 | 114 | 105 | Members of a union, a `var` declared twice, a field and its setter |
+| Constructor | 0 | 24 | 5 | `new X` at the class, where the index gives the constructor |
+| CommonJS exports | 0 | 0 | 125 | `exports.x`: the index gives what is assigned |
+| Alias followed | 0 | 0 | 28 | `var get = a.b.get`: `tsrs` goes on to the function, the index stops at the variable |
+| `tsrs` on the name, index elsewhere | 0 | 0 | 6 | `Foo.prototype = {`: the index gives the function |
+| Unclassified | 0 | 0 | 0 | |
+
+A class says what a disagreement looks like, not which side is right. "Same name, another declaration"
+is the widest, and only samples of it were read: one was `camera.isArrayCamera ? _a : _b`, a union, which
+section 4 asks about in another way.
 
 `tsrs` also resolves `#private` members, which the index does not report. On nest, 1 505 outside targets
 differ only by file within a package: `tsrs` follows declaration maps to `rxjs/src/*.ts`, and the index
@@ -202,26 +225,25 @@ stops at `.d.ts`. Outside targets give no edge, so this changes nothing.
 
 1. **Union types behind a call.** `tsrs` gives one member for `x.area()` on `Circle | Square`, and
    TypeScript 7.0.2 does the same. Mimir asks `typeDefinition` on the receiver and, with several types,
-   `implementation`, so each member is a possible target. `make().area()` has no name to ask about, so
-   there one member stays, as a certain call: a known limit.
+   `implementation`, so each member is a possible target. At `make().area()` the type is asked for at
+   `make`. `list[0].area()` and `(a ?? b).area()` have no name to ask about, so there one member stays,
+   as a certain call: a known limit.
 2. **Plain JavaScript gets about two thirds of its calls.** The rest is left out: `this.type()` on a
    prototype, and values of unknown type. This is the rule of not guessing, and the README must say so.
-3. **TS2 is not met yet.** Unclassified disagreements remain on nest, three.js and VS Code.
+3. **TS2 was not repeated on VS Code**, whose copy is gone, and its classes do not say who is right.
 4. **pnpm and yarn workspaces** are unmeasured: nest uses npm, and the index covered 3 of its 153
    `tsconfig` files. `tsrs` was asked about all files.
 5. **All sites of a very large project.** Estimated, not measured: about 15 minutes for all of VS Code if
    every reference were asked about. The parser's sites are fewer. TS5 decides.
 6. **An edit near the bottom of the imports** re-asks most of a project: 30 s on nest. Until it ends those files give syntax answers, marked partial.
-7. **Memory after asking** is over T4 on three.js and nest.
+7. **Memory after asking** is 410 MB on three.js, of 27 387 symbols, against T4's 400 MB at 20 000.
 8. **Accuracy on real projects** is known only as agreement with an index; TS1 is a small hand-written list.
 9. **How `tsrs` is installed.** The npm package needs Node for its launcher; the native binary is inside
    a platform package. Whether Homebrew or a release can provide it is not checked.
 10. **Results depend on a one-month-old beta**, which takes no pull requests.
 11. **Only the union case was compared with TypeScript 7 itself.** `scip-typescript` runs TypeScript 6
     and `tsrs` follows 7.1 beta, so other disagreements may come from either the version or the port.
-12. **Code outside a function has no caller,** so calls at the top of a module give no edge. In JavaScript
-    that is often how a program starts.
-13. **Unexplained:** memory on hono is higher one file at a time, and `scip-typescript --infer-tsconfig`
+12. **Unexplained:** memory on hono is higher one file at a time, and `scip-typescript --infer-tsconfig`
     found no files in express with its packages installed.
 
 ## 9. Order

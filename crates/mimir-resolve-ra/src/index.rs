@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use mimir_resolve::{ProjectFile, Refresh, SemanticIndex};
+use mimir_resolve::{LiveDocument, ProjectFile, Refresh, SemanticIndex};
 use mimir_types::ContentHash;
 use tracing::{info, warn};
 
@@ -21,6 +21,12 @@ const TIMEOUT: Duration = Duration::from_secs(600);
 const MAX_EDITED_FILES: usize = 50;
 /// What the log of an index holds when a proc macro failed and said so.
 const MACRO_FAILURE: &str = "proc-macro tried to print";
+
+fn shared(live: HashMap<PathBuf, LiveDocument>) -> HashMap<PathBuf, std::sync::Arc<LiveDocument>> {
+    live.into_iter()
+        .map(|(path, document)| (path, std::sync::Arc::new(document)))
+        .collect()
+}
 
 /// The indexes for a project's Rust files: from the cache, or by running `rust-analyzer`.
 /// Files in no index, because the tool is missing or failed, keep their syntax edges.
@@ -167,7 +173,7 @@ fn load_root(
             }
             match analyzers.resolve(project, &abs, files, &asked) {
                 Ok(live) => {
-                    index.answers = live;
+                    index.answers = shared(live);
                     return Ok(index);
                 }
                 // A new index would not help files whose macros may fail again.
@@ -225,7 +231,7 @@ fn load_root(
             .collect();
         fs::write(&failed_file, list).map_err(|e| LoadError::Failed(e.to_string()))?;
         match analyzers.resolve(project, &abs, files, &suspects) {
-            Ok(live) => index.answers = live,
+            Ok(live) => index.answers = shared(live),
             Err(e) => warn!(
                 "No running analyzer for {:?}, keeping what the index says: {e}",
                 root

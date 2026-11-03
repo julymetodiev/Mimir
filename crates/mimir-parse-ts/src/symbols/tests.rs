@@ -94,7 +94,7 @@ fn overloads_are_one_symbol_at_what_has_a_body() {
         "function f(a: string): void;\nfunction f(a: number): void;\nfunction f(a: any) {}\n";
     let tree = adapter.parse(source).unwrap();
     let found = adapter.extract_symbols(&tree, FileId::new(1));
-    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found.len(), 2, "the function and the module: {found:?}");
     assert_eq!(found[0].range.start_line, 3);
 }
 
@@ -104,7 +104,7 @@ fn signatures_without_a_body_keep_the_first() {
     let source = "declare function f(a: string): void;\ndeclare function f(a: number): void;\n";
     let tree = adapter.parse(source).unwrap();
     let found = adapter.extract_symbols(&tree, FileId::new(1));
-    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found.len(), 2, "the function and the module: {found:?}");
     assert_eq!(found[0].range.start_line, 1);
 }
 

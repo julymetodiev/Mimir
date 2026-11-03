@@ -71,8 +71,17 @@ pub fn collect_bound<'a>(
     if depth >= MAX_DEPTH {
         return;
     }
+    // In `a = dflt` only `a` is bound.
+    let computed = match node.kind() {
+        "required_parameter" | "optional_parameter" => node.child_by_field_name("value"),
+        "assignment_pattern" | "object_assignment_pattern" => node.child_by_field_name("right"),
+        _ => None,
+    };
     let mut cursor = node.walk();
     for child in node.named_children(&mut cursor) {
+        if Some(child) == computed {
+            continue;
+        }
         match child.kind() {
             "arrow_function"
             | "function_expression"
@@ -81,7 +90,8 @@ pub fn collect_bound<'a>(
             | "method_definition"
             | "class"
             | "class_declaration" => {
-                if child.kind() != "arrow_function"
+                // An arrow has no name, and a method's is reached through its object.
+                if !matches!(child.kind(), "arrow_function" | "method_definition")
                     && let Some(name) = child.child_by_field_name("name")
                     && let Some(name) = text(&name, source)
                 {

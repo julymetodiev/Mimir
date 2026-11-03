@@ -7,7 +7,7 @@ mod saved;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use mimir_lsp::{LspError, Server, ServerSpec};
@@ -179,7 +179,7 @@ impl State {
                 continue;
             };
             let hash = ContentHash::compute(file.source.as_bytes());
-            self.known.insert(path, (hash, document));
+            self.known.insert(path, (hash, Arc::new(document)));
         }
         let held: HashSet<&Path> = scripts.iter().map(|f| f.path.as_path()).collect();
         self.known.retain(|path, _| held.contains(path.as_path()));

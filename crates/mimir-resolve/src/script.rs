@@ -49,11 +49,13 @@ pub fn resolve_calls(
         for reference in &file.references {
             let (from, kind) = match reference.kind {
                 ReferenceKind::Call => (
-                    table.callable_at(
-                        file.file_id,
-                        reference.range.start_line,
-                        reference.range.start_col,
-                    ),
+                    table
+                        .callable_at(
+                            file.file_id,
+                            reference.range.start_line,
+                            reference.range.start_col,
+                        )
+                        .or_else(|| table.any_at(file.file_id, reference.span.start)),
                     EdgeKind::Calls,
                 ),
                 ReferenceKind::FunctionValue => (
@@ -149,7 +151,7 @@ impl Answers<'_> {
         // Answers that are one symbol make a certain edge. Several are possible targets.
         let mut callables = Vec::new();
         for target in targets {
-            let Some(defined_in) = self.by_path.get(target.path.as_path()) else {
+            let Some(defined_in) = self.by_path.get(&*target.path) else {
                 continue;
             };
             let id = defined_in.file_id;
@@ -165,7 +167,7 @@ impl Answers<'_> {
                 }
             } else if let Some(callable) = table
                 .definition_at(id, target.line, &target.name)
-                .filter(|s| s.name == target.name)
+                .filter(|s| *s.name == *target.name)
                 .or_else(|| table.definition_after(id, target.line, &target.name))
                 .filter(|s| is_callable(s))
             {
@@ -192,16 +194,16 @@ impl Answers<'_> {
                 add_data_use(&from, data, span, self.edges);
             }
         }
-        let Some(caller) = self.table.callable_at(
-            file.file_id,
-            reference.range.start_line,
-            reference.range.start_col,
-        ) else {
-            for callable in &callables {
-                self.edge(&from, callable, EdgeKind::UsesAsValue, reference);
-            }
-            return;
-        };
+        // Outside any function, the caller is what holds the site: at last the file's own symbol.
+        let caller = self
+            .table
+            .callable_at(
+                file.file_id,
+                reference.range.start_line,
+                reference.range.start_col,
+            )
+            .unwrap_or(&from)
+            .clone();
         let certain = callables.len() == 1;
         for callable in &callables {
             let is_field = matches!(
@@ -248,7 +250,7 @@ impl Answers<'_> {
             return;
         };
         for target in targets {
-            let Some(defined_in) = self.by_path.get(target.path.as_path()) else {
+            let Some(defined_in) = self.by_path.get(&*target.path) else {
                 continue;
             };
             for method in self.table.methods_in_owner(file.file_id, &class.name) {

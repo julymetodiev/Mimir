@@ -48,3 +48,11 @@ export function either(x: Circle | Square): void {
 export function chain(o: { inner: Circle | Square }): void {
   o.inner.area();
 }
+
+function make(): Circle | Square {
+  return new Square();
+}
+
+export function made(): void {
+  make().area();
+}

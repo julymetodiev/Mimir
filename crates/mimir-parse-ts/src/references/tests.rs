@@ -33,7 +33,6 @@ fn a_call_is_found_at_its_name() {
     assert_eq!((run.range.start_line, run.range.start_col), (2, 6));
     assert_eq!(run.call_form, Some(CallForm::Method));
     assert_eq!(run.context.as_deref(), Some("obj"));
-    assert_eq!(run.container.as_deref(), Some("a"));
 }
 
 #[test]
@@ -76,10 +75,10 @@ fn values_are_not_their_declarations() {
     let found =
         ts("const f = g;\nfunction h(a = dflt, { b, c: d } = {}) { use(a, f, { x, y: z }); }\n");
     let values = kinds(&found, ReferenceKind::FunctionValue);
-    for name in ["g", "dflt", "a", "f", "x", "z"] {
+    for name in ["g", "dflt", "f", "x", "z"] {
         assert!(values.contains(&name), "{name} in {values:?}");
     }
-    for name in ["h", "b", "c", "d", "y"] {
+    for name in ["h", "a", "b", "c", "d", "y"] {
         assert!(!values.contains(&name), "{name} in {values:?}");
     }
 }

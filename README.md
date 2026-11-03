@@ -212,7 +212,7 @@ Who uses what, against `rust-analyzer`'s find-references on the project above:
 feature. A graph kept up to date through edits had 0 differences from a new index, on edits of comment
 lines in 3 files. These are measurements of one project, not a guarantee for yours.
 
-Known limits in TypeScript and JavaScript: what has no type has no target, so plain JavaScript gets about two thirds of its calls (62% on express, 66% on three.js, against 91% and 94% on TypeScript projects). Mimir leaves the rest out and does not guess. Code outside any function has no caller. `make().area()` on a union of types shows one member. `tsrs` is a young beta.
+Known limits in TypeScript and JavaScript: what has no type has no target, so plain JavaScript gets about two thirds of its calls (62% on express, 66% on three.js, against 91% and 94% on TypeScript projects). Mimir leaves the rest out and does not guess. `list[0].area()` on a union of types shows one member. `tsrs` is a young beta.
 
 Known limits in Rust: a proc macro that fails silently while the index is written loses its calls;
 one that says so is handled. A read and a write of a field are not told apart. A constant inside a format string has a read only in macros known to take one, and only if it is an item of the same module or imported by a project path: an attribute such as `#[error("{NAME}")]`, a glob import or a renamed import leaves it out. A function named in an attribute, as in `#[serde(skip_serializing_if = "name")]`, has no call. Replacing a file by renaming breaks a hard link to it.

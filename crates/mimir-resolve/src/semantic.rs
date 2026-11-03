@@ -268,7 +268,7 @@ fn resolve_live(
                 .into_iter()
                 .flatten()
                 .find_map(|t| {
-                    let defined_in = by_path.get(t.path.as_path())?.file_id;
+                    let defined_in = by_path.get(&*t.path)?.file_id;
                     table
                         .data_at(defined_in, t.line, &t.name)
                         .filter(|s| s.kind == SymbolKind::Field)
@@ -283,7 +283,7 @@ fn resolve_live(
         if matches!(reference.kind, ReferenceKind::Read | ReferenceKind::TypeUse) {
             // What a site is, only the answer says: `Kind::A` looks like a constant.
             let answer = document.sites.get(&(line, column)).and_then(|t| {
-                let defined_in = by_path.get(t.path.as_path())?.file_id;
+                let defined_in = by_path.get(&*t.path)?.file_id;
                 Some((defined_in, t))
             });
             let Some(from) = table.any_at(file.file_id, reference.span.start) else {
@@ -315,9 +315,10 @@ fn resolve_live(
             ),
             _ => continue,
         };
-        let target = document.sites.get(&(line, column)).and_then(|t| {
-            table.definition_at(by_path.get(t.path.as_path())?.file_id, t.line, &t.name)
-        });
+        let target = document
+            .sites
+            .get(&(line, column))
+            .and_then(|t| table.definition_at(by_path.get(&*t.path)?.file_id, t.line, &t.name));
         if let (Some(from), Some(target)) = (from, target) {
             edges.add(
                 from.id,
@@ -334,7 +335,7 @@ fn resolve_live(
             .and_then(|block| document.traits.get(&block.range.start_line))
             .and_then(|declared| {
                 // Its own name: the impl may use another, from `use a::Tr as Other`.
-                let defined_in = by_path.get(declared.path.as_path())?;
+                let defined_in = by_path.get(&*declared.path)?;
                 table
                     .methods_of(&declared.name, &method.name)
                     .iter()
