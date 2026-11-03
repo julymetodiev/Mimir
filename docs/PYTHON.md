@@ -275,8 +275,8 @@ project's `.venv` without `VIRTUAL_ENV`: flask gave 71.8% either way.
     [astral-sh/ty#4915](https://github.com/astral-sh/ty/issues/4915). `error.error_list` at `forms.py:296` in django
     gets its two targets when asked first, and none after one question about `base.py:76`. It repeats on a clean
     clone with nothing installed, and on 0.0.80, 0.0.90, 0.0.95 and 0.0.96. `pyrefly` and `pyright` answer the same
-    in both orders. A server is one module here, so when that is fixed `ty` can come back, once it passes the same
-    check of order on all of django.
+    in both orders. **When that is fixed `pyrefly` is to be replaced by `ty`, by the owner's word,** once `ty` passes the same
+    check of order on all of django. A server is one module here, `pyrefly.rs`.
 13. **Whether Homebrew can provide `pyrefly`** is not checked. Its releases have 22 files, under the MIT license.
 
 ## 9. Order

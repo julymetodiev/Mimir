@@ -268,11 +268,6 @@ fn start(language: &AskedLanguage, project: &Path) -> Result<Server, LspError> {
         },
         project,
     )?;
-    if server.capabilities()["positionEncoding"] != "utf-8" {
-        warn!(
-            "{program} does not offer byte columns, so columns after other than ASCII will be off"
-        );
-    }
     info!(
         "{program} ready for {} in {:?}",
         project.display(),

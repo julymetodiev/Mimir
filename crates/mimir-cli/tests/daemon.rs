@@ -120,6 +120,35 @@ fn test_a_name_shared_with_a_field_traces_the_function() {
 }
 
 #[test]
+fn test_a_file_chooses_among_the_same_qualified_name_in_several() {
+    let project = project();
+    let dir = project.path();
+    fs::write(
+        dir.join("a.py"),
+        "class C:\n    def run(self):\n        pass\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.join("b.py"),
+        "class C:\n    def run(self):\n        pass\n",
+    )
+    .unwrap();
+    for file in ["a.py", "b.py"] {
+        mimir(dir)
+            .args(["read", "-s", "C::run", "--file", file])
+            .assert()
+            .success()
+            .stdout(contains(file));
+    }
+    mimir(dir)
+        .args(["trace", "-s", "C::run"])
+        .assert()
+        .success()
+        .stderr(contains("2 symbols"));
+    stop(dir);
+}
+
+#[test]
 fn test_search_counts_all_matches_and_functions_include_methods() {
     let project = project();
     let dir = project.path();
