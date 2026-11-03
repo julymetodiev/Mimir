@@ -1,15 +1,9 @@
-//! File indexing for the Mimir semantic code intelligence engine.
+//! File scanning for the Mimir semantic code intelligence engine.
 //!
-//! Provides file scanning, indexing, and change detection.
+//! Provides gitignore-aware directory scanning and language detection.
 
-mod entry;
-mod handle;
 mod ignore;
-mod index;
 mod language;
 mod scanner;
 
-pub use entry::FileEntry;
-pub use handle::FilesHandle;
-pub use index::FileIndex;
 pub use scanner::{ScannedFile, Scanner};

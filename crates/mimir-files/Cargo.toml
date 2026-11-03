@@ -11,13 +11,9 @@ repository.workspace = true
 [dependencies]
 mimir-types = { workspace = true }
 mimir-error = { workspace = true }
-mimir-content = { workspace = true }
-dashmap = { workspace = true }
-serde = { workspace = true }
 chrono = { workspace = true }
 ignore = { workspace = true }
 tokio = { workspace = true }
-async-trait = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

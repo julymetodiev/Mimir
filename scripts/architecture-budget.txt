@@ -1,6 +1,6 @@
-allow_attrs 22
+allow_attrs 18
 anyhow_libs 0
-debug_names 9
+debug_names 8
 domain_io 0
 env_below_root 1
 path_attrs 0
@@ -9,8 +9,8 @@ pub_in_path 0
 pub_super 0
 string_errors 0
 super_paths 2
-swallowed 33
-transport_reach 35
-unused_deps 4
+swallowed 32
+transport_reach 29
+unused_deps 2
 unwrap_expect 4
-wrong_deps 21
+wrong_deps 14
