@@ -7,7 +7,7 @@ use crate::error::GraphError;
 use crate::scanner;
 use mimir_parse_core::nodes::MODULE_NAME;
 use mimir_protocol::{ChangedSymbol, ImpactResponse, NamedAt, RemovedSymbol};
-use mimir_types::{FileId, Language, Span, Symbol, SymbolId, SymbolKind};
+use mimir_types::{FileId, Language, QualifiedName, Span, Symbol, SymbolId, SymbolKind};
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -47,10 +47,26 @@ pub fn own_text(span: Span, others: &[Span], source: &str) -> String {
     pieces.join("\n")
 }
 
+/// What a member belongs to, as the second last part of its name. Anything else belongs to no one
+/// here: where it lives is part of its name in some languages, and moving it changes that.
+fn owner(name: &QualifiedName, kind: SymbolKind) -> Option<String> {
+    let is_member = matches!(
+        kind,
+        SymbolKind::Method | SymbolKind::Field | SymbolKind::Property | SymbolKind::EnumVariant
+    );
+    let segments = name.segments();
+    is_member
+        .then(|| segments.len().checked_sub(2))
+        .flatten()
+        .and_then(|at| segments.get(at))
+        .cloned()
+}
+
 /// A symbol of the version compared with.
 struct Before {
     name: String,
     qualified_name: String,
+    owner: Option<String>,
     kind: SymbolKind,
     line: u32,
     text: String,
@@ -88,7 +104,7 @@ impl GraphActor {
             changed.extend(found);
             removed.extend(gone);
         }
-        self.drop_moved(&mut changed, &mut removed);
+        self.pair_moved(&mut changed, &mut removed);
 
         let roots: Vec<SymbolId> = changed.iter().map(|(symbol, _)| symbol.id).collect();
         let depth = depth.unwrap_or(DEFAULT_DEPTH) as usize;
@@ -193,6 +209,7 @@ impl GraphActor {
             .filter(|symbol| symbol.name != MODULE_NAME)
             .map(|symbol| Before {
                 text: own_text(symbol.span, &spans, text),
+                owner: owner(&symbol.qualified_name, symbol.kind),
                 name: symbol.name,
                 qualified_name: symbol.qualified_name.to_string(),
                 kind: symbol.kind,
@@ -204,28 +221,47 @@ impl GraphActor {
 
     /// A symbol gone from one place and added in another with the same text has moved: what depends
     /// on it still does, and its name still means it.
-    fn drop_moved(&self, changed: &mut Vec<(Arc<Symbol>, bool)>, removed: &mut Vec<Before>) {
+    /// A symbol gone from one place and added in another, with the same name, kind and owner, has
+    /// moved: what depends on it still does, and its name still means it. With the same text nothing
+    /// happened to it, and otherwise it is changed. A method of another type is another method.
+    fn pair_moved(&self, changed: &mut Vec<(Arc<Symbol>, bool)>, removed: &mut Vec<Before>) {
         let mut spans_of: HashMap<FileId, Vec<Span>> = HashMap::new();
         removed.retain(|gone| {
-            let moved = changed.iter().position(|(symbol, added)| {
-                *added
+            let mut same_text = |symbol: &Symbol| {
+                self.sources.get(&symbol.file_id).is_some_and(|file| {
+                    let spans = spans_of.entry(symbol.file_id).or_insert_with(|| {
+                        self.graph
+                            .symbols_in_file(symbol.file_id)
+                            .iter()
+                            .map(|symbol| symbol.span)
+                            .collect()
+                    });
+                    own_text(symbol.span, spans, &file.source) == gone.text
+                })
+            };
+            let is_it = |symbol: &Symbol, added: bool| {
+                added
                     && symbol.name == gone.name
                     && symbol.kind == gone.kind
-                    && self.sources.get(&symbol.file_id).is_some_and(|file| {
-                        let spans = spans_of.entry(symbol.file_id).or_insert_with(|| {
-                            self.graph
-                                .symbols_in_file(symbol.file_id)
-                                .iter()
-                                .map(|symbol| symbol.span)
-                                .collect()
-                        });
-                        own_text(symbol.span, spans, &file.source) == gone.text
-                    })
-            });
-            if let Some(moved) = moved {
-                changed.remove(moved);
+                    && owner(&symbol.qualified_name, symbol.kind) == gone.owner
+            };
+            let unchanged = changed
+                .iter()
+                .position(|(symbol, added)| is_it(symbol, *added) && same_text(symbol));
+            if let Some(unchanged) = unchanged {
+                changed.remove(unchanged);
+                return false;
             }
-            moved.is_none()
+            match changed
+                .iter_mut()
+                .find(|(symbol, added)| is_it(symbol, *added))
+            {
+                Some((_, added)) => {
+                    *added = false;
+                    false
+                }
+                None => true,
+            }
         });
     }
 

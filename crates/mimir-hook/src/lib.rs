@@ -128,11 +128,13 @@ fn project_of(directory: &Path) -> Option<&Path> {
         .find(|ancestor| ancestor.join(".git").exists())
 }
 
-/// Whether a command begins any of its parts with a search.
+/// Whether a command begins any of its parts with a search. What comes after a pipe filters the
+/// output of something else, and searches no file.
 fn searches(command: &str) -> bool {
     command
-        .split(['\n', ';', '|', '&'])
-        .filter_map(|part| part.split_whitespace().next())
+        .replace("||", ";")
+        .split(['\n', ';', '&'])
+        .filter_map(|part| part.split('|').next()?.split_whitespace().next())
         .any(|word| SEARCHES.contains(&word))
 }
 
@@ -269,6 +271,14 @@ mod tests {
                 .ask("Bash", json!({"command": "cargo test"}))
                 .is_none()
         );
+    }
+
+    #[test]
+    fn what_filters_an_output_is_no_search() {
+        assert!(!searches("gh api x | cut -c1-90 | head -5"));
+        assert!(!searches("cargo test 2>&1 | grep FAILED"));
+        assert!(searches("cargo test || cat out.log"));
+        assert!(searches("rg x | head"));
     }
 
     #[test]

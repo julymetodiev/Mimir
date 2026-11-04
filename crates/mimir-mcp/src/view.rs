@@ -7,6 +7,8 @@ use mimir_protocol::{
     TraceResponse,
 };
 use serde::Serialize;
+use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 /// Where a symbol is: `path:first-last`.
 fn place(symbol: &SymbolInfo) -> String {
@@ -177,11 +179,15 @@ impl From<&RemovedSymbol> for Removed {
 #[derive(Serialize)]
 pub struct Impact {
     base: String,
+    /// What changed and has dependents.
     changed: Vec<Changed>,
+    /// What changed with nothing depending on it, by file, as names alone: `read` shows any of them.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    no_dependents: BTreeMap<PathBuf, Vec<String>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     removed: Vec<Removed>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    other_files: Vec<std::path::PathBuf>,
+    other_files: Vec<PathBuf>,
     /// Analysis is still running, so dependents may be missing.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     provisional: bool,
@@ -189,9 +195,26 @@ pub struct Impact {
 
 impl From<ImpactResponse> for Impact {
     fn from(impact: ImpactResponse) -> Self {
+        let (changed, alone): (Vec<_>, Vec<_>) = impact
+            .changed
+            .iter()
+            .partition(|changed| !changed.dependents.is_empty());
+        let mut no_dependents: BTreeMap<PathBuf, Vec<String>> = BTreeMap::new();
+        for changed in alone {
+            let name = full_name(&changed.symbol);
+            no_dependents
+                .entry(changed.symbol.file_path.clone())
+                .or_default()
+                .push(if changed.added {
+                    format!("{name} (added)")
+                } else {
+                    name
+                });
+        }
         Self {
             base: impact.base,
-            changed: impact.changed.iter().map(Changed::from).collect(),
+            changed: changed.into_iter().map(Changed::from).collect(),
+            no_dependents,
             removed: impact.removed.iter().map(Removed::from).collect(),
             other_files: impact.other_files,
             provisional: impact.provisional,
@@ -364,6 +387,34 @@ mod tests {
             relationship,
         };
         serde_json::to_value(Step::from(&node)).unwrap()
+    }
+
+    #[test]
+    fn what_nothing_depends_on_is_only_named_by_file() {
+        let symbol = |name: &str, file: &str| {
+            serde_json::json!({
+                "id": 1, "name": name, "qualified_name": null, "kind": "function", "file_id": 1,
+                "file_path": file, "start_line": 1, "end_line": 2, "language": "rust",
+            })
+        };
+        let answer: ImpactResponse = serde_json::from_value(serde_json::json!({
+            "base": "abc", "removed": [], "other_files": [], "provisional": false,
+            "changed": [
+                {"symbol": symbol("lonely", "a.rs"), "added": false, "dependents": []},
+                {"symbol": symbol("fresh", "a.rs"), "added": true, "dependents": []},
+                {"symbol": symbol("used", "b.rs"), "added": false, "dependents": [{
+                    "symbol": symbol("caller", "c.rs"), "depth": 1, "relationship": "Caller",
+                }]},
+            ],
+        }))
+        .unwrap();
+        let shown = serde_json::to_value(Impact::from(answer)).unwrap();
+        assert_eq!(
+            shown["no_dependents"]["a.rs"],
+            serde_json::json!(["lonely", "fresh (added)"])
+        );
+        assert_eq!(shown["changed"].as_array().unwrap().len(), 1);
+        assert_eq!(shown["changed"][0]["name"], "used");
     }
 
     #[test]

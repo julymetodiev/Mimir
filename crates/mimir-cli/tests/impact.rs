@@ -146,6 +146,52 @@ fn a_function_moved_to_another_file_is_not_removed() {
 }
 
 #[test]
+fn a_function_moved_and_changed_is_changed_and_not_removed() {
+    let dir = committed();
+    fs::write(
+        dir.path().join(LIB),
+        "mod other;\npub use other::helper;\n\npub fn compute() -> u32 {\n    helper()\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("src/other.rs"),
+        "pub fn helper() -> u32 {\n    2\n}\n",
+    )
+    .unwrap();
+
+    let answer = impact(dir.path(), &[]);
+    assert_eq!(answer["removed"], serde_json::json!([]));
+    let helper = answer["changed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|changed| changed["symbol"]["name"] == "helper")
+        .unwrap();
+    assert_eq!(helper["added"], false);
+    stop(dir.path());
+}
+
+#[test]
+fn a_method_of_another_type_with_the_name_of_one_removed_has_not_moved() {
+    let dir = committed();
+    let text = "pub struct A;\npub struct B;\nimpl A {\n    pub fn run(&self) {}\n}\n";
+    fs::write(dir.path().join("src/m.rs"), text).unwrap();
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-qm", "types"]);
+    fs::write(
+        dir.path().join("src/m.rs"),
+        text.replace("impl A", "impl B"),
+    )
+    .unwrap();
+
+    let answer = impact(dir.path(), &[]);
+    assert_eq!(names(&answer["removed"], "name"), ["impl A", "run"]);
+    assert_eq!(names(&answer["changed"], "symbol"), ["impl B", "run"]);
+    assert_eq!(answer["changed"][1]["added"], true);
+    stop(dir.path());
+}
+
+#[test]
 fn a_new_file_is_all_added() {
     let dir = committed();
     fs::write(dir.path().join("src/new.rs"), "pub fn fresh() {}\n").unwrap();

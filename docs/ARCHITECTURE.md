@@ -120,8 +120,8 @@ since the daemon builds the graph from the sources when it starts.
 `impact` compares each file git says changed with its version in a commit, by parsing both. Each
 symbol is compared by its text without the symbols inside it, so lines moved by an edit above change
 nothing, and a method added to a type does not change the type. Symbols of one name and kind pair in
-written order. One gone from one place and added in another with the same text has moved, and is not
-reported. Dependents are the callers of `trace`, each symbol once across the answer.
+written order. One gone from one place and added in another, with the same name, kind and owner, has
+moved: with the same text it is not reported, and otherwise it is changed. Dependents are the callers of `trace`, each symbol once across the answer.
 
 A removed symbol has no edges left, and its callers cannot be known from the graph. Reported for it are
 the places that still name it and resolve to nothing else, as `still named at`: a claim about a name,
