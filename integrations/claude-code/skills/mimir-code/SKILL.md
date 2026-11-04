@@ -5,8 +5,15 @@ description: Use Mimir instead of Grep, Glob, Read, Edit and Write in a project 
 
 # Mimir
 
-Mimir holds the project's call graph, resolved by `rust-analyzer`, so `x.get()` links to the `get`
-of `x`'s type. Plain text search cannot tell same-named methods apart, so use `trace` for calls and `grep` for text.
+Mimir holds the project's call graph, resolved by each language's compiler or checker (Rust, Go, Python, TypeScript and
+JavaScript), so `x.get()` links to the `get` of `x`'s type. Plain text search cannot tell same-named methods apart, so use
+`trace` for calls and `grep` for text.
+
+## How to work
+
+Before changing code: `trace` what you will change, to see its callers, then `read` the symbols you need. Do not read whole
+files or cut them into ranges to find a function. Then make the whole change in one `edit_symbols` or `replace_text` call:
+all its edits apply together or none do. `trace` a caller to see what it calls in turn.
 
 ## When to use what
 
@@ -28,7 +35,9 @@ Outside the project, use your usual tools: Mimir reads only the project's files.
 
 ## Reading a trace
 
-- An entry without `possible` is an exact call.
+- An entry without `possible` or `not_a_call` is an exact call.
+- `not_a_call: "reads it"` and `"uses it"`: it reads the constant, or names the type or field, and
+  calls nothing. These come only for what you traced, not further along a chain.
 - `possible: "via trait"` and `"implementation"`: which implementation runs is decided at runtime.
   `"as value"`: a function named without being called, so it may run later or never. Check these
   before relying on them.
@@ -39,7 +48,7 @@ Outside the project, use your usual tools: Mimir reads only the project's files.
 - For a constant, type, trait, variant or field, `callers` are the symbols that use it, including
   `impl` blocks and the fields of other types. A read and a write of a field are not told apart.
   A function's `callees` do not list the constants, types or fields it uses. When several share a
-  name, pass `file` or a qualified name such as `Config::limit`.
+  name, pass `file`, or a qualified name such as `Config::limit` or `Known::add`.
 - A constant named only inside a format string shows a reader in macros known to take one, if it is an item of the same module or imported by a project path. An attribute such as `#[error("{NAME}")]`, a glob import or a renamed import shows none.
 - No caller does not prove a function is dead. It can be called from outside the project, from a
   test behind a `cfg`, or by name in an attribute, as in `#[serde(skip_serializing_if = "is_zero")]`.
@@ -54,5 +63,5 @@ qualified name such as `Kind::Variant`. `insert_after` adds code below a symbol 
 names the lines. With several edits, if one does not apply, no file changes. Use `preview: true` when unsure. A file changed since it was read is re-read first, so the right
 lines are replaced, and if the edit still does not apply it fails rather than guess.
 
-After editing, a `trace` shows the new calls at once. `sync` is rarely needed; changes are followed
-by themselves.
+After editing, ask again: a `trace` may be `provisional` at first, for under a second on a small edit and longer on a file
+much of the project imports. `sync` is rarely needed; changes are followed by themselves.

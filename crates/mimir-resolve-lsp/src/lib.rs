@@ -25,6 +25,11 @@ use tracing::{info, warn};
 
 use crate::saved::{Known, ProjectFiles};
 
+/// The notification of work a server reports.
+const PROGRESS: &str = "$/progress";
+/// As long as a question may take: a change to a base file makes a whole project stale.
+const RECHECK_TIMEOUT: Duration = Duration::from_secs(300);
+
 /// What is particular to one language server.
 struct AskedLanguage {
     /// Found on `PATH`, never in a project, which must not choose what the daemon runs.
@@ -44,6 +49,10 @@ struct AskedLanguage {
     language_id: fn(&Path) -> &'static str,
     /// Says so if a project lists packages that are not installed, where less can be answered.
     missing_packages: fn(&Path) -> Option<&'static str>,
+    /// It takes in a change on disk after it is told, answers from before that until then, and says
+    /// when it is done with `$/progress`. Even then, a file that imports the change can keep what
+    /// was before it, as a new server does not: a change with importers gets a new server.
+    reports_recheck: bool,
 }
 
 /// A language server as a semantic source.
@@ -104,6 +113,7 @@ impl SemanticSource for AskedSource {
         state.read_saved(language, cache_dir);
         if refresh == Refresh::Full {
             state.known.clear();
+            state.server = None;
         }
         match state.bring_up_to_date(language, project, cache_dir, files, &own) {
             Ok(()) => vec![state.index(&own)],
@@ -207,6 +217,9 @@ impl State {
         }
         let stale = ask::with_importers(own, &changed, &self.known);
         self.last_used = Some(Instant::now());
+        if language.reports_recheck && stale.len() > changed.len() {
+            self.server = None;
+        }
         let first_start = self.server.is_none();
         if first_start {
             self.server = Some(start(language, &project)?);
@@ -217,6 +230,9 @@ impl State {
         if !first_start {
             let on_disk: Vec<PathBuf> = changed.iter().map(|p| project.join(p)).collect();
             server.files_changed(&on_disk)?;
+            if language.reports_recheck {
+                wait_for_recheck(server)?;
+            }
         }
         let answered = ask::answers(server, language, &project, files, &stale)?;
         for (path, document) in answered {
@@ -263,8 +279,9 @@ fn start(language: &AskedLanguage, project: &Path) -> Result<Server, LspError> {
             capabilities: json!({
                 "general": {"positionEncodings": ["utf-8"]},
                 "textDocument": {"definition": {"linkSupport": false}},
+                "window": {"workDoneProgress": language.reports_recheck},
             }),
-            status_method: None,
+            status_method: language.reports_recheck.then(|| PROGRESS.to_string()),
         },
         project,
     )?;
@@ -274,6 +291,31 @@ fn start(language: &AskedLanguage, project: &Path) -> Result<Server, LspError> {
         started.elapsed()
     );
     Ok(server)
+}
+
+/// Wait until the server is done with a change it was told of. A file answered before that keeps a
+/// target from before the change for as long as the file itself does not change.
+fn wait_for_recheck(server: &Server) -> Result<(), LspError> {
+    let started = Instant::now();
+    let mut running = 0usize;
+    loop {
+        let status = RECHECK_TIMEOUT
+            .checked_sub(started.elapsed())
+            .and_then(|left| server.next_status(left))
+            .ok_or_else(|| LspError::TimedOut {
+                method: PROGRESS.to_string(),
+            })?;
+        match status["value"]["kind"].as_str() {
+            Some("begin") => running += 1,
+            Some("end") => {
+                running = running.saturating_sub(1);
+                if running == 0 {
+                    return Ok(());
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// Whether `--version` printed this version, and not one that starts with it.

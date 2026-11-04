@@ -55,6 +55,29 @@ async fn names_by_kind(kind: &str) -> Vec<String> {
     names
 }
 
+#[test]
+fn a_method_is_found_by_its_type_or_trait_without_the_impl() {
+    use crate::actor::queries::ends_with;
+    let name = |segments: &[&str]| segments.iter().map(ToString::to_string).collect::<Vec<_>>();
+    assert!(ends_with(
+        &name(&["impl Known<'a>", "add_go"]),
+        "Known::add_go"
+    ));
+    let in_trait = name(&["impl LanguageAdapter for GoAdapter", "qualify"]);
+    assert!(ends_with(&in_trait, "GoAdapter::qualify"));
+    assert!(ends_with(&in_trait, "LanguageAdapter::qualify"));
+    // Go has the directory first.
+    let in_go = name(&["shapes", "Circle", "Area"]);
+    assert!(ends_with(&in_go, "Circle::Area"));
+    assert!(ends_with(&in_go, "shapes::Circle::Area"));
+    assert!(!ends_with(
+        &name(&["impl Other", "add_go"]),
+        "Known::add_go"
+    ));
+    assert!(!ends_with(&name(&["add_go"]), "Known::add_go"));
+    assert!(!ends_with(&in_go, "Square::Area"));
+}
+
 #[tokio::test]
 async fn test_kind_filter_function() {
     assert_eq!(names_by_kind("function").await, vec!["area"]);

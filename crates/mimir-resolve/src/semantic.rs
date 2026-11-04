@@ -2,20 +2,21 @@
 //! of a running analyzer. Where they come from is the business of a [`crate::SemanticSource`].
 
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
 use std::sync::Arc;
 
 use mimir_graph::EdgeKind;
 use mimir_types::{Confidence, FileId, Language, ReferenceKind, Span, Symbol, SymbolKind};
 
-use crate::ProjectFile;
 use crate::definitions::{
     Definitions, ROLE_DEFINITION, ROLE_IMPORT, is_data, is_function, is_term,
 };
 use crate::edges::{ConstantUse, EdgeSet, files_by_path};
-use crate::lookup::{SymbolTable, trait_of};
-use crate::port::{LiveDocument, Occurrence, SemanticIndex};
-use crate::script;
+use crate::known::{Document, Known, documents_of};
+use crate::lines::Lines;
+use crate::live::resolve_live;
+use crate::lookup::SymbolTable;
+use crate::port::{Occurrence, SemanticIndex};
+use crate::{ProjectFile, golang, script};
 
 /// Add an edge for each call and each function named as a value in the indexes.
 /// Returns the files they cover.
@@ -23,193 +24,231 @@ pub fn resolve(
     table: &SymbolTable,
     files: &[ProjectFile],
     indexes: &[SemanticIndex],
+    family: Language,
     edges: &mut EdgeSet,
     constant_uses: &mut Vec<ConstantUse>,
 ) -> HashSet<FileId> {
     let by_path = files_by_path(files);
     let mut covered = HashSet::new();
-    for index in indexes {
-        let documents: Vec<(&ProjectFile, Vec<&str>, &Vec<Occurrence>)> = index
-            .documents
-            .iter()
-            .filter_map(|(path, occurrences)| {
-                let file = by_path.get(index.root.join(path).as_path())?;
-                Some((*file, file.source.split('\n').collect(), occurrences))
-            })
-            .collect();
-
-        let mut definitions = Definitions::default();
-        let mut constants = Definitions::default();
-        let mut data = Definitions::default();
-        for (file, lines, occurrences) in &documents {
-            if !index.unanswered.contains(&file.path) {
-                covered.insert(file.file_id);
-            }
-            let id = file.file_id;
-            if index.is_edited(&file.path) {
-                definitions.add_by_order(occurrences, is_function, |name, n| {
-                    table.nth_definition(id, name, n)
-                });
-                constants.add_by_order(occurrences, is_term, |name, n| {
-                    table.nth_constant(id, name, n)
-                });
-                data.add_by_order(occurrences, is_data, |name, n| table.nth_data(id, name, n));
-                continue;
-            }
-            definitions.add_by_position(occurrences, lines, is_function, |line, name| {
-                table.definition_at(id, line, name)
-            });
-            constants.add_by_position(occurrences, lines, is_term, |line, name| {
-                table.constant_at(id, line, name)
-            });
-            data.add_by_position(occurrences, lines, is_data, |line, name| {
-                table.data_at(id, line, name)
-            });
+    let read: Vec<_> = indexes
+        .iter()
+        .map(|index| (index, documents_of(index, &by_path)))
+        .collect();
+    if family == Language::Go {
+        // A module's symbols are used from other modules' indexes, without a version.
+        let mut known = Known::default();
+        let mut edited = HashSet::new();
+        for (index, documents) in &read {
+            known.add_go(table, index, documents, &mut covered);
+            edited.extend(
+                documents
+                    .iter()
+                    .filter(|(file, ..)| index.is_edited(&file.path))
+                    .map(|(file, ..)| file.file_id),
+            );
         }
-
-        for (file, lines, occurrences) in documents
-            .iter()
-            .filter(|(file, ..)| !index.is_edited(&file.path))
-        {
-            // rust-analyzer does not set the import role on the paths in a `use`.
-            let imports: Vec<Span> = file
-                .references
+        for (index, documents) in &read {
+            link_documents(table, index, documents, &known, true, edges, constant_uses);
+        }
+        golang::add_index_implementations(table, indexes, &known.definitions, &edited, edges);
+    } else {
+        for (index, documents) in &read {
+            let mut known = Known::default();
+            known.add(table, index, documents, &mut covered);
+            link_documents(table, index, documents, &known, false, edges, constant_uses);
+            for (file, lines, occurrences) in documents
                 .iter()
-                .filter(|r| r.kind == ReferenceKind::Import)
-                .map(|r| r.span)
-                .collect();
-            // A failed macro leaves a parameter resolved to the function of the same name.
-            let locals: HashSet<u32> = file
-                .references
-                .iter()
-                .filter(|r| r.kind == ReferenceKind::LocalRead)
-                .map(|r| r.span.start)
-                .collect();
-            for o in occurrences.iter().filter(|o| {
-                o.roles & (ROLE_DEFINITION | ROLE_IMPORT) == 0 && is_function(&o.symbol)
-            }) {
-                let Some(target) = definitions.get(o.symbol.as_str(), file.file_id) else {
-                    continue;
-                };
-                let Some(after) = lines
-                    .get(o.end_line as usize)
-                    .and_then(|l| l.get(o.end_column as usize..))
-                else {
-                    continue;
-                };
-                let start = byte_offset(lines, o.line, o.column);
-                let span = Span::new(start, byte_offset(lines, o.end_line, o.end_column));
-                // An operator's occurrence is its token: `a[i]` is `index`, `a == b` is `eq`.
-                let named = lines
-                    .get(o.line as usize)
-                    .and_then(|l| l.get(o.column as usize..))
-                    .is_some_and(|t| t.starts_with(|c: char| c.is_alphabetic() || c == '_'));
-                let (from, kind) = if is_call(after) {
-                    (
-                        table.callable_at(file.file_id, o.line + 1, o.column),
-                        EdgeKind::Calls,
-                    )
-                } else if !named
-                    || imports.iter().any(|i| i.start <= start && start < i.end)
-                    || locals.contains(&start)
-                {
-                    continue;
-                } else {
-                    (table.any_at(file.file_id, start), EdgeKind::UsesAsValue)
-                };
-                if let Some(from) = from {
-                    edges.add(from.id, target.id, kind, span, Confidence::Certain);
-                }
-            }
-            for o in occurrences
-                .iter()
-                .filter(|o| o.roles & (ROLE_DEFINITION | ROLE_IMPORT) == 0 && is_term(&o.symbol))
+                .filter(|(file, ..)| !index.is_edited(&file.path))
             {
-                let Some(constant) = constants.get(o.symbol.as_str(), file.file_id) else {
-                    continue;
-                };
-                let start = byte_offset(lines, o.line, o.column);
-                if imports.iter().any(|i| i.start <= start && start < i.end) {
-                    continue;
-                }
-                // A static in a function gets the same SCIP symbol as an item of that name, and is
-                // no symbol of the graph: what its function reads is not the item.
-                let defined_in_this_function = table
-                    .callable_holding(file.file_id, start)
-                    .is_some_and(|function| {
-                        occurrences.iter().any(|d| {
-                            let at = byte_offset(lines, d.line, d.column);
-                            d.roles & ROLE_DEFINITION != 0
-                                && d.symbol == o.symbol
-                                && function.span.start <= at
-                                && at <= function.span.end
-                        })
-                    });
-                if defined_in_this_function {
-                    continue;
-                }
-                if let Some(from) = table.any_at(file.file_id, start) {
-                    constant_uses.push(ConstantUse {
-                        from: from.id,
-                        constant: constant.id,
-                        span: Span::new(start, byte_offset(lines, o.end_line, o.end_column)),
-                        confidence: Confidence::Certain,
-                    });
-                }
-            }
-            add_data_uses(table, file, lines, occurrences, &data, &imports, edges);
-        }
-
-        for (file, lines, occurrences) in documents
-            .iter()
-            .filter(|(file, ..)| !index.is_edited(&file.path))
-        {
-            for (method, trait_name) in table.trait_impls_in(file.file_id) {
-                let declaration = table
-                    .impl_at(file.file_id, method.range.start_line)
-                    .and_then(|block| {
-                        declared_method(
-                            block,
-                            method,
-                            trait_name,
-                            lines,
-                            occurrences,
-                            &definitions,
-                            file.file_id,
-                        )
-                    });
-                if let Some(declaration) = declaration {
-                    edges.add(
-                        method.id,
-                        declaration.id,
-                        EdgeKind::Implements,
-                        method.span,
-                        Confidence::Certain,
-                    );
+                for (method, trait_name) in table.trait_impls_in(file.file_id) {
+                    let declaration = table
+                        .impl_at(file.file_id, method.range.start_line)
+                        .and_then(|block| {
+                            declared_method(
+                                block,
+                                method,
+                                trait_name,
+                                lines,
+                                occurrences,
+                                &known.definitions,
+                                file.file_id,
+                            )
+                        });
+                    if let Some(declaration) = declaration {
+                        edges.add(
+                            method.id,
+                            declaration.id,
+                            EdgeKind::Implements,
+                            method.span,
+                            Confidence::Certain,
+                        );
+                    }
                 }
             }
         }
-
+    }
+    for index in indexes {
         for (path, document) in &index.answers {
             let Some(file) = by_path.get(path.as_path()) else {
                 continue;
             };
             covered.insert(file.file_id);
-            if Language::from_path(path).family() != Language::Rust {
-                script::resolve_answers(table, file, document, &by_path, edges, constant_uses);
-            } else {
-                resolve_live(table, file, document, &by_path, edges, constant_uses);
+            match family {
+                Language::Rust => {
+                    resolve_live(table, file, document, &by_path, edges, constant_uses)
+                }
+                _ => script::resolve_answers(table, file, document, &by_path, edges, constant_uses),
+            }
+            if family == Language::Go {
+                golang::add_answered_implementations(table, file, document, &by_path, edges);
             }
         }
     }
     covered
 }
 
+/// Add the edges of the occurrences in an index, for the files not edited since it.
+fn link_documents(
+    table: &SymbolTable,
+    index: &SemanticIndex,
+    documents: &[Document<'_>],
+    known: &Known<'_>,
+    go: bool,
+    edges: &mut EdgeSet,
+    constant_uses: &mut Vec<ConstantUse>,
+) {
+    let names_callable = if go {
+        golang::may_be_callable
+    } else {
+        is_function
+    };
+    let is_call = if go { golang::is_call } else { is_call };
+    for (file, lines, occurrences) in documents
+        .iter()
+        .filter(|(file, ..)| !index.is_edited(&file.path))
+    {
+        // rust-analyzer does not set the import role on the paths in a `use`.
+        let imports: Vec<Span> = file
+            .references
+            .iter()
+            .filter(|r| r.kind == ReferenceKind::Import)
+            .map(|r| r.span)
+            .collect();
+        // A failed macro leaves a parameter resolved to the function of the same name.
+        let locals: HashSet<u32> = file
+            .references
+            .iter()
+            .filter(|r| r.kind == ReferenceKind::LocalRead)
+            .map(|r| r.span.start)
+            .collect();
+        let mut term_definitions: HashMap<&str, Vec<u32>> = HashMap::new();
+        for d in occurrences
+            .iter()
+            .filter(|d| d.roles & ROLE_DEFINITION != 0 && is_term(&d.symbol))
+        {
+            term_definitions
+                .entry(d.symbol.as_str())
+                .or_default()
+                .push(lines.offset(d.line, d.column));
+        }
+        for o in occurrences
+            .iter()
+            .filter(|o| o.roles & (ROLE_DEFINITION | ROLE_IMPORT) == 0 && names_callable(&o.symbol))
+        {
+            let target = if go {
+                golang::definition(&known.definitions, o.symbol.as_str(), file.file_id)
+            } else {
+                known.definitions.get(o.symbol.as_str(), file.file_id)
+            };
+            let Some(target) = target else {
+                continue;
+            };
+            let Some(after) = lines
+                .get(o.end_line as usize)
+                .and_then(|l| l.get(o.end_column as usize..))
+            else {
+                continue;
+            };
+            let start = lines.offset(o.line, o.column);
+            let span = Span::new(start, lines.offset(o.end_line, o.end_column));
+            // An operator's occurrence is its token: `a[i]` is `index`, `a == b` is `eq`.
+            let named = lines
+                .get(o.line as usize)
+                .and_then(|l| l.get(o.column as usize..))
+                .is_some_and(|t| t.starts_with(|c: char| c.is_alphabetic() || c == '_'));
+            let (from, kind) = if is_call(after) {
+                let caller = table.callable_at(file.file_id, o.line + 1, o.column);
+                (
+                    // In Go, code at package level belongs to the variable it initialises.
+                    caller.or_else(|| table.any_at(file.file_id, start).filter(|_| go)),
+                    EdgeKind::Calls,
+                )
+            } else if !named
+                || imports.iter().any(|i| i.start <= start && start < i.end)
+                || locals.contains(&start)
+            {
+                continue;
+            } else {
+                (table.any_at(file.file_id, start), EdgeKind::UsesAsValue)
+            };
+            if let Some(from) = from {
+                edges.add(from.id, target.id, kind, span, Confidence::Certain);
+            }
+        }
+        for o in occurrences
+            .iter()
+            .filter(|o| o.roles & (ROLE_DEFINITION | ROLE_IMPORT) == 0 && is_term(&o.symbol))
+        {
+            let Some(constant) = known.constants.get(o.symbol.as_str(), file.file_id) else {
+                continue;
+            };
+            let start = lines.offset(o.line, o.column);
+            if imports.iter().any(|i| i.start <= start && start < i.end) {
+                continue;
+            }
+            // A static in a function gets the same SCIP symbol as an item of that name, and is
+            // no symbol of the graph: what its function reads is not the item.
+            let defined_in_this_function =
+                table
+                    .callable_holding(file.file_id, start)
+                    .is_some_and(|function| {
+                        term_definitions
+                            .get(o.symbol.as_str())
+                            .is_some_and(|places| {
+                                places
+                                    .iter()
+                                    .any(|&at| function.span.start <= at && at <= function.span.end)
+                            })
+                    });
+            if defined_in_this_function {
+                continue;
+            }
+            if let Some(from) = table.any_at(file.file_id, start) {
+                constant_uses.push(ConstantUse {
+                    from: from.id,
+                    constant: constant.id,
+                    span: Span::new(start, lines.offset(o.end_line, o.end_column)),
+                    confidence: Confidence::Certain,
+                });
+            }
+        }
+        add_data_uses(
+            table,
+            file,
+            lines,
+            occurrences,
+            &known.data,
+            &imports,
+            edges,
+        );
+    }
+}
+
 /// Add an edge for each use in a file of a type or field of the project.
 fn add_data_uses(
     table: &SymbolTable,
     file: &ProjectFile,
-    lines: &[&str],
+    lines: &Lines<'_>,
     occurrences: &[Occurrence],
     data: &Definitions<'_>,
     imports: &[Span],
@@ -222,7 +261,7 @@ fn add_data_uses(
         let Some(target) = data.get(o.symbol.as_str(), file.file_id) else {
             continue;
         };
-        let start = byte_offset(lines, o.line, o.column);
+        let start = lines.offset(o.line, o.column);
         // `Self` is written only inside the type it stands for, and says nothing about who uses it.
         let is_self = lines
             .get(o.line as usize)
@@ -232,7 +271,7 @@ fn add_data_uses(
             continue;
         }
         if let Some(from) = table.any_at(file.file_id, start) {
-            let span = Span::new(start, byte_offset(lines, o.end_line, o.end_column));
+            let span = Span::new(start, lines.offset(o.end_line, o.end_column));
             add_data_use(from, target, span, edges);
         }
     }
@@ -248,109 +287,6 @@ pub fn add_data_use(from: &Symbol, target: &Symbol, span: Span, edges: &mut Edge
         EdgeKind::UsesType
     };
     edges.add(from.id, target.id, kind, span, Confidence::Certain);
-}
-
-/// Edges of an edited file, from a running analyzer's answers.
-fn resolve_live(
-    table: &SymbolTable,
-    file: &ProjectFile,
-    document: &LiveDocument,
-    by_path: &HashMap<&Path, &ProjectFile>,
-    edges: &mut EdgeSet,
-    constant_uses: &mut Vec<ConstantUse>,
-) {
-    for reference in &file.references {
-        let (line, column) = (reference.range.start_line, reference.range.start_col);
-        if reference.kind == ReferenceKind::FieldUse {
-            let field = document
-                .all_sites
-                .get(&(line, column))
-                .into_iter()
-                .flatten()
-                .find_map(|t| {
-                    let defined_in = by_path.get(&*t.path)?.file_id;
-                    table
-                        .data_at(defined_in, t.line, &t.name)
-                        .filter(|s| s.kind == SymbolKind::Field)
-                });
-            if let (Some(field), Some(from)) =
-                (field, table.any_at(file.file_id, reference.span.start))
-            {
-                add_data_use(from, field, reference.span, edges);
-            }
-            continue;
-        }
-        if matches!(reference.kind, ReferenceKind::Read | ReferenceKind::TypeUse) {
-            // What a site is, only the answer says: `Kind::A` looks like a constant.
-            let answer = document.sites.get(&(line, column)).and_then(|t| {
-                let defined_in = by_path.get(&*t.path)?.file_id;
-                Some((defined_in, t))
-            });
-            let Some(from) = table.any_at(file.file_id, reference.span.start) else {
-                continue;
-            };
-            let Some((defined_in, target)) = answer else {
-                continue;
-            };
-            if let Some(constant) = table.constant_at(defined_in, target.line, &target.name) {
-                constant_uses.push(ConstantUse {
-                    from: from.id,
-                    constant: constant.id,
-                    span: reference.span,
-                    confidence: Confidence::Certain,
-                });
-            } else if let Some(data) = table.data_at(defined_in, target.line, &target.name) {
-                add_data_use(from, data, reference.span, edges);
-            }
-            continue;
-        }
-        let (from, kind) = match reference.kind {
-            ReferenceKind::Call => (
-                table.callable_at(file.file_id, line, column),
-                EdgeKind::Calls,
-            ),
-            ReferenceKind::FunctionValue => (
-                table.any_at(file.file_id, reference.span.start),
-                EdgeKind::UsesAsValue,
-            ),
-            _ => continue,
-        };
-        let target = document
-            .sites
-            .get(&(line, column))
-            .and_then(|t| table.definition_at(by_path.get(&*t.path)?.file_id, t.line, &t.name));
-        if let (Some(from), Some(target)) = (from, target) {
-            edges.add(
-                from.id,
-                target.id,
-                kind,
-                reference.span,
-                Confidence::Certain,
-            );
-        }
-    }
-    for (method, _) in table.trait_impls_in(file.file_id) {
-        let declared = table
-            .impl_at(file.file_id, method.range.start_line)
-            .and_then(|block| document.traits.get(&block.range.start_line))
-            .and_then(|declared| {
-                // Its own name: the impl may use another, from `use a::Tr as Other`.
-                let defined_in = by_path.get(&*declared.path)?;
-                table
-                    .methods_of(&declared.name, &method.name)
-                    .iter()
-                    .find(|s| s.file_id == defined_in.file_id && trait_of(s).is_none())
-            });
-        if let Some(declared) = declared {
-            edges.add(
-                method.id,
-                declared.id,
-                EdgeKind::Implements,
-                method.span,
-                Confidence::Certain,
-            );
-        }
-    }
 }
 
 /// The trait's method for a method of an `impl`. The trait's name in the impl's header is a
@@ -401,11 +337,6 @@ fn is_call(after: &str) -> bool {
     }
     // Generics running past the end of the line: nearly always a call.
     true
-}
-
-fn byte_offset(lines: &[&str], line: u32, column: u32) -> u32 {
-    let before: usize = lines.iter().take(line as usize).map(|l| l.len() + 1).sum();
-    before as u32 + column
 }
 
 #[cfg(test)]

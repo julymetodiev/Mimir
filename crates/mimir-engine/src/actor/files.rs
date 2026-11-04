@@ -37,15 +37,17 @@ impl GraphActor {
 
         // Store reverse mapping for file path lookup
         let relative_path = path.strip_prefix(&self.root).unwrap_or(&path).to_path_buf();
-        let (file_id, _) =
+        let (file_id, symbols) =
             self.insert_file(path, relative_path, content, content_hash, language)?;
+        self.graph.add_symbols(symbols);
 
         self.needs_link = true;
 
         Ok(file_id)
     }
 
-    /// Parse a file and add it and its symbols to the graph. Edges come from `relink`.
+    /// Parse a file and track it, giving its symbols for the caller to add to the graph, as adding
+    /// copies the graph. Edges come from `relink`.
     pub fn insert_file(
         &mut self,
         path: PathBuf,
@@ -53,7 +55,7 @@ impl GraphActor {
         content: String,
         content_hash: ContentHash,
         language: Language,
-    ) -> Result<(FileId, usize), GraphError> {
+    ) -> Result<(FileId, Vec<Symbol>), GraphError> {
         // Get adapter for this language
         let adapter = self
             .registry
@@ -79,7 +81,8 @@ impl GraphActor {
         self.file_paths.insert(file_id, relative_path.clone());
 
         // Extract symbols
-        let extracted_symbols = adapter.extract_symbols(&tree, file_id);
+        let mut extracted_symbols = adapter.extract_symbols(&tree, file_id);
+        adapter.qualify(&relative_path, &mut extracted_symbols);
         let references = adapter.extract_references(&tree, file_id);
         self.sources.insert(
             file_id,
@@ -91,9 +94,9 @@ impl GraphActor {
             },
         );
 
-        // Convert ExtractedSymbol to Symbol and add to graph
-        for extracted in &extracted_symbols {
-            let symbol = Symbol {
+        let symbols = extracted_symbols
+            .iter()
+            .map(|extracted| Symbol {
                 id: self.ids.next(),
                 name: extracted.name.clone(),
                 qualified_name: extracted.qualified_name.clone(),
@@ -105,14 +108,10 @@ impl GraphActor {
                 signature: extracted.signature.clone(),
                 visibility: extracted.visibility,
                 doc: extracted.doc.clone(),
-            };
+            })
+            .collect();
 
-            self.graph.add_symbol(symbol);
-        }
-
-        let symbols_count = extracted_symbols.len();
-
-        Ok((file_id, symbols_count))
+        Ok((file_id, symbols))
     }
 
     /// Handle removing a file from the graph.

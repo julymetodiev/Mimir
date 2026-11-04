@@ -6,13 +6,39 @@ All notable changes to Mimir are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-04
+
 ### Added
 
+- **Go**, resolved by an index from `scip-go` for each module, and by a running `gopls` for edited files.
 - **Python**, resolved by a running `pyrefly`, with its answers saved beside the graph.
 
 ### Changed
 
 - Answers saved by 0.3.0 are asked for once again, because their format has a new name.
+- `trace`, `read` and `edit_symbols` find a method by its type, as `Known::add` for `impl Known<'a>::add`.
+- `trace` over MCP marks what reads or uses a symbol with `not_a_call`, where it read as an exact call.
+- `trace` follows reads and uses only from what is traced, and calls further along a chain. On django
+  `save` to depth 3 goes from 10 121 symbols to 277.
+- `sync --full` starts a new language server for Python and TypeScript.
+- Python: an edit whose lines other files depend on starts a new `pyrefly`, because the running one keeps
+  old lines through a file in between. The first `trace` after an edit on django takes 0.6 to 1.1 s, and
+  beyond 500 ms it answers as provisional until the server has finished.
+
+### Fixed
+
+- `trace` gives each symbol its shortest depth and the same answer every time. It could drop callers,
+  by an order of edges that changed with each edit.
+- Python: an edit that moves lines no longer loses calls to members inherited through another file.
+- Rust and Go: after an edit that moved or added a method with a name others in its file have, a call from
+  another file could go to the wrong one until the next index. A method is now told apart by what it
+  belongs to, and one that cannot be matched gets no edge, never a guess.
+
+### Known issues
+
+- Go: until the next index, the implementations of an edited file come from `gopls` and the rest from
+  `scip-go`, which do not list the same pairs. On hugo, 3 files edited: 63 extra and 21 missing of about
+  1 650 `Implements` edges, and 0 differences in calls.
 
 ## [0.3.0] - 2026-11-03
 

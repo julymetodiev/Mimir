@@ -38,10 +38,13 @@ allowed() {
     mimir-parse-rust) echo "mimir-types mimir-parse-core" ;;
     mimir-parse-ts) echo "mimir-types mimir-parse-core" ;;
     mimir-parse-python) echo "mimir-types mimir-parse-core" ;;
+    mimir-parse-go) echo "mimir-types mimir-parse-core" ;;
     mimir-graph) echo "mimir-types" ;;
     mimir-resolve) echo "mimir-types mimir-graph mimir-parse-core" ;;
     mimir-lsp) echo "mimir-types" ;;
-    mimir-resolve-ra) echo "mimir-types mimir-parse-core mimir-resolve mimir-lsp" ;;
+    mimir-resolve-scip) echo "mimir-types mimir-resolve mimir-lsp" ;;
+    mimir-resolve-ra) echo "mimir-types mimir-parse-core mimir-resolve mimir-resolve-scip mimir-lsp" ;;
+    mimir-resolve-go) echo "mimir-types mimir-resolve mimir-resolve-scip mimir-lsp" ;;
     mimir-resolve-lsp) echo "mimir-types mimir-parse-core mimir-resolve mimir-lsp" ;;
     mimir-edit) echo "mimir-types" ;;
     mimir-protocol) echo "mimir-types" ;;
@@ -52,7 +55,7 @@ allowed() {
     mimir-view-wire) echo "" ;;
     mimir-view) echo "mimir-types mimir-protocol mimir-client mimir-view-wire" ;;
     mimir-view-page) echo "mimir-view-wire" ;;
-    mimir-cli) echo "mimir-types mimir-protocol mimir-client mimir-daemon mimir-mcp mimir-view mimir-parse-core mimir-parse-rust mimir-parse-ts mimir-parse-python mimir-resolve mimir-resolve-ra mimir-resolve-lsp" ;;
+    mimir-cli) echo "mimir-types mimir-protocol mimir-client mimir-daemon mimir-mcp mimir-view mimir-parse-core mimir-parse-rust mimir-parse-ts mimir-parse-python mimir-parse-go mimir-resolve mimir-resolve-ra mimir-resolve-go mimir-resolve-lsp" ;;
     *) echo "NOT-IN-SPEC" ;;
   esac
 }
@@ -75,7 +78,7 @@ unused_deps() { # dependencies declared but not named in the crate's source
   done
   echo "$n"
 }
-DOMAIN='crates/mimir-types crates/mimir-graph crates/mimir-parse-core crates/mimir-parse-rust crates/mimir-parse-ts crates/mimir-parse-python'
+DOMAIN='crates/mimir-types crates/mimir-graph crates/mimir-parse-core crates/mimir-parse-rust crates/mimir-parse-ts crates/mimir-parse-python crates/mimir-parse-go'
 TRANSPORT='crates/mimir-cli crates/mimir-mcp crates/mimir-daemon crates/mimir-client crates/mimir-view'
 
 now() {

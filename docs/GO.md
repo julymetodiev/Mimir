@@ -1,7 +1,7 @@
 # Go
 
 The specification for Go in section 8 of [ARCHITECTURE.md](ARCHITECTURE.md). The rules, layers and targets
-there hold here too. **Status: specified, not built.** Section 8 says what is open.
+there hold here too. **Status: built, and GO1 to GO5 hold.** Section 8 says what is open.
 
 Go works as Rust does, and not as TypeScript and Python do: an index of the whole project, and a running server
 only for the files edited since. Section 7 has the numbers that decided this, by the owner's word.
@@ -13,7 +13,8 @@ Files: `.go`, test files included. Whatever git ignores is left out.
 Also left out, because the Go tool does not build them: `vendor/`, `testdata/`, and a directory whose name starts
 with `_` or `.`. A target in `vendor/` is outside the project.
 
-Left out: C and assembly beside Go, code inside strings, and templates. Generated Go in the repository is Go like any other.
+Left out: C and assembly beside Go, code inside strings, and templates. Generated Go in the repository is Go like any other,
+up to the limit every language has: a file over 500 KB is left out by the scanner.
 
 ## 2. The parts
 
@@ -84,7 +85,9 @@ the names of private modules out. Section 7 has the cost. Go itself has no netwo
 comes before it.
 
 An index is kept as in section 5 of the architecture: by a hash of the sources, and written again when a manifest changes, when
-more than 50 files are edited, or by `sync --full`. Manifests: `go.mod`, `go.sum`, `go.work`, `go.work.sum`.
+more than 50 files are edited, or by `sync --full`. Manifests: `go.mod`, `go.sum`, `go.work`, `go.work.sum`. Their hash is taken after
+the index is written, as `go list` fills `go.work.sum`, which would otherwise call for another index at once. So a person's change
+to a manifest while an index is written goes unseen until the next change.
 
 - **A root is a directory with a `go.mod`,** in a directory section 1 keeps. Every one has an index of its own. An index at a
   `go.work` beside no `go.mod` is empty, so `go.work` gives no root. Nested modules are roots too, and their number has no limit.
@@ -110,7 +113,9 @@ more than 50 files are edited, or by `sync --full`. Manifests: `go.mod`, `go.sum
   find a wrong target, since a type in Go has no field and method of one name.
 
 **After an edit.** The index is kept, and `gopls` answers for the edited files, as `rust-analyzer` does. Positions in the
-index for an edited file are old, and its definitions are found by name and order, as today.
+index for an edited file are old, and its definitions are found by name, by what they belong to, and by order among those, as for Rust. The order is counted within each
+form of a symbol, as an interface's method is written `T#m.` like a field, and a type's method `T#m().`, and the two are often in one
+file: `T#m().` among functions and the methods of types, `T#m.` among fields and interfaces' methods.
 
 - One `gopls` per root, started in it with `zeroConfig: false`. Otherwise opening a file for another system makes
   a view for that system and more memory is held.
@@ -164,7 +169,8 @@ Added to section 2 of the architecture when they hold, each checked by `scripts/
 | GO4 | T1, T2, T3 and T4 hold on a Go project of 20 000 symbols, T3 with the build cache filled |
 | GO5 | Across two modules of one `go.work`, a call has its edge |
 
-Nothing is measured through `mimir` yet: section 7 is of the tools alone. GO2 holds on hugo by those numbers.
+Section 7 has the numbers, through `mimir` in its last part. GO1, GO3 and GO5 are in `crates/mimir-resolve-go/tests/`, GO2 is
+`scripts/bench/go_compare.py` and GO4 `scripts/bench/daemon_latency.py`.
 
 ## 6. Machine checks
 
@@ -172,9 +178,11 @@ Nothing is measured through `mimir` yet: section 7 is of the tools alone. GO2 ho
   `mimir-parse-go` is in the pure domain list.
 - `scripts/check-deps.py`: the versions of `scip-go` and `gopls`, and `tree-sitter-go` as any crate.
 - `cargo test`: the fixture of GO1, skipped with a message when the tools are not installed. CI installs them.
-- `cargo test`: two modules of a `go.work`, indexed with a local server named as the proxy instead of the closed port. It must
-  get no request, so a new `scip-go` that goes around the proxy fails here.
-- `scripts/bench`: GO2 to GO5.
+- `cargo test`: a module of a `go.work`, indexed with the closed port and with a local server named as the proxy that refuses
+  every request: the two indexes say the same. `scip-go` 0.2.9 does send to that server, 1 request for a module with no other
+  module and 5 for one that uses another, which is the fault of section 4. A new `scip-go` that goes around the proxy is not
+  caught here: only a run with no network would see it.
+- `scripts/bench`: GO2 and GO4.
 
 ## 7. What was measured
 
@@ -291,22 +299,66 @@ the same occurrences apart from the version.
 **Across modules,** over the 39 without the root: 1 033 758 uses of a symbol of another of them, of which 7 247 have no definition by
 the symbol without its version. 6 418 of those have one in the other form of section 4. 829 have none.
 
+**Through `mimir`,** at `mimir` of 2026-11-04, with Go's cache on another disk and symbols added in one step.
+
+| | hugo | kubernetes |
+|---|---|---|
+| Files, symbols, edges | 936, 19 065, 50 780 | 13 689, 221 808, 1 003 288 |
+| Files outside the build | 14 | 358 |
+| A first `mimir sync`, Go's cache without this project | 331 s | 513 s, from an empty cache |
+| Longest root, in that run | 330 s | 202 s, the root, after the others filled the cache |
+| Go's cache grew by | not measured alone | 13.9 GB, from empty |
+| A new daemon, indexes kept | 1.3 to 1.9 s to a first answer | 32 s to a complete graph |
+| Daemon after that: footprint, live, peak | 96 MB, 56 MB, 243 MB | 1.7 GB, 968 MB, 4.7 GB |
+| A query with nothing changed | under 10 ms | not measured |
+| A first answer after an edit | 0.77 to 0.83 s | not measured |
+
+The peak on kubernetes is while its 605 MB of indexes are read. Live memory there is 4.4 KB for each symbol; on hugo, 2.9 KB. So T4
+holds at the size it names, and not on a project eleven times that. RSS from `ps` misleads here, as macOS compresses what is idle.
+
+GO2 on hugo, by `go_compare.py`: 103 967 sites in 103 s, 0 unclassified. Against the table above, 455 sites and not 391 are in a
+file not in the index, and the classes around it differ by as much. Why was not worked out.
+
+| | Sites |
+|---|---|
+| Same place | 50 369 |
+| Target outside the project, same package | 36 908 |
+| The definition itself | 8 808 |
+| A built-in name or `unsafe` | 6 485 |
+| `gopls` has an error, the file is outside the build | 893 |
+| File not in the index, outside the build | 455 |
+| A package's name | 43 |
+| Not in the index, target outside the project | 4 |
+| `gopls` empty, outside the build | 2 |
+
+**What kubernetes found in `mimir`.** Two costs that grow faster than a project, neither seen at 20 000 symbols. For a language with
+an index, a byte offset summed every earlier line for each occurrence, with a scan of all a file's occurrences for each use of a
+constant: a new daemon took 1 246 s and then 131 s. For every language, adding a symbol copied the whole graph: then 33 s. Neither changed one edge
+of 1 003 288, on kubernetes, nor one of 9 006 on Mimir's own Rust.
+
 ## 8. Open
 
-1. **A build from an empty cache** of kubernetes was not measured, so the 170 s is less than a first index costs, and 600 s for a
-   root is not known to be enough, there or on a slower machine.
-2. **Reading 575 MB of indexes in Mimir** is unmeasured: the time, and T4, under 400 MB, on such a project. It can only be measured
-   once the reader exists, and it may change the design.
+1. **A build from an empty cache of a single large root** was not measured: kubernetes's root came last, and took 202 s. So 600 s for
+   a root is known to be enough there in that order, and not on a slower machine or for a project of one large module.
+2. **T4 on a project far over 20 000 symbols** does not hold: section 7. The owner has not been asked to lower the peak of 4.7 GB,
+   which comes from reading the indexes.
 3. **The 829 uses of section 7** have no definition, so no edge. Some look like a field through a defined type, as
    `type CounterOpts KubeOpts`, with the field looked for under `CounterOpts`. They were not checked one by one, and uses from the
    root were not counted at all.
-4. **The closed proxy** was measured with port 9, not with a port taken and let go, and with `NO_PROXY` as it was. `scip-go` was not
-   told of its fault, which the owner will decide. The two steps in this order were run on `code-generator/examples` and the root only.
+4. **The closed proxy.** `scip-go` was not told of its fault, which the owner will decide. The check of section 6 does not catch a
+   `scip-go` that goes around a proxy.
 5. **`gopls` and the network.** Whether it asks a module's host as `scip-go` does was not looked at.
 6. **Why a change in `common/hstrings` took 293 s on hugo** is still not known. hugo has no `go.work`, so the fault above need not be it.
 7. **An edit changes more than its file.** A method added to an interface changes what implements it in files not edited, as a changed
-   signature does what a call means. They stay as the index says until the next one, as with Rust. Not measured for Go.
-8. **`implementation` at a declaration** was tried at sites only. It is in the design from those answers, and GO1 is to hold it.
+   signature does what a call means. They stay as the index says until the next one, as with Rust.
+   Measured on hugo, a comment added to 3 files, against a new index: `Calls`, `UsesField`, `UsesConstant` and `UsesAsValue` with 0
+   differences, of 16 287 calls. `Implements` 63 edges only after the edit and 21 only in the new index, of 1 677 and 1 635, and each
+   touches an edited file: for those `gopls` answers, and for the rest `scip-go`, and the two do not list the same pairs. `UsesType` 1
+   only in the new index, cause not looked at. All of it was there before owners were matched, and goes at the next index.
+8. **An edit that changes the order** of two members of one name and form in a file: two methods `Name` of two types swapped are told
+   apart by their owner, as in Rust and in `scripts/bench/edit_matrix.py`, where the graph matches a clean start. An owner that cannot
+   be matched gives no definition, never a guess. What still goes by order is two of one name under one owner, which Go allows only for types
+   local to two functions. Not tried.
 9. **A type with no method of its own** that fits an interface through embedding, as `Tag` through `Circle`, has a pair of types and
    no pair of methods. The method it runs is the embedded one, which has its edge. Not checked for a method overridden on the way.
 10. **Calls the source does not spell,** as in section 3, and `f()` on a variable holding a function: never guessed, and the function
@@ -316,7 +368,9 @@ the symbol without its version. 6 418 of those have one in the other form of sec
 12. **`cgo`:** `C.f()` is not linked. What a project's flags can do with its C compiler was not tried beyond the case above.
 13. **A build in the daemon.** A first index takes all cores for minutes and fills Go's cache. Its effect on T8 is unmeasured.
 14. **Only `gopls` and `scip-go` were looked at.** There is no other maintained server for Go, by what is known and not by a search.
-15. **Whether Homebrew can provide them** is not checked, and with Go required the formula's caveats name `go install`.
+15. **Homebrew** has `gopls` 0.24.0 and no `scip-go`, so the formula's caveats name `go install` for both.
+16. **Two modules with one path** have the same symbols, so an edge between them may be lost, and is never wrong.
+17. **Without an index,** as with `MIMIR_NO_SCIP`, `pkg.F()` has no edge, as what a module is imported as comes from `GoSource`.
 
 ## 9. Order
 

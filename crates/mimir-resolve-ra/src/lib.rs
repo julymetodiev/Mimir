@@ -1,7 +1,6 @@
 //! The semantic source behind `rust-analyzer`: its SCIP index and, for edited files, a running
 //! language server.
 
-mod decode;
 mod index;
 mod live;
 

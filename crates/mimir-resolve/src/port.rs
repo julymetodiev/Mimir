@@ -109,6 +109,9 @@ pub struct LiveDocument {
     pub all_sites: HashMap<(u32, u32), Vec<Target>>,
     /// The trait of each `impl Tr for T`, by the line of the `impl`.
     pub traits: HashMap<u32, Target>,
+    /// What each method in the file implements, or is implemented by, by the 1-based line and column
+    /// of its name.
+    pub implementations: HashMap<(u32, u32), Vec<Target>>,
 }
 
 /// One occurrence of a symbol in a document. Lines and columns are 0-based.
@@ -132,6 +135,11 @@ pub struct SemanticIndex {
     pub answers: HashMap<PathBuf, Arc<LiveDocument>>,
     /// Files edited since the index with no answers yet, which syntax rules resolve for now.
     pub unanswered: HashSet<PathBuf>,
+    /// Pairs of symbols from an index: a method, and the method it implements.
+    pub implementations: Vec<(String, String)>,
+    /// What the packages of this root are imported as: in Go the module's path, with `root` its
+    /// directory. Syntax rules go from an import to a directory by it.
+    pub import_path: Option<String>,
 }
 
 /// Whether an index may be kept after an edit.

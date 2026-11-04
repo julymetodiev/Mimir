@@ -17,11 +17,16 @@ get an answer within 72 hours, and a fix is coordinated with you before it is ma
   Mimir on a project you do not trust only in a throwaway environment.
 - **Mimir runs `pyrefly` on your project, and that runs the project's `.venv/bin/python`,** to ask where its
   packages are. A repository that holds a `.venv` runs what it holds, so treat it as you do `rust-analyzer`.
-- **Mimir runs the `tsrs` and the `pyrefly` on your `PATH`,** never one from a project's `node_modules` or
-  environment. `tsrs` is a young beta.
+- **Mimir runs `go list -export` on your project, which compiles it,** with the compiler and, for `cgo`, the C compiler, with
+  what the source asks for as far as Go's list of allowed flags lets it. It runs no test and no `//go:generate`. Mimir does not set
+  `GOTOOLCHAIN`, so as for any `go` command a `go.mod` may make Go fetch the toolchain it names, and run it. Treat an untrusted
+  repository as you do with `rust-analyzer`.
+- **Mimir runs the `tsrs`, the `pyrefly`, the `go`, the `scip-go` and the `gopls` on your `PATH`,** never one from a project's
+  `node_modules` or environment. `tsrs` is a young beta.
 - **The tools can write.** Through MCP, an agent can change any file inside the project. A path outside
   the project is refused.
 - **The daemon listens on a Unix socket** in a per-user directory, not on the network. Anyone who can
   use that socket can read and edit the project.
 - **Nothing leaves your machine.** Mimir makes no network calls of its own. `rust-analyzer` and `cargo`
-  may fetch a project's dependencies.
+  may fetch a project's dependencies, as `go list` may, from whatever fetches modules for your machine. `scip-go` would ask a
+  module's host about its packages, so Mimir runs it with its proxy set to a closed local port. What `gopls` sends was not looked at.

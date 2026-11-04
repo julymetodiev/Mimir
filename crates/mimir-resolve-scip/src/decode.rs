@@ -5,7 +5,9 @@ use std::path::PathBuf;
 use mimir_resolve::{Occurrence, SemanticIndex};
 
 /// Decode what is needed of `scip.proto`: `Index.documents = 2`; `Document.relative_path = 1`,
-/// `occurrences = 2`; `Occurrence.range = 1`, `symbol = 2`, `symbol_roles = 3`.
+/// `occurrences = 2`, `symbols = 3`; `Occurrence.range = 1`, `symbol = 2`, `symbol_roles = 3`,
+/// `single_line_range = 8`, `multi_line_range = 9`; `SymbolInformation.symbol = 1`,
+/// `relationships = 4`; `Relationship.symbol = 1`, `is_implementation = 3`.
 pub fn decode(bytes: &[u8]) -> Result<SemanticIndex, String> {
     let mut index = SemanticIndex::default();
     for field in Fields::new(bytes) {
@@ -18,6 +20,7 @@ pub fn decode(bytes: &[u8]) -> Result<SemanticIndex, String> {
                         path = Some(PathBuf::from(String::from_utf8_lossy(p).into_owned()))
                     }
                     (2, Value::Bytes(o)) => occurrences.push(decode_occurrence(o)?),
+                    (3, Value::Bytes(s)) => decode_symbol(s, &mut index.implementations)?,
                     _ => {}
                 }
             }
@@ -30,6 +33,7 @@ pub fn decode(bytes: &[u8]) -> Result<SemanticIndex, String> {
 
 fn decode_occurrence(bytes: &[u8]) -> Result<Occurrence, String> {
     let (mut range, mut symbol, mut roles) = (Vec::new(), String::new(), 0);
+    let mut typed = None;
     for field in Fields::new(bytes) {
         match field? {
             (1, Value::Bytes(packed)) => {
@@ -41,13 +45,23 @@ fn decode_occurrence(bytes: &[u8]) -> Result<Occurrence, String> {
             (1, Value::Varint(v)) => range.push(v as u32),
             (2, Value::Bytes(s)) => symbol = String::from_utf8_lossy(s).into_owned(),
             (3, Value::Varint(v)) => roles = v,
+            (8, Value::Bytes(line)) => {
+                let [l, c, ec] = numbers::<3>(line)?;
+                typed = Some((l, c, l, ec));
+            }
+            (9, Value::Bytes(lines)) => {
+                let [l, c, el, ec] = numbers::<4>(lines)?;
+                typed = Some((l, c, el, ec));
+            }
             _ => {}
         }
     }
-    // [line, column, end_column], or [line, column, end_line, end_column].
-    let (line, column, end_line, end_column) = match range[..] {
-        [l, c, ec] => (l, c, l, ec),
-        [l, c, el, ec] => (l, c, el, ec),
+    // A typed range goes before the older form, as the format says.
+    let (line, column, end_line, end_column) = match (typed, &range[..]) {
+        (Some(typed), _) => typed,
+        // [line, column, end_column], or [line, column, end_line, end_column].
+        (None, &[l, c, ec]) => (l, c, l, ec),
+        (None, &[l, c, el, ec]) => (l, c, el, ec),
         _ => return Err(format!("bad occurrence range {range:?}")),
     };
     Ok(Occurrence {
@@ -58,6 +72,49 @@ fn decode_occurrence(bytes: &[u8]) -> Result<Occurrence, String> {
         symbol,
         roles,
     })
+}
+
+/// A message of numbers in fields 1 to `N`. One left out is 0, as in all of protobuf.
+fn numbers<const N: usize>(bytes: &[u8]) -> Result<[u32; N], String> {
+    let mut found = [0; N];
+    for field in Fields::new(bytes) {
+        if let (number @ 1.., Value::Varint(v)) = field?
+            && let Some(slot) = found.get_mut(number as usize - 1)
+        {
+            *slot = v as u32;
+        }
+    }
+    Ok(found)
+}
+
+/// `SymbolInformation`: for each `Relationship` with `is_implementation`, the pair of symbols.
+fn decode_symbol(bytes: &[u8], pairs: &mut Vec<(String, String)>) -> Result<(), String> {
+    let (mut symbol, mut implemented) = (String::new(), Vec::new());
+    for field in Fields::new(bytes) {
+        match field? {
+            (1, Value::Bytes(s)) => symbol = String::from_utf8_lossy(s).into_owned(),
+            (4, Value::Bytes(relationship)) => {
+                let (mut target, mut implementation) = (String::new(), false);
+                for field in Fields::new(relationship) {
+                    match field? {
+                        (1, Value::Bytes(s)) => target = String::from_utf8_lossy(s).into_owned(),
+                        (3, Value::Varint(v)) => implementation = v != 0,
+                        _ => {}
+                    }
+                }
+                if implementation {
+                    implemented.push(target);
+                }
+            }
+            _ => {}
+        }
+    }
+    pairs.extend(
+        implemented
+            .into_iter()
+            .map(|target| (symbol.clone(), target)),
+    );
+    Ok(())
 }
 
 enum Value<'a> {
@@ -168,5 +225,42 @@ mod tests {
     #[test]
     fn refuses_truncated_input() {
         assert!(decode(&[2 << 3 | 2, 200]).is_err());
+    }
+
+    #[test]
+    fn reads_a_typed_range_before_the_older_form() {
+        // Line 0 is left out, as protobuf leaves out a zero.
+        let single = [
+            field(1, &[9, 9, 9]),
+            field(2, b"a()."),
+            field(8, &[2 << 3, 4, 3 << 3, 9]),
+        ]
+        .concat();
+        let multi = [
+            field(2, b"b()."),
+            field(9, &[1 << 3, 3, 2 << 3, 4, 3 << 3, 5, 4 << 3, 2]),
+        ]
+        .concat();
+        let document = [field(1, b"a.go"), field(2, &single), field(2, &multi)].concat();
+        let index = decode(&field(2, &document)).unwrap();
+
+        let occurrences = &index.documents[Path::new("a.go")];
+        let at = |o: &Occurrence| (o.line, o.column, o.end_line, o.end_column);
+        assert_eq!(at(&occurrences[0]), (0, 4, 0, 9));
+        assert_eq!(at(&occurrences[1]), (3, 4, 5, 2));
+    }
+
+    #[test]
+    fn reads_which_symbols_implement_which() {
+        let yes = [field(1, b"Area#Area."), vec![3 << 3, 1]].concat();
+        let no = field(1, b"Other#");
+        let symbol = [field(1, b"Circle#Area()."), field(4, &yes), field(4, &no)].concat();
+        let document = [field(1, b"a.go"), field(3, &symbol)].concat();
+        let index = decode(&field(2, &document)).unwrap();
+
+        assert_eq!(
+            index.implementations,
+            [("Circle#Area().".to_string(), "Area#Area.".to_string())]
+        );
     }
 }

@@ -5,6 +5,10 @@
 
 mod definitions;
 mod edges;
+mod golang;
+mod known;
+mod lines;
+mod live;
 mod lookup;
 mod port;
 mod script;
@@ -104,7 +108,7 @@ fn link_family(
     report: &mut LinkReport,
 ) {
     let table = lookup::SymbolTable::new(graph, files);
-    let script = family != Language::Rust;
+    let rust = family == Language::Rust;
     let count = |edges: &EdgeSet, kind| edges.count(kind);
     let before = |edges: &EdgeSet| {
         [
@@ -120,26 +124,28 @@ fn link_family(
     let [calls, implementations, values, constants, types, fields] = before(edges);
 
     let mut constant_uses = Vec::new();
-    let covered = semantic::resolve(&table, files, indexes, edges, &mut constant_uses);
+    let covered = semantic::resolve(&table, files, indexes, family, edges, &mut constant_uses);
     let semantic_calls = count(edges, EdgeKind::Calls) - calls;
-    if script {
-        script::resolve_calls(&table, files, &covered, edges);
-    } else {
-        syntax::resolve_shorthand_values(&table, files, &covered, edges);
-        syntax::resolve_calls(&table, files, &covered, edges);
+    match family {
+        Language::Rust => {
+            syntax::resolve_shorthand_values(&table, files, &covered, edges);
+            syntax::resolve_calls(&table, files, &covered, edges);
+        }
+        Language::Go => golang::resolve_calls(&table, files, indexes, &covered, edges),
+        _ => script::resolve_calls(&table, files, &covered, edges),
     }
     let syntax_calls = count(edges, EdgeKind::Calls) - calls - semantic_calls;
-    if !script {
+    if rust {
         syntax::resolve_implementations(&table, files, &covered, edges);
         syntax::resolve_constant_uses(&table, files, &covered, &mut constant_uses);
         syntax::resolve_format_reads(&table, files, &mut constant_uses);
     }
     add_uses_of_function_holders(graph, edges, &constant_uses);
-    if !script {
+    if rust {
         syntax::resolve_data_uses(&table, files, &covered, edges);
     }
     let linked = edges.len();
-    if !script {
+    if rust {
         syntax::resolve_imports(&table, files, edges);
     }
 

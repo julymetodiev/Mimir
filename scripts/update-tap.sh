@@ -55,10 +55,12 @@ $(entry "      " x86_64-unknown-linux-gnu)
   def caveats
     <<~EOS
       For exact answers, Mimir needs rust-analyzer for Rust, tsrs for TypeScript and JavaScript,
-      and pyrefly for Python:
+      pyrefly for Python, and go with scip-go and gopls for Go:
         rustup component add rust-analyzer rust-src
         npm install -g tsrs
         pipx install pyrefly
+        go install github.com/scip-code/scip-go/cmd/scip-go@latest
+        go install golang.org/x/tools/gopls@latest
 
       In Claude Code:
         /plugin marketplace add julymetodiev/Mimir

@@ -14,11 +14,11 @@ use mimir_types::ReferenceKind;
 use tracing::info;
 
 use mimir_resolve::{LiveDocument, ProjectFile, Target, type_name};
+use mimir_resolve_scip::Running;
 
 mod lsp;
 
 use mimir_lsp::Location;
-pub use mimir_lsp::stop;
 
 use crate::live::lsp::Analyzer;
 
@@ -29,17 +29,14 @@ const FORWARDING_METHODS: [&str; 4] = ["into", "try_into", "parse", "to_string"]
 /// The running analyzers of a project, one per Cargo root.
 #[derive(Default)]
 pub struct Analyzers {
-    running: HashMap<PathBuf, Analyzer>,
-    last_used: Option<Instant>,
+    running: Running<Analyzer>,
 }
 
 impl Analyzers {
     /// Stop every analyzer if none was used for `idle`: each holds gigabytes.
     pub fn stop_if_idle(&mut self, idle: Duration) {
-        if self.last_used.is_some_and(|used| used.elapsed() >= idle) && !self.running.is_empty() {
-            info!("Stopping {} idle rust-analyzer", self.running.len());
-            self.running.clear();
-            self.last_used = None;
+        if let Some(stopped) = self.running.stop_if_idle(idle) {
+            info!("Stopping {stopped} idle rust-analyzer");
         }
     }
 
@@ -52,24 +49,20 @@ impl Analyzers {
         files: &[ProjectFile],
         stale: &[&ProjectFile],
     ) -> Result<HashMap<PathBuf, LiveDocument>, String> {
-        self.last_used = Some(Instant::now());
-        if !self.running.contains_key(root) {
-            let started = Instant::now();
-            let analyzer = Analyzer::start(root)?;
-            info!(
-                "rust-analyzer ready for {:?} in {:?}",
-                root,
-                started.elapsed()
-            );
-            self.running.insert(root.to_path_buf(), analyzer);
-        }
-        let analyzer = self.running.get_mut(root).ok_or("no analyzer")?;
-        let result = resolve_documents(analyzer, project, files, stale);
-        if result.is_err() {
-            self.running.remove(root);
-        }
-        self.last_used = Some(Instant::now());
-        result
+        self.running.with(
+            root,
+            || {
+                let started = Instant::now();
+                let analyzer = Analyzer::start(root)?;
+                info!(
+                    "rust-analyzer ready for {:?} in {:?}",
+                    root,
+                    started.elapsed()
+                );
+                Ok(analyzer)
+            },
+            |analyzer| resolve_documents(analyzer, project, files, stale),
+        )
     }
 }
 

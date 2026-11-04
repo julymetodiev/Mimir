@@ -8,6 +8,7 @@ use mimir_protocol::{
     ActivityKind, FindResponse, GrepOptions, GrepResponse, SearchOptions, SearchResponse,
     StatsResponse, SymbolInfo, SymbolSource, TraceNode, TraceRelation, TraceResponse,
 };
+use mimir_resolve::type_name;
 use mimir_types::{FileId, Language, Symbol, SymbolId, SymbolKind};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -15,6 +16,22 @@ use std::sync::Arc;
 
 /// How many matches of a text search come back unless asked otherwise.
 const DEFAULT_GREP_LIMIT: u32 = 50;
+
+/// Whether a qualified name ends as `name` is written, an `impl` counting as its type or its trait.
+pub fn ends_with(segments: &[String], name: &str) -> bool {
+    let wanted: Vec<&str> = name.split("::").collect();
+    wanted.len() <= segments.len()
+        && segments
+            .iter()
+            .rev()
+            .zip(wanted.iter().rev())
+            .all(|(segment, wanted)| {
+                segment == wanted
+                    || segment.strip_prefix("impl ").is_some_and(|header| {
+                        header.split(" for ").any(|part| type_name(part) == *wanted)
+                    })
+            })
+}
 
 impl GraphActor {
     /// Handle finding symbols by name.
@@ -165,6 +182,15 @@ impl GraphActor {
             if found.is_empty() {
                 found.extend(self.graph.find_by_qualified_name(name));
             }
+            // Written as far as it tells them apart: `Known::add` for `impl Known<'a>::add`.
+            if found.is_empty() {
+                found.extend(
+                    self.graph
+                        .find_symbol(simple)
+                        .into_iter()
+                        .filter(|symbol| ends_with(symbol.qualified_name.segments(), name)),
+                );
+            }
         }
         if let Some(file) = file {
             let absolute = self.root.join(file);
@@ -297,6 +323,7 @@ impl GraphActor {
             references_count: self.graph.edge_count(),
             files_by_language: Vec::new(),
             symbols_by_kind: Vec::new(),
+            notes: self.semantics.notes(&self.root),
         }
     }
 

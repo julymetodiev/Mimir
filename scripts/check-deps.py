@@ -50,6 +50,14 @@ with urllib.request.urlopen("https://pypi.org/pypi/pyrefly/json", timeout=20) as
     newest_pyrefly = json.load(response)["info"]["version"]
 if tested != newest_pyrefly:
     stale.append(("pyrefly", tested, newest_pyrefly))
+# So do `scip-go` and `gopls`, whose newest version is what the Go proxy says.
+tools = pathlib.Path("crates/mimir-resolve-go/src/tools.rs").read_text()
+for name, module in (("scip-go", "github.com/scip-code/scip-go"), ("gopls", "golang.org/x/tools/gopls")):
+    tested = re.search(rf'{name.upper().replace("-", "_")}_TESTED: &str = "(.+?)"', tools).group(1)
+    with urllib.request.urlopen(f"https://proxy.golang.org/{module}/@latest", timeout=20) as response:
+        newest = json.load(response)["Version"].lstrip("v")
+    if tested != newest:
+        stale.append((name, tested, newest))
 for name, version, newest in stale:
     print(f"error: {name} is at {version}, the latest is {newest}")
 if not stale:

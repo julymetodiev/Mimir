@@ -51,9 +51,12 @@ pub struct Step {
     /// How far from the root, when more than one step.
     #[serde(skip_serializing_if = "is_first_level")]
     depth: u32,
-    /// Why this may not happen at runtime. Without it, this is an exact call.
+    /// Why this may not happen at runtime. Without it or `not_a_call`, this is an exact call.
     #[serde(skip_serializing_if = "Option::is_none")]
     possible: Option<&'static str>,
+    /// What this does instead of a call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    not_a_call: Option<&'static str>,
 }
 
 fn is_first_level(depth: &u32) -> bool {
@@ -74,6 +77,11 @@ impl From<&TraceNode> for Step {
                 | TraceRelation::Callee
                 | TraceRelation::Reader
                 | TraceRelation::User => None,
+            },
+            not_a_call: match node.relationship {
+                TraceRelation::Reader => Some("reads it"),
+                TraceRelation::User => Some("uses it"),
+                _ => None,
             },
         }
     }
@@ -156,6 +164,8 @@ pub struct Status {
     files: usize,
     symbols: usize,
     edges: usize,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    notes: Vec<String>,
 }
 
 impl From<mimir_protocol::StatsResponse> for Status {
@@ -164,6 +174,7 @@ impl From<mimir_protocol::StatsResponse> for Status {
             files: stats.files_count,
             symbols: stats.symbols_count,
             edges: stats.references_count,
+            notes: stats.notes,
         }
     }
 }
@@ -253,5 +264,32 @@ impl From<FileText> for Text {
             total_lines: file.total_lines,
             text,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn step(relationship: TraceRelation) -> serde_json::Value {
+        let symbol = serde_json::from_value(serde_json::json!({
+            "id": 1, "name": "f", "qualified_name": null, "kind": "function", "file_id": 1,
+            "file_path": "a.py", "start_line": 1, "end_line": 2, "language": "python",
+        }))
+        .unwrap();
+        let node = TraceNode {
+            symbol,
+            depth: 1,
+            relationship,
+        };
+        serde_json::to_value(Step::from(&node)).unwrap()
+    }
+
+    #[test]
+    fn what_reads_or_uses_a_symbol_is_not_shown_as_a_call() {
+        assert_eq!(step(TraceRelation::User)["not_a_call"], "uses it");
+        assert_eq!(step(TraceRelation::Reader)["not_a_call"], "reads it");
+        let call = step(TraceRelation::Caller);
+        assert!(call.get("not_a_call").is_none() && call.get("possible").is_none());
     }
 }

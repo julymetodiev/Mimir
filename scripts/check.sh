@@ -18,7 +18,7 @@ run page-clippy cargo clippy --target wasm32-unknown-unknown -p mimir-view-page 
 run deps scripts/check-deps.py
 run fmt cargo fmt --all -- --check
 run clippy cargo clippy --workspace --all-targets --all-features -- -D warnings
-run test cargo test --workspace --all-features --no-fail-fast
+run test scripts/build.sh test
 run deny cargo deny --workspace --all-features check
 RUSTDOCFLAGS="-D warnings" run docs cargo doc --workspace --no-deps --all-features
 echo "all checks passed"

@@ -35,6 +35,7 @@ pub fn pyrefly() -> AskedSource {
         answers_file: "pyrefly-answers.txt",
         language_id,
         missing_packages,
+        reports_recheck: true,
     })
 }
 

@@ -59,6 +59,9 @@ pub enum ReferenceKind {
 
     /// A field written, where a parser can tell: a setter runs, not a getter.
     FieldWrite,
+
+    /// A method named where it is declared, for a language where a server says what implements what.
+    MethodDeclaration,
 }
 
 impl ReferenceKind {}
@@ -75,6 +78,7 @@ impl fmt::Display for ReferenceKind {
             Self::TypeUse => "type_use",
             Self::FieldUse => "field_use",
             Self::FieldWrite => "field_write",
+            Self::MethodDeclaration => "method_declaration",
         };
         write!(f, "{}", s)
     }

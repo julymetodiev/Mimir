@@ -191,6 +191,24 @@ impl Server {
         path: &Path,
         positions: &[(u32, u32)],
     ) -> Result<Vec<Vec<Location>>, LspError> {
+        self.each(method, path, positions)?
+            .into_iter()
+            .map(|answer| {
+                answer.map_err(|message| LspError::Failed {
+                    method: method.to_string(),
+                    message,
+                })
+            })
+            .collect()
+    }
+
+    /// [`Self::many`], where the server's error about one position is that position's answer.
+    pub fn each(
+        &mut self,
+        method: &str,
+        path: &Path,
+        positions: &[(u32, u32)],
+    ) -> Result<Vec<Result<Vec<Location>, String>>, LspError> {
         let mut out = Vec::with_capacity(positions.len());
         for chunk in positions.chunks(BATCH) {
             let first = self.next_id + 1;
@@ -206,7 +224,8 @@ impl Server {
                     }),
                 )?;
             }
-            let mut answers: Vec<Option<Vec<Location>>> = chunk.iter().map(|_| None).collect();
+            let mut answers: Vec<Option<Result<Vec<Location>, String>>> =
+                chunk.iter().map(|_| None).collect();
             let mut waiting = chunk.len();
             let started = Instant::now();
             while waiting > 0 {
@@ -229,19 +248,18 @@ impl Server {
                 answers[index] = match answer["error"]["code"].as_i64() {
                     // Asked again alone below, with the waiting that takes.
                     Some(CONTENT_MODIFIED | CANCELLED) => None,
-                    Some(_) => {
-                        return Err(LspError::Failed {
-                            method: method.to_string(),
-                            message: answer["error"]["message"].to_string(),
-                        });
-                    }
-                    None => Some(locations_in(&answer["result"])),
+                    Some(_) => Some(Err(answer["error"]["message"].to_string())),
+                    None => Some(Ok(locations_in(&answer["result"]))),
                 };
             }
             for (answer, &(line, column)) in answers.into_iter().zip(chunk) {
                 out.push(match answer {
                     Some(found) => found,
-                    None => self.locations(method, path, line, column)?,
+                    None => match self.locations(method, path, line, column) {
+                        Ok(found) => Ok(found),
+                        Err(LspError::Failed { message, .. }) => Err(message),
+                        Err(e) => return Err(e),
+                    },
                 });
             }
         }

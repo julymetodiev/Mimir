@@ -33,9 +33,10 @@ fn start_view(dir: &std::path::Path) -> (View, String) {
         .spawn()
         .unwrap();
     let mut line = String::new();
-    BufReader::new(child.stdout.take().unwrap())
-        .read_line(&mut line)
-        .unwrap();
+    let mut stdout = BufReader::new(child.stdout.take().unwrap());
+    stdout.read_line(&mut line).unwrap();
+    // Kept open: closed, the view's next line of output would end it.
+    child.stdout = Some(stdout.into_inner());
     let address = line
         .trim()
         .strip_prefix("Mimir view: ")

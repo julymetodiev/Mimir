@@ -7,6 +7,47 @@ use mimir_resolve_ra::{Analyzers, load_or_generate};
 use crate::expected::SOURCES;
 use crate::support::{edges_of_kind, index_at, workspace};
 
+/// A copy of the workspace to change.
+fn scratch_copy(name: &str) -> std::path::PathBuf {
+    let scratch = std::env::temp_dir().join(format!("{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    for path in ["Cargo.toml", "alpha/Cargo.toml", "beta/Cargo.toml"]
+        .into_iter()
+        .chain(SOURCES)
+    {
+        std::fs::create_dir_all(scratch.join(path).parent().unwrap()).unwrap();
+        std::fs::copy(workspace().join(path), scratch.join(path)).unwrap();
+    }
+    scratch
+}
+
+/// A new file of another language under a Cargo root is not an edit the analyzer is asked about.
+#[test]
+fn a_new_file_of_another_language_is_not_an_edit() {
+    if std::process::Command::new("rust-analyzer")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        eprintln!("skipped: rust-analyzer is not installed");
+        return;
+    }
+    let scratch = scratch_copy("mimir-resolve-other-language");
+    let cache = scratch.join("cache");
+    let mut analyzers = Analyzers::default();
+    let (_, mut files) = index_at(&scratch);
+    load_or_generate(&scratch, &cache, &files, &mut analyzers, Refresh::Edits);
+
+    let mut go = files[0].clone();
+    go.path = "alpha/src/new.go".into();
+    files.push(go);
+    let indexes = load_or_generate(&scratch, &cache, &files, &mut analyzers, Refresh::Edits);
+    let _ = std::fs::remove_dir_all(&scratch);
+
+    let asked: usize = indexes.iter().map(|index| index.answers.len()).sum();
+    assert_eq!(asked, 0);
+}
+
 /// An edit answered by a running analyzer gives what a new index gives.
 #[test]
 fn edited_files_match_a_new_index() {
@@ -18,15 +59,7 @@ fn edited_files_match_a_new_index() {
         eprintln!("skipped: rust-analyzer is not installed");
         return;
     }
-    let scratch = std::env::temp_dir().join(format!("mimir-resolve-edit-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&scratch);
-    for path in ["Cargo.toml", "alpha/Cargo.toml", "beta/Cargo.toml"]
-        .into_iter()
-        .chain(SOURCES)
-    {
-        std::fs::create_dir_all(scratch.join(path).parent().unwrap()).unwrap();
-        std::fs::copy(workspace().join(path), scratch.join(path)).unwrap();
-    }
+    let scratch = scratch_copy("mimir-resolve-edit");
     let edit = |path: &str, from: &str, to: &str| {
         let text = std::fs::read_to_string(scratch.join(path)).unwrap();
         assert!(text.contains(from), "{from}");

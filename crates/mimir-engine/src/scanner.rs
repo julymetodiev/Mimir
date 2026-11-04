@@ -59,7 +59,22 @@ pub fn visits(root: &Path, path: &Path) -> bool {
 /// Whether a scan would take this file into the graph, whichever way it came to be noticed.
 pub fn takes(root: &Path, path: &Path) -> bool {
     std::fs::metadata(path).is_ok_and(|file| file.is_file() && file.len() <= MAX_FILE_BYTES)
+        && !go_tool_skips(path.strip_prefix(root).unwrap_or(path))
         && visits(root, path)
+}
+
+/// A Go file in a directory the Go tool does not build: `vendor`, `testdata`, or a name that starts
+/// with `_`. One that starts with `.` no scan visits anyway.
+fn go_tool_skips(relative: &Path) -> bool {
+    Language::from_path(relative) == Language::Go
+        && relative
+            .parent()
+            .into_iter()
+            .flat_map(Path::components)
+            .any(|part| {
+                let part = part.as_os_str().to_string_lossy();
+                part == "vendor" || part == "testdata" || part.starts_with('_')
+            })
 }
 
 /// Remove temporary files that a crash during a write left in the project. One younger than `age`
@@ -136,6 +151,9 @@ impl Scanner {
             if !language.is_known() {
                 continue;
             }
+            if go_tool_skips(path.strip_prefix(&root).unwrap_or(path)) {
+                continue;
+            }
 
             // Read and hash content
             let content = match fs::read(path).await {
@@ -196,6 +214,22 @@ mod tests {
         assert!(!root.join("src/.mimir-write-abc123").exists());
         assert!(root.join("src/.mimir-write-long-name").exists());
         assert!(root.join("src/kept.rs").exists());
+    }
+
+    #[test]
+    fn test_a_go_file_the_go_tool_does_not_build_is_left_out() {
+        for (path, skipped) in [
+            ("a.go", false),
+            ("inner/a.go", false),
+            ("vendor/x/a.go", true),
+            ("inner/testdata/a.go", true),
+            ("_mock/a.go", true),
+            ("inner/_old/a.go", true),
+            ("vendor/a.rs", false),
+            ("testdata/a.py", false),
+        ] {
+            assert_eq!(go_tool_skips(Path::new(path)), skipped, "{path}");
+        }
     }
 
     #[test]

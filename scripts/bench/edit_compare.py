@@ -54,7 +54,8 @@ sync("base")
 sync("cached")
 for name in files:
     path = project / name
-    path.write_text("// edited\n// edited\n" + path.read_text())
+    comment = "#" if path.suffix == ".py" else "//"
+    path.write_text(f"{comment} edited\n{comment} edited\n" + path.read_text())
 sync("edited")
 sync("full", "--full")
 subprocess.run([mimir, "daemon", "stop"], cwd=project, capture_output=True)

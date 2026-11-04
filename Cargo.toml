@@ -7,10 +7,13 @@ members = [
     "crates/mimir-parse-rust",
     "crates/mimir-parse-ts",
     "crates/mimir-parse-python",
+    "crates/mimir-parse-go",
     "crates/mimir-graph",
     "crates/mimir-resolve",
     "crates/mimir-lsp",
+    "crates/mimir-resolve-scip",
     "crates/mimir-resolve-ra",
+    "crates/mimir-resolve-go",
     "crates/mimir-resolve-lsp",
     # M3: Actor crates
     "crates/mimir-edit",
@@ -27,7 +30,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.95"
 authors = ["JuliusML"]
@@ -43,12 +46,15 @@ mimir-parse-core = { path = "crates/mimir-parse-core" }
 mimir-parse-rust = { path = "crates/mimir-parse-rust" }
 mimir-parse-ts = { path = "crates/mimir-parse-ts" }
 mimir-parse-python = { path = "crates/mimir-parse-python" }
+mimir-parse-go = { path = "crates/mimir-parse-go" }
 
 # Internal crates - Layer 3
 mimir-graph = { path = "crates/mimir-graph" }
 mimir-resolve = { path = "crates/mimir-resolve" }
 mimir-lsp = { path = "crates/mimir-lsp" }
+mimir-resolve-scip = { path = "crates/mimir-resolve-scip" }
 mimir-resolve-ra = { path = "crates/mimir-resolve-ra" }
+mimir-resolve-go = { path = "crates/mimir-resolve-go" }
 mimir-resolve-lsp = { path = "crates/mimir-resolve-lsp" }
 mimir-edit = { path = "crates/mimir-edit" }
 mimir-protocol = { path = "crates/mimir-protocol" }
@@ -91,6 +97,7 @@ tree-sitter-rust = "0.24.2"
 tree-sitter-typescript = "0.23.2"
 tree-sitter-javascript = "0.25.0"
 tree-sitter-python = "0.25.0"
+tree-sitter-go = "0.25.0"
 
 # CLI
 clap = { version = "4.6.7", features = ["derive"] }

@@ -51,10 +51,16 @@ jobs:
         with:
           components: rust-analyzer, rust-src
       - uses: Swatinem/rust-cache@v2
-      - name: tsrs and pyrefly, or their tests are skipped
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - name: tsrs, pyrefly, scip-go and gopls, or their tests are skipped
         run: |
           npm install -g tsrs
           pipx install pyrefly
+          go install github.com/scip-code/scip-go/cmd/scip-go@latest
+          go install golang.org/x/tools/gopls@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Tests
         run: cargo test --workspace --all-features --no-fail-fast
 

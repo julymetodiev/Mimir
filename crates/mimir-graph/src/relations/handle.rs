@@ -35,6 +35,11 @@ impl RelationsHandle {
         self.inner.add_symbol(symbol_id)
     }
 
+    /// Add symbols in one step.
+    pub fn add_symbols(&self, symbol_ids: impl IntoIterator<Item = SymbolId>) {
+        self.inner.add_symbols(symbol_ids)
+    }
+
     /// Add an edge between two symbols.
     pub fn add_edge(&self, from: SymbolId, to: SymbolId, data: EdgeData) {
         self.inner.add_edge(from, to, data)
@@ -45,9 +50,9 @@ impl RelationsHandle {
         self.inner.replace_edges(edges)
     }
 
-    /// Remove a symbol and all its edges.
-    pub fn remove_symbol(&self, symbol_id: SymbolId) {
-        self.inner.remove_symbol(symbol_id)
+    /// Remove symbols and all their edges, in one step.
+    pub fn remove_symbols(&self, symbol_ids: &[SymbolId]) {
+        self.inner.remove_symbols(symbol_ids)
     }
 
     /// Get all outgoing edges from a symbol.

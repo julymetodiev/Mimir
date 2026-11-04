@@ -23,6 +23,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Python
+__pycache__/
+
 # Coverage
 *.profraw
 coverage/
@@ -31,13 +34,8 @@ coverage/
 .claude/
 CLAUDE.md
 mcp.json
-
-# Temporary project files
-dev.txt
-TODO.md
-PROJECT.md
-GEMINI.md
 .mimir/
 # test-project/
 test-project/target
 fixtures/resolve-workspace/target
+.jm/

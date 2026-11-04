@@ -20,11 +20,13 @@ The daemon starts by itself with the first command; after rebuilding `mimir`, ru
 | `value_eval.py` | How do function values from syntax rules compare with those from an index? |
 | `uses_eval.py` | Do the users `trace` shows for a type, field or constant match the server's find-references? |
 | `lsp_probe.py` | How fast and how exact is a running analyzer on given files? |
+| `edit_matrix.py` | Every language and kind of edit, in under a minute: the graph after the edit against a clean start |
 | `edit_compare.py` | After edits, does a running analyzer give what a new index gives? |
 | `daemon_latency.py` | How long does `trace` take through the daemon, from no daemon on and after edits? |
 | `graph_diff.py` | Which edges differ between two `graph.json`? |
 | `roots.py` | What does each index of a project add, and which files does none cover? |
 | `scip_compare.py` | How does a running `tsrs` compare with a `scip-typescript` index, site by site? |
+| `go_compare.py` | GO2: does every disagreement between `gopls` and the index of a Go root fall in a named class? |
 
 ## What the numbers mean
 

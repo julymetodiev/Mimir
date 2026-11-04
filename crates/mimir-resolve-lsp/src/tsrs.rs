@@ -29,6 +29,7 @@ pub fn tsrs() -> AskedSource {
         answers_file: "tsrs-answers.txt",
         language_id,
         missing_packages,
+        reports_recheck: false,
     })
 }
 

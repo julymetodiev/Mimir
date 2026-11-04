@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use mimir_graph::CodeGraph;
-use mimir_types::{FileId, Symbol, SymbolKind};
+use mimir_types::{FileId, Language, Symbol, SymbolKind};
 
 use crate::ProjectFile;
 
@@ -32,8 +32,10 @@ pub fn is_data(symbol: &Symbol) -> bool {
     )
 }
 
-fn is_constant(symbol: &Symbol) -> bool {
+/// Whether a symbol is a constant or static, or in Go a variable at package level.
+pub fn is_constant(symbol: &Symbol) -> bool {
     symbol.kind == SymbolKind::Constant
+        || (symbol.kind == SymbolKind::Variable && symbol.language == Language::Go)
 }
 
 /// The type or trait a method belongs to: `Foo` for a method of `impl<T> Tr for a::Foo<T>`.
@@ -155,16 +157,17 @@ impl SymbolTable {
             .min_by_key(|s| s.span.end - s.span.start)
     }
 
-    /// The `n`th function or method with this name in a file, in the order they are written.
-    pub fn nth_definition(&self, file: FileId, name: &str, n: usize) -> Option<&Arc<Symbol>> {
+    /// The functions and methods with this name in a file, in the order they are written.
+    pub fn definitions_named(&self, file: FileId, name: &str) -> Vec<&Arc<Symbol>> {
         let mut named: Vec<_> = self
             .by_file
-            .get(&file)?
-            .iter()
+            .get(&file)
+            .into_iter()
+            .flatten()
             .filter(|s| s.name == name)
             .collect();
         named.sort_by_key(|s| s.span.start);
-        named.get(n).copied()
+        named
     }
 
     /// The next function or method with this name from a line on: what an overload's signature
@@ -225,31 +228,31 @@ impl SymbolTable {
             .min_by_key(|s| s.span.end - s.span.start)
     }
 
-    /// The `n`th constant or static with this name in a file, in the order they are written.
-    pub fn nth_constant(&self, file: FileId, name: &str, n: usize) -> Option<&Arc<Symbol>> {
-        self.nth_declared(file, name, n, is_constant)
+    /// The constants and statics with this name in a file, in the order they are written.
+    pub fn constants_named(&self, file: FileId, name: &str) -> Vec<&Arc<Symbol>> {
+        self.declared_named(file, name, is_constant)
     }
 
-    /// The `n`th type, trait, variant or field with this name in a file, in the order written.
-    pub fn nth_data(&self, file: FileId, name: &str, n: usize) -> Option<&Arc<Symbol>> {
-        self.nth_declared(file, name, n, is_data)
+    /// The types, traits, variants and fields with this name in a file, in the order written.
+    pub fn data_named(&self, file: FileId, name: &str) -> Vec<&Arc<Symbol>> {
+        self.declared_named(file, name, is_data)
     }
 
-    fn nth_declared(
+    fn declared_named(
         &self,
         file: FileId,
         name: &str,
-        n: usize,
         wanted: fn(&Symbol) -> bool,
-    ) -> Option<&Arc<Symbol>> {
+    ) -> Vec<&Arc<Symbol>> {
         let mut named: Vec<_> = self
             .all_by_file
-            .get(&file)?
-            .iter()
+            .get(&file)
+            .into_iter()
+            .flatten()
             .filter(|s| wanted(s) && s.name == name)
             .collect();
         named.sort_by_key(|s| s.span.start);
-        named.get(n).copied()
+        named
     }
 
     /// The type or trait a name without a path means at a byte offset, if syntax can tell: the only

@@ -37,6 +37,7 @@ Each is a number `scripts/bench` can check, on a project of 20 000 symbols. All 
 | T6 | After edits, the graph equals the graph from a new index: 0 differences |
 | T7 | `mimir view`: first frame of the whole graph under 1 s, then 60 frames a second with layout running, on a current laptop |
 | T8 | With no view open, T1 to T4 hold as if the view did not exist |
+| GO1 to GO5 | The targets for Go, in [GO.md](GO.md), section 5 |
 
 ## 3. Layers
 
@@ -47,12 +48,12 @@ Dependencies point inwards. IO lives at the edge.
   client        mimir-client                           connect, start the daemon, one call per command
   wire          mimir-protocol                         requests and responses, typed
   application   mimir-engine                           the one writer: sync, watch, query, edit
-  adapters      mimir-resolve-ra, mimir-resolve-lsp,   rust-analyzer, tsrs, pyrefly, a language server, files on disk
-                mimir-lsp,
+  adapters      mimir-resolve-scip, mimir-resolve-ra,  a SCIP index, rust-analyzer, scip-go, gopls, tsrs, pyrefly, a language server, files on disk
+                mimir-resolve-go, mimir-resolve-lsp, mimir-lsp,
                 mimir-edit
   ports + rules mimir-resolve                          linking rules and the port for a semantic source
   domain        mimir-graph, mimir-parse-core,         pure: no IO, no async, no clock, no environment
-                mimir-parse-rust, mimir-parse-ts, mimir-parse-python,
+                mimir-parse-rust, mimir-parse-ts, mimir-parse-python, mimir-parse-go,
                 mimir-types
 ```
 
@@ -63,9 +64,12 @@ Dependencies point inwards. IO lives at the edge.
 | `mimir-parse-rust` | domain | Rust through tree-sitter |
 | `mimir-parse-ts` | domain | TypeScript and JavaScript through tree-sitter |
 | `mimir-parse-python` | domain | Python through tree-sitter |
+| `mimir-parse-go` | domain | Go through tree-sitter |
 | `mimir-graph` | domain | symbols, edges and queries over them |
 | `mimir-resolve` | rules + port | turning references into edges; syntax rules; the port `SemanticSource` |
-| `mimir-resolve-ra` | adapter | the SCIP index and the running `rust-analyzer` |
+| `mimir-resolve-scip` | adapter | reading a SCIP index, keeping it by a hash of the sources, the choice between a kept index, a running server and a new index |
+| `mimir-resolve-ra` | adapter | what is Rust's own: Cargo roots, failed macros, the running `rust-analyzer` |
+| `mimir-resolve-go` | adapter | what is Go's own: `go.mod` roots, `scip-go`, `gopls`, the versions tested |
 | `mimir-resolve-lsp` | adapter | a language server as a semantic source: asking about each site, saving the answers; one module for each server, as `tsrs` and `pyrefly` |
 | `mimir-lsp` | adapter | a running language server: starting it, its messages, file URIs |
 | `mimir-edit` | adapter | applying edits to files, with conflict detection |
@@ -175,8 +179,7 @@ reads and never writes: rule 4 stands, and the page has no way to ask for an edi
 
 ## 8. Other languages
 
-Built for JavaScript, TypeScript and Python, and the targets of section 2 are measured for Rust only. Each is
-parsed through tree-sitter and resolved by a running language server, behind the same port as Rust: `tsrs`, in
-[TYPESCRIPT.md](TYPESCRIPT.md), and `pyrefly`, in [PYTHON.md](PYTHON.md). Go comes next and is not built: it works as
-Rust does, with an index and a server for edited files, in [GO.md](GO.md). A language server is installed apart, and
-is never linked.
+Built for JavaScript, TypeScript, Python and Go, and T1 to T8 are measured for Rust, and T1 to T4 for Go. Each is parsed
+through tree-sitter, behind the same port as Rust. JavaScript, TypeScript and Python are resolved by a running language
+server: `tsrs`, in [TYPESCRIPT.md](TYPESCRIPT.md), and `pyrefly`, in [PYTHON.md](PYTHON.md). Go works as Rust does, with an
+index and a server for edited files, in [GO.md](GO.md). A language server is installed apart, and is never linked.

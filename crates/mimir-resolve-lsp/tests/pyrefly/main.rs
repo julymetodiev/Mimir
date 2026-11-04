@@ -218,6 +218,42 @@ fn an_edit_is_seen_by_the_files_that_import_it() {
     assert_eq!(calls(&pyrefly()), names(&["B.go", "make"]));
 }
 
+/// Lines that move in a file move a member inherited from it through another file.
+#[test]
+fn moved_lines_are_seen_through_a_file_in_between() {
+    if !pyrefly_is_there() {
+        return;
+    }
+    let dir = tempfile::TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    let lib = "class Base:\n    def go(self):\n        pass\n";
+    std::fs::write(root.join("lib.py"), lib).unwrap();
+    std::fs::write(
+        root.join("mid.py"),
+        "from lib import Base\n\n\nclass Mid(Base):\n    pass\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("main.py"),
+        "from mid import Mid\n\n\ndef run():\n    Mid().go()\n",
+    )
+    .unwrap();
+    let source = pyrefly();
+    let calls = |source: &AskedSource| {
+        let (graph, files) = linked(&root, &["lib.py", "mid.py", "main.py"], source);
+        edges(&graph, &files, EdgeKind::Calls)
+            .into_iter()
+            .filter(|(from, to)| from == "run" && to.ends_with("go"))
+            .map(|(_, to)| to)
+            .collect::<BTreeSet<_>>()
+    };
+    let go = BTreeSet::from(["Base.go".to_string()]);
+    assert_eq!(calls(&source), go);
+
+    std::fs::write(root.join("lib.py"), format!("# moved\n{lib}")).unwrap();
+    assert_eq!(calls(&source), go);
+}
+
 /// Only a project with files of the language and a list of packages is told.
 #[test]
 fn a_project_without_its_packages_is_told_so() {

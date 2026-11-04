@@ -1,5 +1,7 @@
 //! Language adapter trait for parsing.
 
+use std::path::Path;
+
 use mimir_types::{FileId, Language};
 
 use crate::extracted::{ExtractedReference, ExtractedSymbol};
@@ -23,6 +25,10 @@ pub trait LanguageAdapter: Send + Sync {
 
     /// Extract references from a parse tree.
     fn extract_references(&self, tree: &ParsedTree, file_id: FileId) -> Vec<ExtractedReference>;
+
+    /// Say where a file's symbols are, for a language whose qualified names start with its directory.
+    /// A parser is not told a file's path otherwise.
+    fn qualify(&self, _path: &Path, _symbols: &mut [ExtractedSymbol]) {}
 
     /// Get file extensions this adapter handles.
     fn extensions(&self) -> &[&str];

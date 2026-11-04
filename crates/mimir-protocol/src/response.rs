@@ -203,6 +203,9 @@ pub struct StatsResponse {
     pub files_by_language: Vec<(Language, usize)>,
     /// Symbols by kind.
     pub symbols_by_kind: Vec<(SymbolKind, usize)>,
+    /// What a person should know about the answers, as in a sync.
+    #[serde(default)]
+    pub notes: Vec<String>,
 }
 
 impl StatsResponse {
@@ -214,6 +217,7 @@ impl StatsResponse {
             references_count: 0,
             files_by_language: Vec::new(),
             symbols_by_kind: Vec::new(),
+            notes: Vec::new(),
         }
     }
 }

@@ -11,5 +11,8 @@ pub async fn execute() -> Result<()> {
     println!("Files: {}", stats.files_count);
     println!("Symbols: {}", stats.symbols_count);
     println!("Edges: {}", stats.references_count);
+    for note in &stats.notes {
+        println!("Note: {note}");
+    }
     Ok(())
 }

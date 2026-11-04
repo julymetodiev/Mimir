@@ -3,7 +3,7 @@
 use crate::relations::{EdgeData, EdgeKind, RelationsHandle};
 use crate::symbols::SymbolsHandle;
 use mimir_types::{FileId, Symbol, SymbolId};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::trace::{TraceNode, TraceOptions, TraceRelationship, TraceResult};
@@ -54,6 +54,15 @@ impl CodeGraph {
         id
     }
 
+    /// Add symbols in one step, as when a whole project is read.
+    pub fn add_symbols(&self, symbols: Vec<Symbol>) {
+        let ids: Vec<SymbolId> = symbols.iter().map(|s| s.id).collect();
+        for symbol in symbols {
+            self.symbols.insert(symbol);
+        }
+        self.relations.add_symbols(ids);
+    }
+
     /// Get a symbol by ID.
     pub fn get_symbol(&self, id: SymbolId) -> Option<Arc<Symbol>> {
         self.symbols.get(id)
@@ -77,9 +86,8 @@ impl CodeGraph {
     /// Remove all symbols from a file.
     pub fn remove_file(&self, file_id: FileId) -> Vec<Arc<Symbol>> {
         let symbols = self.symbols.remove_file(file_id);
-        for sym in &symbols {
-            self.relations.remove_symbol(sym.id);
-        }
+        let ids: Vec<SymbolId> = symbols.iter().map(|s| s.id).collect();
+        self.relations.remove_symbols(&ids);
         symbols
     }
 
@@ -112,16 +120,14 @@ impl CodeGraph {
 
         // Trace callers
         if options.include_callers {
-            let mut visited = HashSet::new();
-            visited.insert(symbol_id);
-            self.trace_callers(symbol_id, 1, max_depth, &mut visited, &mut result.callers);
+            result.callers = self.walk(symbol_id, max_depth, |id| {
+                self.callers_of(id, id == symbol_id)
+            });
         }
 
         // Trace callees
         if options.include_callees {
-            let mut visited = HashSet::new();
-            visited.insert(symbol_id);
-            self.trace_callees(symbol_id, 1, max_depth, &mut visited, &mut result.callees);
+            result.callees = self.walk(symbol_id, max_depth, |id| self.callees_of(id));
         }
 
         // Calculate max depth reached
@@ -136,18 +142,55 @@ impl CodeGraph {
         Some(result)
     }
 
-    fn trace_callers(
+    /// What is reached from a symbol, each at its shortest depth, so what is reached does not depend
+    /// on the order of the edges, nor does the answer. A symbol comes right after the one it was
+    /// reached from, with what it leads to under it.
+    fn walk(
+        &self,
+        root: SymbolId,
+        max_depth: usize,
+        next: impl Fn(SymbolId) -> Vec<(SymbolId, TraceRelationship)>,
+    ) -> Vec<TraceNode> {
+        let mut visited = HashSet::from([root]);
+        let mut under: HashMap<SymbolId, Vec<(Arc<Symbol>, TraceRelationship)>> = HashMap::new();
+        let mut level = vec![root];
+        for _ in 0..max_depth {
+            let mut next_level = Vec::new();
+            for parent in level {
+                let mut found = Vec::new();
+                for (id, relationship) in next(parent) {
+                    if let Some(symbol) = self.symbols.get(id)
+                        && visited.insert(id)
+                    {
+                        found.push((symbol, relationship));
+                    }
+                }
+                found.sort_by_key(|(symbol, _)| {
+                    (
+                        symbol.file_id.value(),
+                        symbol.range.start_line,
+                        symbol.range.start_col,
+                        symbol.name.clone(),
+                    )
+                });
+                next_level.extend(found.iter().map(|(symbol, _)| symbol.id));
+                under.insert(parent, found);
+            }
+            level = next_level;
+        }
+        let mut result = Vec::new();
+        push_under(root, 1, &under, &mut result);
+        result
+    }
+
+    /// Who leads to a symbol, the surest first: the first is what a symbol found twice is called.
+    /// Who reads or uses it is asked of what is traced alone: past that, one class used all over a
+    /// project would bury the calls under everything that names it, and none of that is a call.
+    fn callers_of(
         &self,
         symbol_id: SymbolId,
-        depth: usize,
-        max_depth: usize,
-        visited: &mut HashSet<SymbolId>,
-        result: &mut Vec<TraceNode>,
-    ) {
-        if depth > max_depth {
-            return;
-        }
-
+        with_uses: bool,
+    ) -> Vec<(SymbolId, TraceRelationship)> {
         let value_users = |id| {
             self.relations
                 .incoming(id)
@@ -185,41 +228,15 @@ impl CodeGraph {
             .into_iter()
             .filter(|(_, edge)| matches!(edge.kind, EdgeKind::UsesType | EdgeKind::UsesField))
             .map(|(user, _)| (user, TraceRelationship::User));
-        let callers: Vec<_> = direct
-            .chain(by_value)
-            .chain(via_trait)
-            .chain(readers)
-            .chain(users)
-            .collect();
-
-        for (caller_id, relationship) in callers {
-            if !visited.insert(caller_id) {
-                continue;
-            }
-
-            if let Some(symbol) = self.symbols.get(caller_id) {
-                result.push(TraceNode {
-                    symbol,
-                    depth,
-                    relationship,
-                });
-                self.trace_callers(caller_id, depth + 1, max_depth, visited, result);
-            }
+        let mut found: Vec<_> = direct.chain(by_value).chain(via_trait).collect();
+        if with_uses {
+            found.extend(readers.chain(users));
         }
+        found
     }
 
-    fn trace_callees(
-        &self,
-        symbol_id: SymbolId,
-        depth: usize,
-        max_depth: usize,
-        visited: &mut HashSet<SymbolId>,
-        result: &mut Vec<TraceNode>,
-    ) {
-        if depth > max_depth {
-            return;
-        }
-
+    /// What a symbol leads to, the surest first: the first is what a symbol found twice is called.
+    fn callees_of(&self, symbol_id: SymbolId) -> Vec<(SymbolId, TraceRelationship)> {
         let implementations = self
             .relations
             .incoming(symbol_id)
@@ -237,22 +254,7 @@ impl CodeGraph {
             .into_iter()
             .filter(|(_, edge)| edge.kind == EdgeKind::UsesAsValue)
             .map(|(function, _)| (function, TraceRelationship::CalleeByValue));
-        let targets: Vec<_> = direct.chain(by_value).chain(implementations).collect();
-
-        for (target_id, relationship) in targets {
-            if !visited.insert(target_id) {
-                continue;
-            }
-
-            if let Some(symbol) = self.symbols.get(target_id) {
-                result.push(TraceNode {
-                    symbol,
-                    depth,
-                    relationship,
-                });
-                self.trace_callees(target_id, depth + 1, max_depth, visited, result);
-            }
-        }
+        direct.chain(by_value).chain(implementations).collect()
     }
 
     // ============ Stats ============
@@ -265,6 +267,23 @@ impl CodeGraph {
     /// Get the number of edges in the graph.
     pub fn edge_count(&self) -> usize {
         self.relations.edge_count()
+    }
+}
+
+/// Add what was reached from a symbol, and under each what was reached from that.
+fn push_under(
+    parent: SymbolId,
+    depth: usize,
+    under: &HashMap<SymbolId, Vec<(Arc<Symbol>, TraceRelationship)>>,
+    result: &mut Vec<TraceNode>,
+) {
+    for (symbol, relationship) in under.get(&parent).into_iter().flatten() {
+        result.push(TraceNode {
+            symbol: Arc::clone(symbol),
+            depth,
+            relationship: *relationship,
+        });
+        push_under(symbol.id, depth + 1, under, result);
     }
 }
 
@@ -309,6 +328,89 @@ mod tests {
 
         let found = graph.find_symbol("foo");
         assert_eq!(found.len(), 1);
+    }
+
+    #[test]
+    fn a_symbol_found_by_a_long_way_keeps_its_short_one_and_what_is_past_it() {
+        // x calls root and also, by way of q and p, comes to it the long way. y calls only x.
+        let chains = [
+            ("x", "root"),
+            ("p", "root"),
+            ("q", "p"),
+            ("x", "q"),
+            ("y", "x"),
+        ];
+        for reversed in [false, true] {
+            let ids = ids();
+            let graph = CodeGraph::new();
+            let file_id: FileId = ids.next();
+            let mut by_name = HashMap::new();
+            for name in ["root", "x", "p", "q", "y"] {
+                by_name.insert(name, graph.add_symbol(make_symbol(name, &ids, file_id)));
+            }
+            let mut edges = chains.to_vec();
+            if reversed {
+                edges.reverse();
+            }
+            for (from, to) in edges {
+                graph.relations().add_edge(
+                    by_name[from],
+                    by_name[to],
+                    EdgeData::new(EdgeKind::Calls, Span::new(0, 1), Confidence::High),
+                );
+            }
+            let options = TraceOptions {
+                max_depth: Some(3),
+                include_callers: true,
+                include_callees: false,
+            };
+            let callers = graph.trace(by_name["root"], options).unwrap().callers;
+            let got: Vec<_> = callers
+                .iter()
+                .map(|node| (node.symbol.name.as_str(), node.depth))
+                .collect();
+            assert_eq!(got, [("p", 1), ("q", 2), ("x", 1), ("y", 2)]);
+        }
+    }
+
+    #[test]
+    fn a_use_is_followed_from_what_is_traced_and_no_further() {
+        // `kind` is used by `user`, and `user` by `user_of_user`. `caller` calls `user`.
+        let ids = ids();
+        let graph = CodeGraph::new();
+        let file_id: FileId = ids.next();
+        let mut by_name = HashMap::new();
+        for name in ["kind", "user", "user_of_user", "caller"] {
+            by_name.insert(name, graph.add_symbol(make_symbol(name, &ids, file_id)));
+        }
+        for (from, to, edge_kind) in [
+            ("user", "kind", EdgeKind::UsesType),
+            ("user_of_user", "user", EdgeKind::UsesType),
+            ("caller", "user", EdgeKind::Calls),
+        ] {
+            graph.relations().add_edge(
+                by_name[from],
+                by_name[to],
+                EdgeData::new(edge_kind, Span::new(0, 1), Confidence::High),
+            );
+        }
+        let options = TraceOptions {
+            max_depth: Some(3),
+            include_callers: true,
+            include_callees: false,
+        };
+        let callers = graph.trace(by_name["kind"], options).unwrap().callers;
+        let got: Vec<_> = callers
+            .iter()
+            .map(|node| (node.symbol.name.as_str(), node.depth, node.relationship))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                ("user", 1, TraceRelationship::User),
+                ("caller", 2, TraceRelationship::Caller),
+            ]
+        );
     }
 
     #[test]

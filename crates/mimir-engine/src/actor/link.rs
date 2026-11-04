@@ -6,6 +6,7 @@ use crate::save;
 use crate::scanner::{ScannedFile, Scanner};
 use mimir_protocol::{LinkSummary, SyncResult};
 use mimir_resolve::{LinkReport, ProjectFile, Refresh, SemanticIndex, link};
+use mimir_types::Symbol;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tokio::sync::oneshot;
@@ -193,6 +194,7 @@ impl GraphActor {
 
         // Build a set of paths we've seen
         let mut seen_paths: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+        let mut symbols = Vec::new();
 
         // Process each scanned file
         for scanned in scanned_files {
@@ -214,7 +216,7 @@ impl GraphActor {
                     }
 
                     // Add updated file
-                    match self.sync_add_file(&scanned) {
+                    match self.sync_add_file(&scanned, &mut symbols) {
                         Ok(added_count) => {
                             symbols_added += added_count;
                             files_updated += 1;
@@ -231,7 +233,7 @@ impl GraphActor {
                 // File unchanged - skip
             } else {
                 // New file - add it
-                match self.sync_add_file(&scanned) {
+                match self.sync_add_file(&scanned, &mut symbols) {
                     Ok(added_count) => {
                         symbols_added += added_count;
                         files_added += 1;
@@ -242,6 +244,8 @@ impl GraphActor {
                 }
             }
         }
+
+        self.graph.add_symbols(symbols);
 
         // Find files that were removed
         let tracked_paths: Vec<PathBuf> = self.files.keys().cloned().collect();
@@ -279,8 +283,12 @@ impl GraphActor {
         Ok(result)
     }
 
-    /// Add a file during sync operation.
-    pub fn sync_add_file(&mut self, scanned: &ScannedFile) -> Result<usize, GraphError> {
+    /// Add a file during sync operation: its symbols join those to add when the scan ends.
+    pub fn sync_add_file(
+        &mut self,
+        scanned: &ScannedFile,
+        symbols: &mut Vec<Symbol>,
+    ) -> Result<usize, GraphError> {
         // Read file content
         let content =
             std::fs::read_to_string(&scanned.absolute_path).map_err(|source| GraphError::Read {
@@ -288,14 +296,16 @@ impl GraphActor {
                 source,
             })?;
 
-        let (_, symbols_count) = self.insert_file(
+        let (_, new) = self.insert_file(
             scanned.absolute_path.clone(),
             scanned.path.clone(),
             content,
             scanned.content_hash,
             scanned.language,
         )?;
+        let count = new.len();
+        symbols.extend(new);
 
-        Ok(symbols_count)
+        Ok(count)
     }
 }

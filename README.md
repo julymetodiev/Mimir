@@ -17,7 +17,7 @@ to the `get` of `x`'s type, because the language's own compiler resolves it, whe
 It also has the tools an agent needs instead of Grep, Glob, Read, Edit and Write, so the graph stays up
 to date as the agent works.
 
-Rust, TypeScript, JavaScript and Python, on macOS and Linux. Go is in the works.
+Rust, TypeScript, JavaScript, Python and Go, on macOS and Linux.
 
 <p align="center">
   <a href="https://mimir.369.is/"><img src="docs/images/graph.jpg" alt="Mimir's own code as a graph: symbols grouped by crate and file, joined by calls and uses"></a>
@@ -50,12 +50,14 @@ Or build it, with Rust 1.95 or newer:
 cargo install --git https://github.com/julymetodiev/Mimir mimir-cli
 ```
 
-For exact answers, Mimir needs `rust-analyzer` for Rust, [`tsrs`](https://github.com/oxc-project/tsrs) for TypeScript and JavaScript, and [`pyrefly`](https://github.com/facebook/pyrefly) for Python. In a Python project, install its packages in a `.venv` at the top: without them less is answered.
+For exact answers, Mimir needs `rust-analyzer` for Rust, [`tsrs`](https://github.com/oxc-project/tsrs) for TypeScript and JavaScript, [`pyrefly`](https://github.com/facebook/pyrefly) for Python, and `go` with [`scip-go`](https://github.com/scip-code/scip-go) and `gopls` for Go. In a Python project, install its packages in a `.venv` at the top: without them less is answered.
 
 ```bash
 rustup component add rust-analyzer rust-src
 npm install -g tsrs
 pipx install pyrefly
+go install github.com/scip-code/scip-go/cmd/scip-go@latest
+go install golang.org/x/tools/gopls@latest
 ```
 
 ## Use it
@@ -173,9 +175,11 @@ the source of every symbol, so use it only on code that may be public.
 - `[as value, possible]`: a function named without being called, as in `.map(helper)`, or a constant
   holding one. It may run later, or never.
 - `[reads it]`: on a constant or static, a symbol that reads it.
+- `[uses it]`: on a type or field, a symbol that names it. Neither of these is a call, and they come
+  only for what you traced, not further along a chain.
 - `Partial:` analysis is still running, so calls may be missing. Ask again shortly.
 
-Without `rust-analyzer`, `tsrs` or `pyrefly`, or with `MIMIR_NO_SCIP=1`, only syntax rules apply, and `mimir
+Without `rust-analyzer`, `tsrs`, `pyrefly` or `scip-go`, or with `MIMIR_NO_SCIP=1`, only syntax rules apply, and `mimir
 sync` says how many files that covers. In Rust they find about half the calls. In the others they link only
 functions of the same file or of an import in the project, and no methods.
 
@@ -206,6 +210,16 @@ minutes too:
 An edit of a file most of a project imports asks about those files again: about 30 s on nest and django,
 with answers marked partial until then.
 
+On Go projects, which work as Rust does, with an index and `gopls` for the files edited since:
+
+| | hugo | kubernetes |
+|---|---|---|
+| Symbols | 19 065 | 221 808 |
+| A first `mimir sync`, compiling what the project needs | 331 s | 513 s, and 14 GB in Go's build cache |
+| A new daemon with nothing changed | 1.3 to 1.9 s | 32 s |
+| A first answer after an edit | under 0.9 s | not measured |
+| Daemon after asking | 96 MB | 1.7 GB, and a peak of 4.7 GB while it reads the indexes |
+
 ## Accuracy
 
 On Mimir's own code, 1326 of 1326 calls between its functions match what `rust-analyzer` reports. The
@@ -235,6 +249,10 @@ In Python, against `scip-python`, the targets of places that name a function agr
 Known limits in Python: **`pyrefly` runs a project's `.venv/bin/python`** (see [SECURITY.md](SECURITY.md)). What has no type has no target, about a fifth of the calls in django's own code, and Mimir leaves those out and does not guess. A call through a variable, as `alias()` after `alias = plain`, or `cls()`, gives no edge. A call the source does not spell gives none either, as `a + b` running `__add__`. A class that fits a `Protocol` without naming it is not shown as implementing it. A package installed without a change to a lock file leaves saved answers stale. Environments other than a `.venv` at the top of a project are not measured.
 
 Known limits in TypeScript and JavaScript: what has no type has no target, so plain JavaScript gets about two thirds of its calls (62% on express, 66% on three.js, against 91% and 94% on TypeScript projects). Mimir leaves the rest out and does not guess. `list[0].area()` on a union of types shows one member. pnpm and yarn workspaces are not measured, and `.vue` and `.svelte` files are left out. `tsrs` is a young beta.
+
+In Go, against `gopls`, all 103 967 places on hugo that name something agree or fall in a known class: 50 369 at the same place, 36 908 outside the project in the same package, and the rest definitions, built-in names and files outside the build.
+
+Known limits in Go: a first index compiles the project, as a build does, and a `go.mod` may make Go fetch the toolchain it names (see [SECURITY.md](SECURITY.md)). A file behind a build tag or for another system has syntax rules only, and `mimir sync` says how many there are. A file over 500 KB is left out, in any language. `C.f()` is not linked. A call the source does not spell, as through `reflect`, has no edge, and neither has `f()` on a variable holding a function.
 
 Known limits in Rust: a proc macro that fails silently while the index is written loses its calls;
 one that says so is handled. A read and a write of a field are not told apart. A constant inside a format string has a read only in macros known to take one, and only if it is an item of the same module or imported by a project path: an attribute such as `#[error("{NAME}")]`, a glob import or a renamed import leaves it out. A function named in an attribute, as in `#[serde(skip_serializing_if = "name")]`, has no call. Replacing a file by renaming breaks a hard link to it.

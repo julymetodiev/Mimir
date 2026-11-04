@@ -29,7 +29,8 @@ pub enum McpError {
 const INSTRUCTIONS: &str = "Mimir knows the call graph of this project, from its language's compiler. Use \
 trace before changing a function, to see who calls it and what it calls: it finds callers grep \
 misses and does not confuse same-named methods. An entry marked possible (via trait, \
-implementation, as value) may run at runtime or not. A result with provisional true is still \
+implementation, as value) may run at runtime or not. An entry marked not_a_call reads or uses the \
+symbol and calls nothing. A result with provisional true is still \
 being resolved: ask again shortly. Use grep instead of searching text with other tools: each match says which symbol it is in. \
 Use files to find files and read_file to read them. Use read and search to find code by symbol, \
 edit_symbols to replace whole symbols, insert_after to add code, replace_text for small changes and write_file to create a file.";

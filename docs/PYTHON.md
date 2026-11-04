@@ -98,6 +98,12 @@ overrides it is a possible target through `Implements`, as with a trait.
 Finding importers needs Python's own rules for a path: `from . import a`, `from ..a import b`, `import a.b`,
 a package's `__init__.py`, and a `src/` layout.
 
+Told that a file changed on disk, `pyrefly` takes that in by itself and keeps answering from before until it
+is done: 6 of 60 runs gave an importer the old target. So Mimir declares `window.workDoneProgress` and waits
+for the `end` of `$/progress`: 0 of 200. It reports that for every change told, of any file, and only then.
+That holds for a change nothing imports, which keeps the server. One with importers gets a new one: section 5.
+`tsrs` needs no wait, 0 of 100 without one, and reports nothing.
+
 **Syntax rules**, until answers come or without `pyrefly`: a call links only to a function in the same file
 with nothing nearer of that name, or to a name `from a import b` takes from a project file with exactly
 one public symbol of that name. No methods, no `import *`.
@@ -136,7 +142,7 @@ Where they stand, measured through `mimir` on an M1 Pro:
 |---|---|
 | PY1 | Holds |
 | PY2 | Not met: 2 unclassified on flask, and the comparison on django did not end in 15 minutes |
-| PY3 | Holds on django, 3 files edited, 0 differences in every kind of edge. Comment edits, and the fixture for a changed type |
+| PY3 | Not met in full on django: 0 differences for a comment on a base file and for a changed type, 1 extra edge after an edit of a file nothing imports. See below |
 | PY4 | Not measured as `scripts/bench` does. T4 below: 539 MB on django, of 67 865 symbols |
 | PY5 | Holds on what was measured: django, 67 865 symbols, 65 s, for over three times the symbols of the target |
 
@@ -153,6 +159,31 @@ Where they stand, measured through `mimir` on an M1 Pro:
 
 A restart gives the same graph as a clean start, 0 differences on all three. An edit of three files most of
 django imports took 51 s, as long as a clean start of 53 s: they make nearly every file stale.
+
+PY3 on django, 1860f0a, against a clean start with the same edit, on an M1 Pro:
+
+| Edit | Differences | `sync` |
+|---|---|---|
+| A comment on top of `django/db/models/base.py` | 0 | 49 s |
+| `-> int` on `QuerySet.filter` in `django/db/models/query.py` | 0 | 47 s |
+| A comment on top of `tests/basic/tests.py`, which nothing imports | 1 extra: `check_dependencies` uses `context_processors` | 1 s |
+
+Which graph is right at that edge, and why it comes, is not known.
+
+With one `pyrefly` kept for all edits, the first lost 1 218 of 60 802 calls and the second 55. On three files,
+20 of 20 runs: once a file changes, `pyrefly` 1.4.0 can keep the old line for a member inherited through another
+file, and a new `pyrefly` gives the right one. Which it does depends on the text: with the same messages,
+`# moved` on top keeps the old line and `# one line more` does not. Telling it of the middle file, opening
+that file, editing as an editor does and `--indexing-mode` did not help. So a change with importers gets a new
+`pyrefly`. It starts in 16 ms and asks only the stale files. `sync --full` gets one too.
+
+The first `trace` after an edit on django, depth 1, as against one `pyrefly` for all edits:
+
+| Edit | One `pyrefly` | Now |
+|---|---|---|
+| 1 file nothing imports | 590 ms | 600 ms, and 860 ms, partial, for the first edit after a start |
+| 1 file with few importers | 540 ms | 830 ms |
+| 10 test files | 820 ms, partial | 880 ms, partial, complete 1.15 s later |
 
 ## 6. Machine checks
 
