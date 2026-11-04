@@ -6,6 +6,8 @@ All notable changes to Mimir are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-04
+
 ### Added
 
 - **`impact`**: what the uncommitted changes touch, or all of a branch with `--base`: the symbols added,
@@ -13,11 +15,6 @@ All notable changes to Mimir are recorded here. The format follows
 - **The Claude Code plugin steers an agent to Mimir**: the first search or read of a project in a session
   is refused once, with what to use instead, and repeating the call goes through. A search through the
   shell is reminded of it once. A `mimir` too old for this changes nothing.
-
-## [0.4.0] - 2026-11-04
-
-### Added
-
 - **Go**, resolved by an index from `scip-go` for each module, and by a running `gopls` for edited files.
 - **Python**, resolved by a running `pyrefly`, with its answers saved beside the graph.
 
