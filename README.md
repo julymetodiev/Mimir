@@ -17,7 +17,18 @@ to the `get` of `x`'s type, because the language's own compiler resolves it, whe
 It also has the tools an agent needs instead of Grep, Glob, Read, Edit and Write, so the graph stays up
 to date as the agent works.
 
-Rust, TypeScript, JavaScript, Python and Go, on macOS and Linux.
+On macOS and Linux:
+
+| Language | Status | Answers come from |
+|---|---|---|
+| Rust | Supported | `rust-analyzer` |
+| TypeScript | Supported | `tsrs` |
+| JavaScript | Supported | `tsrs` |
+| Python | Supported | `pyrefly` |
+| Go | Supported | `scip-go` and `gopls` |
+| C | Next | |
+| C++ | Next | |
+| Java | Next | |
 
 <p align="center">
   <a href="https://mimir.369.is/"><img src="docs/images/graph.jpg" alt="Mimir's own code as a graph: symbols grouped by crate and file, joined by calls and uses"></a>
