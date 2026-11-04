@@ -15,8 +15,8 @@ use crate::command::{
     Edit, EditReport, FindOptions, GrepOptions, SearchOptions, SyncResult, TraceOptions,
 };
 use crate::response::{
-    FileText, FilesResponse, FindResponse, GrepResponse, SearchResponse, StatsResponse,
-    SymbolSource, TraceResponse,
+    FileText, FilesResponse, FindResponse, GrepResponse, ImpactResponse, SearchResponse,
+    StatsResponse, SymbolSource, TraceResponse,
 };
 use crate::view::{GraphEvent, GraphSnapshot};
 
@@ -50,6 +50,12 @@ pub enum IpcCommand {
 
     /// Find and trace a symbol by name.
     TraceByName { name: String, options: TraceOptions },
+
+    /// What changed since the last commit, or since `base` split off, and what depends on it.
+    Impact {
+        base: Option<String>,
+        depth: Option<u32>,
+    },
 
     /// The source of the symbol a name most likely means, with lines of context around it.
     Read {
@@ -179,6 +185,9 @@ pub enum IpcData {
 
     /// Trace results.
     TraceResult(TraceResponse),
+
+    /// What a change touches.
+    ImpactResult(ImpactResponse),
 
     /// Graph statistics.
     Stats(StatsResponse),

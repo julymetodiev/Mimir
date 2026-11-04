@@ -6,6 +6,14 @@ All notable changes to Mimir are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`impact`**: what the uncommitted changes touch, or all of a branch with `--base`: the symbols added,
+  changed and removed, and what depends on them. A removed symbol shows where its name is still written.
+- **The Claude Code plugin steers an agent to Mimir**: the first search or read of a project in a session
+  is refused once, with what to use instead, and repeating the call goes through. A search through the
+  shell is reminded of it once. A `mimir` too old for this changes nothing.
+
 ## [0.4.0] - 2026-11-04
 
 ### Added

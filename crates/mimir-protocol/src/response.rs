@@ -119,6 +119,63 @@ pub struct FileText {
     pub lines: Vec<String>,
 }
 
+/// What a change touches, and what depends on it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImpactResponse {
+    /// The commit the files were compared with.
+    pub base: String,
+    /// The symbols added or changed since it.
+    pub changed: Vec<ChangedSymbol>,
+    /// The symbols gone since it. A symbol moved with its text unchanged is not among them.
+    pub removed: Vec<RemovedSymbol>,
+    /// Files changed where no symbol did, as in imports, or in a language Mimir does not parse.
+    pub other_files: Vec<PathBuf>,
+    /// Analysis is still running, so dependents may be missing.
+    pub provisional: bool,
+}
+
+/// A symbol added or changed, and what depends on it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangedSymbol {
+    /// The symbol.
+    pub symbol: SymbolInfo,
+    /// It did not exist before.
+    pub added: bool,
+    /// What depends on it, each symbol once across a whole answer.
+    pub dependents: Vec<TraceNode>,
+}
+
+/// A symbol gone. Nothing in the graph points at it any more, so what is known is where its name
+/// is still written and means nothing else.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemovedSymbol {
+    /// Its name.
+    pub name: String,
+    /// Its fullest name.
+    pub qualified_name: String,
+    /// Its kind.
+    pub kind: SymbolKind,
+    /// The file it was in, relative to the project.
+    pub file_path: PathBuf,
+    /// Its first line in the version compared with.
+    pub line: u32,
+    /// The first places that still name it and resolve to nothing else.
+    pub named_at: Vec<NamedAt>,
+    /// All such places, of which `named_at` may be the first few.
+    pub named_total: usize,
+}
+
+/// A place that names a symbol.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NamedAt {
+    /// The file, relative to the project.
+    pub path: PathBuf,
+    /// The line, from 1.
+    pub line: u32,
+    /// The innermost symbol holding the line.
+    pub symbol: Option<String>,
+}
+
 /// A node in a trace result.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraceNode {

@@ -16,6 +16,7 @@ path = "src/main.rs"
 [dependencies]
 mimir-protocol = { workspace = true }
 mimir-client = { workspace = true }
+mimir-hook = { workspace = true }
 mimir-daemon = { workspace = true }
 mimir-mcp = { workspace = true }
 mimir-view = { workspace = true }

@@ -1,6 +1,6 @@
 ---
 name: mimir-code
-description: Use Mimir instead of Grep, Glob, Read, Edit and Write in a project (MCP tools named grep, files, read_file, trace, search, read, edit_symbols, insert_after, edit_lines, replace_text, write_file, sync, status) - for searching text in any file, finding files by name, reading a file, creating a file, before changing, renaming or removing a function, when asking who calls something or what it calls, when tracing a bug through calls, when finding a symbol by name, or when replacing a function, struct or impl or adding code next to one.
+description: Use Mimir instead of Grep, Glob, Read, Edit and Write in a project (MCP tools named grep, files, read_file, trace, impact, search, read, edit_symbols, insert_after, edit_lines, replace_text, write_file, sync, status) - for searching text in any file, finding files by name, reading a file, creating a file, before changing, renaming or removing a function, when asking who calls something or what it calls, when tracing a bug through calls, when finding a symbol by name, or when replacing a function, struct or impl or adding code next to one.
 ---
 
 # Mimir
@@ -23,6 +23,7 @@ all its edits apply together or none do. `trace` a caller to see what it calls i
 | Files by name or glob, skipping what git ignores | `files` |
 | A whole file or a range of its lines, numbered for `edit_lines` | `read_file` |
 | Who calls this, what it calls, before changing it | `trace` |
+| What your changes touch and what else to check, after changing code | `impact` (a whole branch: `base`) |
 | A symbol whose name you partly know (`total` counts all matches, not only those returned) | `search` |
 | A symbol's source, without knowing its file | `read` |
 | Replace whole functions, structs or impls | `edit_symbols` |

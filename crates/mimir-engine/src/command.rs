@@ -3,8 +3,8 @@
 use crate::error::GraphError;
 use mimir_protocol::{
     Edit, EditReport, FileText, FilesResponse, FindOptions, FindResponse, GraphEvent,
-    GraphSnapshot, GrepOptions, GrepResponse, SearchOptions, SearchResponse, StatsResponse,
-    SymbolSource, SyncResult, TraceOptions, TraceResponse,
+    GraphSnapshot, GrepOptions, GrepResponse, ImpactResponse, SearchOptions, SearchResponse,
+    StatsResponse, SymbolSource, SyncResult, TraceOptions, TraceResponse,
 };
 use mimir_types::{FileId, Language, SymbolId};
 use std::path::PathBuf;
@@ -52,6 +52,13 @@ pub enum GraphCommand {
         symbol_id: SymbolId,
         options: TraceOptions,
         reply: oneshot::Sender<TraceResponse>,
+    },
+
+    /// What changed since a commit, and what depends on it.
+    Impact {
+        base: Option<String>,
+        depth: Option<u32>,
+        reply: oneshot::Sender<Result<ImpactResponse, GraphError>>,
     },
 
     /// Find a symbol by name and trace it.

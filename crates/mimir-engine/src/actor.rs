@@ -6,6 +6,7 @@
 
 mod edits;
 mod files;
+mod impact;
 mod link;
 mod queries;
 #[cfg(test)]
@@ -216,6 +217,22 @@ impl GraphActor {
                     answer(reply, response);
                 }
 
+                GraphCommand::Impact { base, depth, reply } => {
+                    let response = self.handle_impact(base, depth).await;
+                    if let Ok(impact) = &response {
+                        let touched = impact
+                            .changed
+                            .iter()
+                            .flat_map(|changed| {
+                                std::iter::once(changed.symbol.id)
+                                    .chain(changed.dependents.iter().map(|node| node.symbol.id))
+                            })
+                            .collect();
+                        self.announce_activity(touched, ActivityKind::Read);
+                    }
+                    answer(reply, response);
+                }
+
                 GraphCommand::TraceByName {
                     name,
                     options,
@@ -336,7 +353,7 @@ impl GraphActor {
     }
 
     /// Convert a Symbol to SymbolInfo.
-    fn symbol_to_info(&self, sym: &Symbol) -> SymbolInfo {
+    pub fn symbol_to_info(&self, sym: &Symbol) -> SymbolInfo {
         let file_path = self
             .file_paths
             .get(&sym.file_id)

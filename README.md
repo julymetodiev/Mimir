@@ -68,6 +68,8 @@ idle minutes or when the project is gone.
 ```bash
 mimir trace -s process_data              # who calls it, what it calls
 mimir trace -s process_data --callers    # only who calls it
+mimir impact                             # what the uncommitted changes touch, and what depends on them
+mimir impact --base main                 # the same for a whole branch
 mimir search --pattern "^process"        # symbols by regular expression
 mimir grep "TODO" --path "*.rs"          # text in any file, with the symbol it is in
 mimir read -s process_data               # the source of a symbol
@@ -81,7 +83,7 @@ mimir sync                               # up to date, wait until nothing is pro
 
 ## Connect your agent
 
-Through MCP, the same operations are tools the model can use: `trace`, `search`, `read`,
+Through MCP, the same operations are tools the model can use: `trace`, `impact`, `search`, `read`,
 `edit_symbols`, `insert_after`, `grep`, `files`, `read_file`, `edit_lines`, `replace_text`,
 `write_file`, `sync`, `status`. The server is `mimir mcp`, and it serves the git repository of the
 directory it runs in. So for most agents, add it to the project's own settings. `mimir` must be on the

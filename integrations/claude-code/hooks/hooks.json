@@ -1,0 +1,25 @@
+{
+  "description": "Mimir: refuses the first search or read of a project in a session once, with what to use instead, and reminds of it once for a search through the shell. A mimir too old for this, or none, must not stop the agent: exit code 2 would refuse every call.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Grep|Glob|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "mimir hook --state \"${CLAUDE_PLUGIN_DATA}\" 2>/dev/null || true"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__plugin_mimir_mimir__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "mimir hook --state \"${CLAUDE_PLUGIN_DATA}\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  }
+}

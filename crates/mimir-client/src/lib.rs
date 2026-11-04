@@ -3,8 +3,8 @@
 
 use mimir_protocol::{
     Edit, EditReport, FileText, FilesResponse, FindOptions, FindResponse, GraphEvent,
-    GraphSnapshot, GrepOptions, GrepResponse, IpcCommand, IpcData, IpcRequest, IpcResponse,
-    IpcResult, SearchOptions, SearchResponse, StatsResponse, SymbolSource, SyncResult,
+    GraphSnapshot, GrepOptions, GrepResponse, ImpactResponse, IpcCommand, IpcData, IpcRequest,
+    IpcResponse, IpcResult, SearchOptions, SearchResponse, StatsResponse, SymbolSource, SyncResult,
     TraceOptions, TraceResponse,
 };
 use mimir_types::SymbolId;
@@ -192,6 +192,18 @@ impl Client {
         };
         match self.call(command).await? {
             IpcData::TraceResult(trace) => Ok(trace),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// What changed since the last commit, or since `base` split off, and what depends on it.
+    pub async fn impact(
+        &mut self,
+        base: Option<String>,
+        depth: Option<u32>,
+    ) -> Result<ImpactResponse, ClientError> {
+        match self.call(IpcCommand::Impact { base, depth }).await? {
+            IpcData::ImpactResult(impact) => Ok(impact),
             _ => Err(ClientError::UnexpectedResponse),
         }
     }

@@ -82,7 +82,7 @@ pub async fn execute(request: TraceRequest<'_>) -> Result<()> {
 
 /// One line of a trace. Which implementation a trait call reaches is decided at runtime, and a
 /// function named as a value may run later or never, so these are marked as possible.
-fn show(node: &TraceNode, arrow: &str) {
+pub fn show(node: &TraceNode, arrow: &str) {
     let indent = "  ".repeat(node.depth as usize);
     let symbol = &node.symbol;
     let name = match node.relationship {

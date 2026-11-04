@@ -2,8 +2,9 @@
 //! a language per symbol are for programs, which get them through the CLI's `--json`.
 
 use mimir_protocol::{
-    FileText, FilesResponse, GrepMatch, GrepResponse, SearchResponse, SymbolInfo, SymbolSource,
-    TraceNode, TraceRelation, TraceResponse,
+    ChangedSymbol, FileText, FilesResponse, GrepMatch, GrepResponse, ImpactResponse, NamedAt,
+    RemovedSymbol, SearchResponse, SymbolInfo, SymbolSource, TraceNode, TraceRelation,
+    TraceResponse,
 };
 use serde::Serialize;
 
@@ -114,6 +115,86 @@ impl From<TraceResponse> for Trace {
             callees: trace.callees.iter().map(Step::from).collect(),
             provisional: trace.provisional,
             others_with_this_name: trace.matches.saturating_sub(1),
+        }
+    }
+}
+
+/// A symbol added or changed.
+#[derive(Serialize)]
+struct Changed {
+    #[serde(flatten)]
+    symbol: Found,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    added: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    dependents: Vec<Step>,
+}
+
+impl From<&ChangedSymbol> for Changed {
+    fn from(changed: &ChangedSymbol) -> Self {
+        Self {
+            symbol: Found::from(&changed.symbol),
+            added: changed.added,
+            dependents: changed.dependents.iter().map(Step::from).collect(),
+        }
+    }
+}
+
+/// A symbol gone, and where its name is still written and means nothing else.
+#[derive(Serialize)]
+struct Removed {
+    name: String,
+    kind: String,
+    was_at: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    still_named_at: Vec<String>,
+    /// All such places, of which `still_named_at` may be the first few.
+    #[serde(skip_serializing_if = "is_zero")]
+    still_named_total: usize,
+}
+
+fn named_place(named: &NamedAt) -> String {
+    let place = format!("{}:{}", named.path.display(), named.line);
+    match &named.symbol {
+        Some(symbol) => format!("{place} in {symbol}"),
+        None => place,
+    }
+}
+
+impl From<&RemovedSymbol> for Removed {
+    fn from(removed: &RemovedSymbol) -> Self {
+        Self {
+            name: removed.qualified_name.clone(),
+            kind: removed.kind.to_string(),
+            was_at: format!("{}:{}", removed.file_path.display(), removed.line),
+            still_named_at: removed.named_at.iter().map(named_place).collect(),
+            still_named_total: removed.named_total,
+        }
+    }
+}
+
+/// What a change touches.
+#[derive(Serialize)]
+pub struct Impact {
+    base: String,
+    changed: Vec<Changed>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    removed: Vec<Removed>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    other_files: Vec<std::path::PathBuf>,
+    /// Analysis is still running, so dependents may be missing.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    provisional: bool,
+}
+
+impl From<ImpactResponse> for Impact {
+    fn from(impact: ImpactResponse) -> Self {
+        Self {
+            base: impact.base,
+            changed: impact.changed.iter().map(Changed::from).collect(),
+            removed: impact.removed.iter().map(Removed::from).collect(),
+            other_files: impact.other_files,
+            provisional: impact.provisional,
         }
     }
 }
@@ -283,6 +364,24 @@ mod tests {
             relationship,
         };
         serde_json::to_value(Step::from(&node)).unwrap()
+    }
+
+    #[test]
+    fn a_removed_symbol_says_where_it_is_still_named_and_nothing_empty_is_shown() {
+        let answer: ImpactResponse = serde_json::from_value(serde_json::json!({
+            "base": "abc", "changed": [], "other_files": [], "provisional": false,
+            "removed": [{
+                "name": "f", "qualified_name": "m::f", "kind": "function", "file_path": "a.rs",
+                "line": 3, "named_total": 1,
+                "named_at": [{"path": "b.rs", "line": 7, "symbol": "g"}],
+            }],
+        }))
+        .unwrap();
+        let shown = serde_json::to_value(Impact::from(answer)).unwrap();
+        assert_eq!(shown["removed"][0]["name"], "m::f");
+        assert_eq!(shown["removed"][0]["was_at"], "a.rs:3");
+        assert_eq!(shown["removed"][0]["still_named_at"][0], "b.rs:7 in g");
+        assert!(shown.get("other_files").is_none() && shown.get("provisional").is_none());
     }
 
     #[test]

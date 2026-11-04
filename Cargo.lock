@@ -1114,6 +1114,7 @@ dependencies = [
  "futures-util",
  "mimir-client",
  "mimir-daemon",
+ "mimir-hook",
  "mimir-mcp",
  "mimir-parse-core",
  "mimir-parse-go",
@@ -1210,6 +1211,15 @@ dependencies = [
  "petgraph",
  "serde",
  "tempfile",
+]
+
+[[package]]
+name = "mimir-hook"
+version = "0.4.0"
+dependencies = [
+ "serde_json",
+ "tempfile",
+ "thiserror",
 ]
 
 [[package]]

@@ -120,14 +120,18 @@ impl CodeGraph {
 
         // Trace callers
         if options.include_callers {
-            result.callers = self.walk(symbol_id, max_depth, |id| {
-                self.callers_of(id, id == symbol_id)
-            });
+            result.callers = self
+                .walk(&[symbol_id], max_depth, |id| {
+                    self.callers_of(id, id == symbol_id)
+                })
+                .concat();
         }
 
         // Trace callees
         if options.include_callees {
-            result.callees = self.walk(symbol_id, max_depth, |id| self.callees_of(id));
+            result.callees = self
+                .walk(&[symbol_id], max_depth, |id| self.callees_of(id))
+                .concat();
         }
 
         // Calculate max depth reached
@@ -142,18 +146,26 @@ impl CodeGraph {
         Some(result)
     }
 
-    /// What is reached from a symbol, each at its shortest depth, so what is reached does not depend
+    /// What depends on each of these symbols, each dependent once, under the first that reaches it
+    /// at its shortest depth. The symbols themselves are not among the dependents.
+    pub fn dependents(&self, roots: &[SymbolId], max_depth: usize) -> Vec<Vec<TraceNode>> {
+        self.walk(roots, max_depth, |id| {
+            self.callers_of(id, roots.contains(&id))
+        })
+    }
+
+    /// What is reached from each symbol, at its shortest depth, so what is reached does not depend
     /// on the order of the edges, nor does the answer. A symbol comes right after the one it was
     /// reached from, with what it leads to under it.
     fn walk(
         &self,
-        root: SymbolId,
+        roots: &[SymbolId],
         max_depth: usize,
         next: impl Fn(SymbolId) -> Vec<(SymbolId, TraceRelationship)>,
-    ) -> Vec<TraceNode> {
-        let mut visited = HashSet::from([root]);
+    ) -> Vec<Vec<TraceNode>> {
+        let mut visited: HashSet<SymbolId> = roots.iter().copied().collect();
         let mut under: HashMap<SymbolId, Vec<(Arc<Symbol>, TraceRelationship)>> = HashMap::new();
-        let mut level = vec![root];
+        let mut level = roots.to_vec();
         for _ in 0..max_depth {
             let mut next_level = Vec::new();
             for parent in level {
@@ -178,9 +190,14 @@ impl CodeGraph {
             }
             level = next_level;
         }
-        let mut result = Vec::new();
-        push_under(root, 1, &under, &mut result);
-        result
+        roots
+            .iter()
+            .map(|root| {
+                let mut result = Vec::new();
+                push_under(*root, 1, &under, &mut result);
+                result
+            })
+            .collect()
     }
 
     /// Who leads to a symbol, the surest first: the first is what a symbol found twice is called.

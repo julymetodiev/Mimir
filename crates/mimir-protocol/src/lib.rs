@@ -16,8 +16,9 @@ pub use view::{
 };
 
 pub use response::{
-    FileText, FilesResponse, FindResponse, GrepMatch, GrepResponse, SearchResponse, StatsResponse,
-    SymbolInfo, SymbolSource, TraceNode, TraceRelation, TraceResponse,
+    ChangedSymbol, FileText, FilesResponse, FindResponse, GrepMatch, GrepResponse, ImpactResponse,
+    NamedAt, RemovedSymbol, SearchResponse, StatsResponse, SymbolInfo, SymbolSource, TraceNode,
+    TraceRelation, TraceResponse,
 };
 
 pub use ipc::{

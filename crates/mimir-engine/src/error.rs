@@ -53,6 +53,12 @@ pub enum GraphError {
     #[error("{path} is not text")]
     NotText { path: PathBuf },
 
+    #[error("git {command} failed: {reason}")]
+    Git { command: String, reason: String },
+
+    #[error("Reading what changed failed: {0}")]
+    Changes(#[source] tokio::task::JoinError),
+
     #[error("Text search failed: {0}")]
     Grep(#[source] tokio::task::JoinError),
 

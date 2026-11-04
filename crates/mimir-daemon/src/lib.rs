@@ -271,6 +271,9 @@ async fn answer(request: IpcRequest, handle: &GraphHandle, identity: &str) -> Ip
             .trace_by_name(name, options)
             .await
             .map(IpcData::TraceResult),
+        IpcCommand::Impact { base, depth } => {
+            handle.impact(base, depth).await.map(IpcData::ImpactResult)
+        }
         IpcCommand::Read {
             name,
             file,

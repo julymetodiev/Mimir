@@ -21,6 +21,7 @@ members = [
     "crates/mimir-engine",
     "crates/mimir-daemon",
     "crates/mimir-client",
+    "crates/mimir-hook",
     "crates/mimir-mcp",
     "crates/mimir-view-wire",
     "crates/mimir-view",
@@ -61,6 +62,7 @@ mimir-protocol = { path = "crates/mimir-protocol" }
 mimir-engine = { path = "crates/mimir-engine" }
 mimir-daemon = { path = "crates/mimir-daemon" }
 mimir-client = { path = "crates/mimir-client" }
+mimir-hook = { path = "crates/mimir-hook" }
 mimir-mcp = { path = "crates/mimir-mcp" }
 mimir-view = { path = "crates/mimir-view" }
 mimir-view-wire = { path = "crates/mimir-view-wire" }

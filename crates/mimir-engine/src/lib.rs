@@ -3,6 +3,7 @@
 //! gives a [`GraphHandle`], a cheap handle to send it commands.
 
 mod actor;
+mod changes;
 mod channel;
 mod command;
 mod edit;

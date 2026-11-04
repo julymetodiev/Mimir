@@ -47,6 +47,7 @@ allowed() {
     mimir-resolve-go) echo "mimir-types mimir-resolve mimir-resolve-scip mimir-lsp" ;;
     mimir-resolve-lsp) echo "mimir-types mimir-parse-core mimir-resolve mimir-lsp" ;;
     mimir-edit) echo "mimir-types" ;;
+    mimir-hook) echo "" ;;
     mimir-protocol) echo "mimir-types" ;;
     mimir-engine) echo "mimir-types mimir-graph mimir-parse-core mimir-resolve mimir-edit mimir-protocol" ;;
     mimir-daemon) echo "mimir-protocol mimir-engine mimir-parse-core mimir-resolve" ;;
@@ -55,7 +56,7 @@ allowed() {
     mimir-view-wire) echo "" ;;
     mimir-view) echo "mimir-types mimir-protocol mimir-client mimir-view-wire" ;;
     mimir-view-page) echo "mimir-view-wire" ;;
-    mimir-cli) echo "mimir-types mimir-protocol mimir-client mimir-daemon mimir-mcp mimir-view mimir-parse-core mimir-parse-rust mimir-parse-ts mimir-parse-python mimir-parse-go mimir-resolve mimir-resolve-ra mimir-resolve-go mimir-resolve-lsp" ;;
+    mimir-cli) echo "mimir-types mimir-protocol mimir-client mimir-hook mimir-daemon mimir-mcp mimir-view mimir-parse-core mimir-parse-rust mimir-parse-ts mimir-parse-python mimir-parse-go mimir-resolve mimir-resolve-ra mimir-resolve-go mimir-resolve-lsp" ;;
     *) echo "NOT-IN-SPEC" ;;
   esac
 }

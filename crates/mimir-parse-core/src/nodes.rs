@@ -10,7 +10,7 @@ use crate::{ExtractedSymbol, ParsedTree};
 pub const MAX_DEPTH: usize = 400;
 
 /// The name of a file's own symbol, which no name in code can be.
-const MODULE_NAME: &str = "<module>";
+pub const MODULE_NAME: &str = "<module>";
 
 pub fn range_of(node: &Node) -> Range {
     let (start, end) = (node.start_position(), node.end_position());

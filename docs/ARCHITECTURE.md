@@ -9,6 +9,7 @@ Mimir gives coding agents an understanding of code: who calls what, where a symb
 edits by symbol. It is one binary, `mimir`, with no daemon to manage and no language model inside.
 
 ```
+  Claude Code ── plugin ── mimir hook (no daemon)
   Claude Code ── plugin ── mimir mcp ─┐
                                       ├── client ── socket ── daemon ── engine
   a person ─────────────── mimir ... ─┤
@@ -73,7 +74,8 @@ Dependencies point inwards. IO lives at the edge.
 | `mimir-resolve-lsp` | adapter | a language server as a semantic source: asking about each site, saving the answers; one module for each server, as `tsrs` and `pyrefly` |
 | `mimir-lsp` | adapter | a running language server: starting it, its messages, file URIs |
 | `mimir-edit` | adapter | applying edits to files, with conflict detection |
-| `mimir-engine` | application | the actor; scanning, watching, editing, reading source, saving the graph for measurements |
+| `mimir-hook` | adapter | what to answer a coding agent's hook, and a mark on disk for each session; no graph and no daemon, as an agent waits for it before each search |
+| `mimir-engine` | application | the actor; scanning, watching, editing, reading source, what git says changed, saving the graph for measurements |
 | `mimir-protocol` | wire | every request and response over the socket |
 | `mimir-daemon` | transport | the socket server over the engine, its lock and idle timer |
 | `mimir-client` | client | connecting, starting and restarting the daemon, the socket path |
@@ -112,6 +114,18 @@ since the daemon builds the graph from the sources when it starts.
 9. **No hidden copies.** Search before adding a function.
 10. **The newest packages.** Every dependency is on its latest stable version, checked by
     `scripts/check-deps.py`. Toolchain: `stable`, with `rust-version` as in `Cargo.toml`.
+
+## 4a. What a change touches
+
+`impact` compares each file git says changed with its version in a commit, by parsing both. Each
+symbol is compared by its text without the symbols inside it, so lines moved by an edit above change
+nothing, and a method added to a type does not change the type. Symbols of one name and kind pair in
+written order. One gone from one place and added in another with the same text has moved, and is not
+reported. Dependents are the callers of `trace`, each symbol once across the answer.
+
+A removed symbol has no edges left, and its callers cannot be known from the graph. Reported for it are
+the places that still name it and resolve to nothing else, as `still named at`: a claim about a name,
+never about a call, so no call target is guessed.
 
 ## 5. Resolution
 

@@ -4,6 +4,7 @@ pub mod daemon;
 pub mod edit;
 pub mod files;
 pub mod grep;
+pub mod impact;
 pub mod init;
 pub mod read;
 pub mod search;
@@ -95,6 +96,29 @@ pub enum Commands {
         /// Show only callees (what this symbol calls).
         #[arg(long)]
         callees: bool,
+    },
+
+    /// What the uncommitted changes touch: symbols added, changed and removed, and what depends on them.
+    Impact {
+        /// Compare with where this branch or commit split off, instead of the last commit.
+        #[arg(short, long)]
+        base: Option<String>,
+
+        /// How many levels of dependents to follow.
+        #[arg(short, long)]
+        depth: Option<u32>,
+
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Answer a coding agent's hook, from what it sends on standard input. Its plugin runs this.
+    #[command(hide = true)]
+    Hook {
+        /// Where to remember each session.
+        #[arg(long)]
+        state: PathBuf,
     },
 
     /// Edit a file with conflict detection.

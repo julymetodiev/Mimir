@@ -131,7 +131,7 @@ impl GraphActor {
         }
     }
 
-    fn to_trace_nodes(&self, nodes: Vec<mimir_graph::TraceNode>) -> Vec<TraceNode> {
+    pub fn to_trace_nodes(&self, nodes: Vec<mimir_graph::TraceNode>) -> Vec<TraceNode> {
         nodes
             .into_iter()
             .map(|node| TraceNode {
@@ -306,7 +306,7 @@ impl GraphActor {
     }
 
     /// The fullest name of the innermost symbol holding a line.
-    fn symbol_at(&self, file: FileId, line: u32) -> Option<String> {
+    pub fn symbol_at(&self, file: FileId, line: u32) -> Option<String> {
         self.graph
             .symbols_in_file(file)
             .iter()

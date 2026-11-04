@@ -1,16 +1,21 @@
 //! The MCP server: each tool parses its arguments, makes one client call and returns the answer as
 //! compact JSON (see `view`). The client finds the project from the directory the server runs in, and starts the daemon.
 
+mod arguments;
 mod view;
 
+use arguments::{
+    Direction, EditLinesArguments, EditSymbolsArguments, FilesArguments, GrepArguments,
+    ImpactArguments, InsertAfterArguments, ReadArguments, ReadFileArguments, ReplaceTextArguments,
+    SearchArguments, SyncArguments, TraceArguments, WriteFileArguments,
+};
 use mimir_client::Client;
 use mimir_protocol::{Edit, EditChange, EditTarget, GrepOptions, SearchOptions, TraceOptions};
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{Implementation, ServerCapabilities, ServerConfig};
 use rmcp::transport::stdio;
 use rmcp::{ServiceExt, tool, tool_handler, tool_router};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
@@ -27,6 +32,7 @@ pub enum McpError {
 
 /// What the server tells a model about itself.
 const INSTRUCTIONS: &str = "Mimir knows the call graph of this project, from its language's compiler. Use \
+impact after changing code, to see what depends on the change. Use \
 trace before changing a function, to see who calls it and what it calls: it finds callers grep \
 misses and does not confuse same-named methods. An entry marked possible (via trait, \
 implementation, as value) may run at runtime or not. An entry marked not_a_call reads or uses the \
@@ -44,181 +50,6 @@ pub async fn serve(from: PathBuf) -> Result<(), McpError> {
         .map_err(|e| McpError::Start(Box::new(e)))?;
     running.waiting().await.map_err(McpError::Serve)?;
     Ok(())
-}
-
-/// The direction of a trace.
-#[derive(Debug, Default, Clone, Copy, Deserialize, JsonSchema)]
-#[serde(rename_all = "lowercase")]
-enum Direction {
-    /// Who calls it and what it calls.
-    #[default]
-    Both,
-    /// Only who calls it.
-    Callers,
-    /// Only what it calls.
-    Callees,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct TraceArguments {
-    /// The symbol's name.
-    symbol: String,
-    /// Only a symbol in this file, when several share the name.
-    file: Option<PathBuf>,
-    /// How many levels to follow. The default is 1.
-    depth: Option<u32>,
-    /// Which way to follow. The default is both.
-    #[serde(default)]
-    direction: Direction,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct SearchArguments {
-    /// A regular expression over symbol names and qualified names.
-    pattern: String,
-    /// Only this kind of symbol: function (methods too), method, struct, enum and so on.
-    kind: Option<String>,
-    /// The most results to return. The default is 20.
-    limit: Option<u32>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct GrepArguments {
-    /// A regular expression, or with `literal` the text itself.
-    pattern: String,
-    /// Take the pattern as text, not as a regular expression.
-    #[serde(default)]
-    literal: bool,
-    /// Letter case does not matter.
-    #[serde(default)]
-    ignore_case: bool,
-    /// Only files matching this glob, such as `*.md` or `crates/**/*.rs`.
-    path: Option<String>,
-    /// Lines to show around each match.
-    #[serde(default)]
-    context: u32,
-    /// The most matches to return. The default is 50.
-    limit: Option<u32>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct FilesArguments {
-    /// Only files matching this glob, such as `*.md` or `crates/**/*.rs`.
-    glob: Option<String>,
-    /// The most files to return. The default is 500.
-    limit: Option<u32>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct ReadFileArguments {
-    /// The file, by absolute path or relative to the project.
-    file: PathBuf,
-    /// The first line to return, from 1.
-    first: Option<u32>,
-    /// The last line to return. Without it, up to 2000 lines.
-    last: Option<u32>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct ReadArguments {
-    /// The symbol's name.
-    symbol: String,
-    /// Only a symbol in this file, when several share the name.
-    file: Option<PathBuf>,
-    /// Lines of context before it.
-    #[serde(default)]
-    before: u32,
-    /// Lines of context after it.
-    #[serde(default)]
-    after: u32,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct SymbolEdit {
-    /// The symbol's name. A qualified name such as `Kind::Variant` also works.
-    symbol: String,
-    /// The file it is in. Needed when several symbols share the name: the edit fails otherwise.
-    file: Option<PathBuf>,
-    /// Its whole new source. Doc comments and attributes above it are not part of the symbol.
-    content: String,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct EditSymbolsArguments {
-    /// The symbols to replace, applied together.
-    edits: Vec<SymbolEdit>,
-    /// Only show what would change.
-    #[serde(default)]
-    preview: bool,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct InsertAfterArguments {
-    /// The symbol the new code goes after. A qualified name such as `Kind::Variant` also works.
-    symbol: String,
-    /// The file it is in. Needed when several symbols share the name: the edit fails otherwise.
-    file: Option<PathBuf>,
-    /// The new code, indented as it should be.
-    content: String,
-    /// Only show what would change.
-    #[serde(default)]
-    preview: bool,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct EditLinesArguments {
-    /// The file, by absolute path or relative to the project.
-    file: PathBuf,
-    /// The first line to replace, from 1.
-    start: u32,
-    /// The last line to replace, inclusive.
-    end: u32,
-    /// The new text.
-    content: String,
-    /// Only show what would change.
-    #[serde(default)]
-    preview: bool,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct TextEdit {
-    /// The file, by absolute path or relative to the project.
-    file: PathBuf,
-    /// The exact text to find, with enough around it to occur once. It may span lines.
-    old: String,
-    /// What to put in its place.
-    new: String,
-    /// Replace every place it occurs, instead of refusing when there are several.
-    #[serde(default)]
-    all: bool,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct ReplaceTextArguments {
-    /// The replacements, applied together: if one does not apply, no file changes. In one file they
-    /// apply in this order, each to the result of the one before.
-    edits: Vec<TextEdit>,
-    /// Only show what would change.
-    #[serde(default)]
-    preview: bool,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct WriteFileArguments {
-    /// The file, by absolute path or relative to the project. Missing directories are made.
-    file: PathBuf,
-    /// The whole text of the file.
-    content: String,
-    /// Replace the file if it exists. Without this, an existing file is refused.
-    #[serde(default)]
-    overwrite: bool,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct SyncArguments {
-    /// Write a new semantic index instead of asking a running analyzer about edited files.
-    #[serde(default)]
-    full: bool,
 }
 
 /// The server. One client, opened at the first call so that starting up costs nothing.
@@ -271,6 +102,20 @@ impl MimirServer {
         self.with_client(async |client| {
             let trace = client.trace(&arguments.symbol, options).await?;
             Ok(view::Trace::from(trace))
+        })
+        .await
+    }
+
+    #[tool(
+        description = "What the uncommitted changes touch, or all of a branch with base: the symbols added, changed and removed, and what depends on them. Use after changing code, to see what else to check."
+    )]
+    async fn impact(
+        &self,
+        Parameters(arguments): Parameters<ImpactArguments>,
+    ) -> Result<String, String> {
+        self.with_client(async |client| {
+            let impact = client.impact(arguments.base, arguments.depth).await?;
+            Ok(view::Impact::from(impact))
         })
         .await
     }

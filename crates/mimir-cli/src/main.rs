@@ -79,6 +79,20 @@ async fn main() -> anyhow::Result<()> {
             })
             .await?
         }
+        commands::Commands::Impact { base, depth, json } => {
+            commands::impact::execute(base, depth, json).await?
+        }
+        commands::Commands::Hook { state } => {
+            use std::io::Read;
+            let mut event = String::new();
+            std::io::stdin().read_to_string(&mut event)?;
+            // A hook that fails must not get in the way of what the agent is doing.
+            match mimir_hook::answer(&event, &state) {
+                Ok(Some(answer)) => println!("{answer}"),
+                Ok(None) => {}
+                Err(e) => eprintln!("mimir hook: {e}"),
+            }
+        }
         commands::Commands::Edit {
             file,
             symbol,
