@@ -177,5 +177,6 @@ reads and never writes: rule 4 stands, and the page has no way to ask for an edi
 
 Built for JavaScript, TypeScript and Python, and the targets of section 2 are measured for Rust only. Each is
 parsed through tree-sitter and resolved by a running language server, behind the same port as Rust: `tsrs`, in
-[TYPESCRIPT.md](TYPESCRIPT.md), and `pyrefly`, in [PYTHON.md](PYTHON.md). Go comes next, and has no specification
-yet. A language server is installed apart, and is never linked.
+[TYPESCRIPT.md](TYPESCRIPT.md), and `pyrefly`, in [PYTHON.md](PYTHON.md). Go comes next and is not built: it works as
+Rust does, with an index and a server for edited files, in [GO.md](GO.md). A language server is installed apart, and
+is never linked.
