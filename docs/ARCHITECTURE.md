@@ -77,7 +77,7 @@ Dependencies point inwards. IO lives at the edge.
 | `latt-resolve-lsp` | adapter | a language server as a semantic source: asking about each site, saving the answers; one module for each server, as `tsrs` and `pyrefly` |
 | `latt-lsp` | adapter | a running language server: starting it, its messages, file URIs |
 | `latt-edit` | adapter | applying edits to files, with conflict detection |
-| `latt-hook` | adapter | what to answer a coding agent's hook, and a mark on disk for each session; no graph and no daemon, as an agent waits for it before each search |
+| `latt-hook` | adapter | what to answer a coding agent's hook, and a mark on disk for each session; no graph and no daemon, as an agent waits for it before each search, read or edit |
 | `latt-engine` | application | the actor; scanning, watching, editing, reading source, what git says changed, saving the graph for measurements |
 | `latt-protocol` | wire | every request and response over the socket |
 | `latt-daemon` | transport | the socket server over the engine, its lock and idle timer |

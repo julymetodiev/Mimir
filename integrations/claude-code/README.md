@@ -5,9 +5,11 @@ Connects Claude Code to [Lantern Lattice](../../README.md), the call graph of a 
 - **MCP server** `latt`, the `latt mcp` command, which runs in the project's directory.
 - **Skill** `latt-code`: when to use it instead of searching text.
 - **Hook**: the first `Read`, `Grep` or `Glob` of a git repository in a session is refused once, with
-  what to use instead, unless the session has used Lantern Lattice already. Repeating the call goes through. Images,
-  PDFs and files outside the repository are left alone. A search through `Bash` is reminded of it once and
-  never refused. It reads no graph and takes about 15 ms; a `latt` too old for it changes nothing.
+  what to use instead, unless the session has used Lantern Lattice already. So are the first `Edit` or
+  `Write` of its files and the first command that reads them through `Bash`. Repeating the call goes
+  through. Once the session has used Lantern Lattice, a read through `Bash` is refused every time; pipe
+  filters, builds and tests are not. Images, PDFs and files outside the repository are left alone. It
+  reads no graph and takes about 15 ms; a `latt` too old for it changes nothing.
 
 ## Install
 

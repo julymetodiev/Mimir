@@ -2,12 +2,16 @@
 //!
 //! The first search or read of a project in a session is refused once, with what to use instead,
 //! unless the session has used Lantern Lattice already. The same call then goes through, so an agent is never
-//! stuck. A command that reads the project's files through the shell is reminded of it once, and
-//! once the session has used Lantern Lattice, which shows that its tools work, it is refused every time: the
-//! Read tool stays for what they do not show. It reads no graph and starts no daemon: an agent waits
-//! for it before every such tool.
+//! stuck. The first edit of a project's file with Edit or Write is refused once too, and so is the
+//! first command that reads the project's files through the shell. Once the session has used Lantern
+//! Lattice, which shows that its tools work, such a command is refused every time: the Read tool stays
+//! for what they do not show. It reads no graph and starts no daemon: an agent waits for it before
+//! every such tool.
+
+mod shell;
 
 use serde_json::{Value, json};
+use shell::reads_project;
 use std::fs::{self, OpenOptions};
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -20,29 +24,26 @@ const SESSION_KEPT: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 /// Read tools can show these, and Lantern Lattice's cannot.
 const NOT_TEXT: [&str; 7] = ["png", "jpg", "jpeg", "gif", "webp", "pdf", "ipynb"];
 
-/// Commands that search, read or edit files, when they begin a part of a command.
-const READERS: [&str; 16] = [
-    "grep", "egrep", "fgrep", "rg", "ag", "ack", "find", "fd", "sed", "awk", "gawk", "cat", "bat",
-    "head", "tail", "less",
-];
-
-/// Words before the program a command runs.
-const WRAPPERS: [&str; 9] = [
-    "{", "(", "!", "time", "command", "env", "nohup", "sudo", "timeout",
-];
-
 const REFUSAL: &str = "This project has Lantern Lattice. Use its tools here: grep instead of Grep, files \
 instead of Glob, read_file or read instead of Read, and trace before changing a function. They \
 answer from the compiler's call graph and say which symbol each match is in. This is said once a \
 session: if you have no such tools or need this one, repeat the same call and it goes through.";
 
-const REMINDER: &str = "This project has Lantern Lattice: its grep, files and read_file tools do this \
-without the shell, and say which symbol each match is in.";
+const EDIT_REFUSAL: &str = "This project has Lantern Lattice. Change its files with its tools: \
+replace_text for a small change, edit_symbols to replace a symbol, insert_after to add code, \
+edit_lines for a range of lines, write_file to create a file. They keep the call graph up to date \
+as you edit. This is said once a session: if you have no such tools or need this one, repeat the \
+same call and it goes through.";
 
 const SHELL_REFUSAL: &str = "This reads the project's files through the shell. Use Lantern Lattice's tools: \
 grep to search, files to find files, read_file or read to read, replace_text or edit_symbols to \
 change. Pipe filters, builds and tests are not refused. For a file Lantern Lattice does not show, use the \
 Read tool.";
+
+const FIRST_SHELL_REFUSAL: &str = "This reads the project's files through the shell. This project has \
+Lantern Lattice: use its tools, grep to search, files to find files, read_file or read to read, \
+replace_text or edit_symbols to change. Pipe filters, builds and tests are not refused. This is said \
+once a session: if you have no such tools, repeat the same command and it goes through.";
 
 /// What can go wrong remembering a session.
 #[derive(Error, Debug)]
@@ -90,11 +91,17 @@ pub fn answer(event: &str, state: &Path) -> Result<Option<String>, HookError> {
         {
             Some(refusal(REFUSAL))
         }
+        "Edit" | "Write"
+            if input("file_path").is_some_and(|file| is_of_a_project(Some(file), cwd))
+                && remember(state, &format!("{session}.edit"))? =>
+        {
+            Some(refusal(EDIT_REFUSAL))
+        }
         "Bash" if input("command").is_some_and(|command| reads_project(command, cwd)) => {
             if state.join(format!("{session}.latt")).exists() {
                 Some(refusal(SHELL_REFUSAL))
             } else if remember(state, &format!("{session}.shell"))? {
-                Some(reminder())
+                Some(refusal(FIRST_SHELL_REFUSAL))
             } else {
                 None
             }
@@ -109,16 +116,6 @@ fn refusal(reason: &str) -> String {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
             "permissionDecisionReason": reason,
-        }
-    })
-    .to_string()
-}
-
-fn reminder() -> String {
-    json!({
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "additionalContext": REMINDER,
         }
     })
     .to_string()
@@ -142,156 +139,6 @@ fn project_of(directory: &Path) -> Option<&Path> {
     directory
         .ancestors()
         .find(|ancestor| ancestor.join(".git").exists())
-}
-
-/// A part of a command: its words, and whether it reads what a pipe gives it.
-struct Part {
-    words: Vec<String>,
-    after_pipe: bool,
-}
-
-/// The parts of a command, with quotes kept in one word and a `|` or `;` inside them no separator.
-/// What follows `<<` is a text and no command, so it ends here.
-fn parts_of(command: &str) -> Vec<Part> {
-    let mut parts = Vec::new();
-    let mut words: Vec<String> = Vec::new();
-    let mut word = String::new();
-    let mut quote = None;
-    let mut after_pipe = false;
-    let mut chars = command.chars().peekable();
-    while let Some(c) = chars.next() {
-        if let Some(open) = quote {
-            if c == open {
-                quote = None;
-            } else {
-                word.push(c);
-            }
-            continue;
-        }
-        let mut separator = None;
-        match c {
-            '\'' | '"' => quote = Some(c),
-            '\\' => word.extend(chars.next()),
-            ' ' | '\t' => {}
-            '<' if chars.peek() == Some(&'<') => {
-                words.push(std::mem::take(&mut word));
-                words.push("<<".to_string());
-                break;
-            }
-            // `2>&1` and `&>` are redirections.
-            '&' if word.ends_with('>') || chars.peek() == Some(&'>') => word.push(c),
-            '|' if chars.peek() == Some(&'|') => {
-                chars.next();
-                separator = Some(false);
-            }
-            '|' => separator = Some(true),
-            ';' | '\n' | '&' => {
-                if c == '&' && chars.peek() == Some(&'&') {
-                    chars.next();
-                }
-                separator = Some(false);
-            }
-            _ => word.push(c),
-        }
-        if (matches!(c, ' ' | '\t') || separator.is_some()) && !word.is_empty() {
-            words.push(std::mem::take(&mut word));
-        }
-        if let Some(pipe) = separator {
-            parts.push(Part {
-                words: std::mem::take(&mut words),
-                after_pipe,
-            });
-            after_pipe = pipe;
-        }
-    }
-    if !word.is_empty() {
-        words.push(word);
-    }
-    parts.push(Part { words, after_pipe });
-    parts
-}
-
-/// Whether a command searches, reads or edits a file of the git repository it runs in. What comes
-/// after a pipe filters the output of something else. A path outside the project, or one that only
-/// the shell can say, is not refused: what is not known to be the project's must not stop an agent.
-fn reads_project(command: &str, cwd: &Path) -> bool {
-    let Some(project) = project_of(cwd) else {
-        return false;
-    };
-    let mut directory = plain(cwd);
-    for part in parts_of(command) {
-        let mut words = part.words.as_slice();
-        while let Some((first, rest)) = words.split_first() {
-            let assignment = first
-                .split_once('=')
-                .is_some_and(|(name, _)| !name.is_empty() && !name.contains('/'));
-            let number = first.starts_with(|c: char| c.is_ascii_digit());
-            if !WRAPPERS.contains(&first.as_str()) && !assignment && !number {
-                break;
-            }
-            words = rest;
-        }
-        let Some((first, arguments)) = words.split_first() else {
-            continue;
-        };
-        if first == "cd" {
-            if let Some(target) = arguments.first() {
-                directory = plain(&directory.join(target));
-            }
-            continue;
-        }
-        let program = first.rsplit('/').next().unwrap_or(first);
-        if part.after_pipe
-            || !READERS.contains(&program)
-            || arguments.iter().any(|word| word == "<<")
-        {
-            continue;
-        }
-        let paths = paths_in(arguments);
-        let elsewhere = paths.iter().any(|path| {
-            path.starts_with(['$', '~']) || !plain(&directory.join(path)).starts_with(project)
-        });
-        let named_here = paths
-            .iter()
-            .any(|path| path.starts_with('/') && Path::new(path).starts_with(project));
-        if named_here || (directory.starts_with(project) && !elsewhere) {
-            return true;
-        }
-    }
-    false
-}
-
-/// The words of a command that may be paths: all but its options and where its output goes. A
-/// relative one says nothing, as it may be a pattern, so only those that can lead elsewhere count.
-fn paths_in(arguments: &[String]) -> Vec<&str> {
-    let mut found = Vec::new();
-    let mut words = arguments.iter();
-    while let Some(word) = words.next() {
-        if word.ends_with('>') {
-            words.next();
-        } else if !word.starts_with('-')
-            && !word.contains('>')
-            && word.starts_with(['/', '$', '~', '.'])
-        {
-            found.push(word.as_str());
-        }
-    }
-    found
-}
-
-/// A path without `.` and `..`, as far as it can be told without the disk.
-fn plain(path: &Path) -> PathBuf {
-    let mut result = PathBuf::new();
-    for part in path.components() {
-        match part {
-            std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => {
-                result.pop();
-            }
-            other => result.push(other),
-        }
-    }
-    result
 }
 
 /// Note a mark, saying whether it is new. Old marks go when a new one comes, so they do not pile up.
@@ -410,17 +257,11 @@ mod tests {
     }
 
     #[test]
-    fn a_search_through_the_shell_is_reminded_once_and_never_refused() {
+    fn a_search_through_the_shell_is_refused_once_and_then_goes_through() {
         let project = Project::new();
         let search = json!({"command": "cargo fmt && grep -n x a.rs | head"});
         let first = project.ask("Bash", search.clone()).unwrap();
-        assert_eq!(decision(&first), "");
-        assert!(
-            first["hookSpecificOutput"]["additionalContext"]
-                .as_str()
-                .unwrap()
-                .contains("Lantern Lattice")
-        );
+        assert_eq!(decision(&first), "deny");
         assert!(project.ask("Bash", search).is_none());
         assert!(
             project
@@ -430,35 +271,49 @@ mod tests {
     }
 
     #[test]
-    fn what_reads_the_project_and_what_does_not() {
+    fn the_first_edit_of_a_session_is_refused_and_then_goes_through() {
         let project = Project::new();
-        let cwd = project.dir.path();
-        let reads = |command: &str| reads_project(command, cwd);
-        // What filters an output is no search.
-        assert!(!reads("gh api x | cut -c1-90 | head -5"));
-        assert!(!reads("cargo test 2>&1 | grep FAILED"));
-        assert!(reads("cargo test || cat out.log"));
-        assert!(reads("rg x | head"));
-        assert!(reads("cd src && sed -n 1,5p a.rs"));
-        assert!(reads("FOO=1 time /usr/bin/grep x a.rs"));
-        assert!(reads("timeout 10 find . -name x"));
-        assert!(reads("{ echo start; grep x a.rs; }"));
-        assert!(reads(&format!(
-            "cd /elsewhere && cat {}/a.rs",
-            cwd.display()
-        )));
-        // A pipe in quotes separates nothing.
-        assert!(!reads("grep -E 'a|b' /elsewhere/log"));
-        assert!(reads("grep -E 'a;b' a.rs"));
-        // Elsewhere, or only the shell knows.
-        assert!(!reads("grep FAILED /elsewhere/out.txt"));
-        assert!(!reads("tail -4 $LOG/out.txt"));
-        assert!(!reads("cat ../other/a.rs"));
-        assert!(!reads("cd /elsewhere && grep x a.rs"));
-        // Not a read.
-        assert!(!reads("cat <<EOF\ngrep x a.rs\nEOF"));
-        assert!(!reads("git commit -m 'grep x a.rs; cat b'"));
-        assert!(!reads("cargo test"));
+        let first = project
+            .ask("Edit", json!({"file_path": "src/lib.rs"}))
+            .unwrap();
+        assert_eq!(decision(&first), "deny");
+        assert!(
+            project
+                .ask("Edit", json!({"file_path": "src/lib.rs"}))
+                .is_none()
+        );
+        assert!(
+            project
+                .ask("Write", json!({"file_path": "src/new.rs"}))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn an_edit_is_refused_apart_from_reads_and_after_latt_was_used() {
+        let project = Project::new();
+        project.ask("mcp__plugin_latt_latt__grep", json!({}));
+        assert!(project.ask("Read", json!({"file_path": "a.rs"})).is_none());
+        let refused = project
+            .ask("Write", json!({"file_path": "src/new.rs"}))
+            .unwrap();
+        assert_eq!(decision(&refused), "deny");
+    }
+
+    #[test]
+    fn an_edit_latt_cannot_make_or_outside_the_project_is_not_refused() {
+        let project = Project::new();
+        assert!(
+            project
+                .ask("Write", json!({"file_path": "/elsewhere/a.rs"}))
+                .is_none()
+        );
+        assert!(
+            project
+                .ask("Write", json!({"file_path": "logo.png"}))
+                .is_none()
+        );
+        assert!(project.ask("Edit", json!({})).is_none());
     }
 
     #[test]
