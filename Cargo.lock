@@ -1013,7 +1013,7 @@ dependencies = [
 
 [[package]]
 name = "lantern-lattice"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1048,7 +1048,7 @@ dependencies = [
 
 [[package]]
 name = "latt-client"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "latt-protocol",
  "latt-types",
@@ -1059,7 +1059,7 @@ dependencies = [
 
 [[package]]
 name = "latt-daemon"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "latt-engine",
  "latt-parse-core",
@@ -1075,7 +1075,7 @@ dependencies = [
 
 [[package]]
 name = "latt-edit"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "latt-types",
  "serde",
@@ -1086,7 +1086,7 @@ dependencies = [
 
 [[package]]
 name = "latt-engine"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "chrono",
  "ignore",
@@ -1111,7 +1111,7 @@ dependencies = [
 
 [[package]]
 name = "latt-graph"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "arc-swap",
  "latt-graph-fb",
@@ -1121,7 +1121,7 @@ dependencies = [
 
 [[package]]
 name = "latt-graph-fb"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "flatbuffers",
  "self_cell",
@@ -1129,7 +1129,7 @@ dependencies = [
 
 [[package]]
 name = "latt-hook"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde_json",
  "tempfile",
@@ -1138,7 +1138,7 @@ dependencies = [
 
 [[package]]
 name = "latt-lsp"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "latt-types",
  "serde_json",
@@ -1148,7 +1148,7 @@ dependencies = [
 
 [[package]]
 name = "latt-mcp"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "latt-client",
  "latt-protocol",
@@ -1162,7 +1162,7 @@ dependencies = [
 
 [[package]]
 name = "latt-parse-c"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "latt-parse-core",
  "latt-types",
@@ -1173,7 +1173,7 @@ dependencies = [
 
 [[package]]
 name = "latt-parse-core"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "dashmap",
  "latt-types",
@@ -1184,7 +1184,7 @@ dependencies = [
 
 [[package]]
 name = "latt-parse-go"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "latt-parse-core",
  "latt-types",
@@ -1194,7 +1194,7 @@ dependencies = [
 
 [[package]]
 name = "latt-parse-python"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "latt-parse-core",
  "latt-types",
@@ -1204,7 +1204,7 @@ dependencies = [
 
 [[package]]
 name = "latt-parse-rust"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "latt-parse-core",
  "latt-types",
@@ -1215,7 +1215,7 @@ dependencies = [
 
 [[package]]
 name = "latt-parse-ts"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "latt-parse-core",
  "latt-types",
@@ -1226,7 +1226,7 @@ dependencies = [
 
 [[package]]
 name = "latt-protocol"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "latt-types",
  "serde",
@@ -1237,7 +1237,7 @@ dependencies = [
 
 [[package]]
 name = "latt-resolve"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "latt-graph",
  "latt-parse-core",
@@ -1247,7 +1247,7 @@ dependencies = [
 
 [[package]]
 name = "latt-resolve-clang"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "latt-graph",
  "latt-lsp",
@@ -1263,7 +1263,7 @@ dependencies = [
 
 [[package]]
 name = "latt-resolve-go"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "latt-graph",
  "latt-lsp",
@@ -1280,7 +1280,7 @@ dependencies = [
 
 [[package]]
 name = "latt-resolve-lsp"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "latt-graph",
  "latt-lsp",
@@ -1296,7 +1296,7 @@ dependencies = [
 
 [[package]]
 name = "latt-resolve-ra"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "latt-graph",
  "latt-lsp",
@@ -1312,7 +1312,7 @@ dependencies = [
 
 [[package]]
 name = "latt-resolve-scip"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "latt-lsp",
  "latt-resolve",
@@ -1324,7 +1324,7 @@ dependencies = [
 
 [[package]]
 name = "latt-types"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "blake3",
  "hex",
@@ -1334,7 +1334,7 @@ dependencies = [
 
 [[package]]
 name = "latt-view"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "axum",
  "getrandom 0.4.3",
@@ -1350,7 +1350,7 @@ dependencies = [
 
 [[package]]
 name = "latt-view-page"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "bytemuck",
  "js-sys",
@@ -1363,7 +1363,7 @@ dependencies = [
 
 [[package]]
 name = "latt-view-wire"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "thiserror",
 ]

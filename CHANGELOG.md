@@ -6,6 +6,8 @@ All notable changes to Mimir are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-05
+
 ### Changed
 
 - **Mimir is now Lantern Lattice**, and its command `latt`: the old name is that of many other projects. The
