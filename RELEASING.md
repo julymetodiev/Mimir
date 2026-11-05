@@ -25,8 +25,6 @@ page of `latt view` anew from its sources, builds
 `latt` for macOS and Linux on arm64 and x86-64, runs each binary its runner can run, and publishes a
 GitHub release with archives, `SHA256SUMS` and the changelog's section as notes.
 
-The tag also starts `.github/workflows/pages.yml`, which publishes the view of Lantern Lattice's own code.
-
 ## After a release
 
 Once the release is published, put it in the Homebrew tap,
@@ -37,6 +35,11 @@ to write to the tap:
 ```bash
 scripts/update-tap.sh X.Y.Z --push
 ```
+
+Then, with that version installed, publish the view of Lantern Lattice's own code at
+https://lanternlattice.com/. It lives on Cloudflare, in the maintainer's repository of sites, not in this
+one: after `brew upgrade lantern-lattice`, its `lanternlattice.com/deploy.sh` exports the page from a clean clone of
+the newest tag and deploys it.
 
 ## A version that is wrong
 

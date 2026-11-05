@@ -6,6 +6,11 @@ All notable changes to Mimir are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The site at https://lanternlattice.com/ is published to Cloudflare after a release, instead of to GitHub Pages
+  by a workflow of this repository.
+
 ## [0.6.1] - 2026-11-05
 
 ### Changed
