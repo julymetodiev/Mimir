@@ -1,7 +1,7 @@
 {
   "name": "mimir",
   "displayName": "Mimir",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "The call graph of your project for Claude Code: who calls a function and what it calls, from the language's own compiler, with edits by symbol.",
   "author": {
     "name": "Julius ML",

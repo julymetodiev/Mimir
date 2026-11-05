@@ -6,6 +6,8 @@ All notable changes to Mimir are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-05
+
 ### Added
 
 - **C and C++**, resolved by an index from `clangd-indexer` over the project's `compile_commands.json`, and by
