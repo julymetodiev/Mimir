@@ -18,11 +18,15 @@ fn test_an_edit_is_seen_by_the_next_sync() {
         "pub fn other() -> u32 {\n    crate::helper()\n}\n",
     )
     .unwrap();
+    // The watcher may take the file in before this sync does, and then the sync adds none: what
+    // counts is that the graph has it, not which of the two counted it.
+    latt(dir).arg("sync").assert().success();
     latt(dir)
-        .arg("sync")
+        .args(["trace", "-s", "other"])
         .assert()
         .success()
-        .stdout(contains("1 added"));
+        .stdout(contains("src/other.rs"))
+        .stdout(contains("helper"));
     stop(dir);
 }
 
