@@ -11,14 +11,22 @@ All notable changes to Mimir are recorded here. The format follows
 ### Added
 
 - **C and C++**, resolved by an index from `clangd-indexer` over the project's `compile_commands.json`, and by
-  a running `clangd` for edited files. A sync says how many compile commands failed.
+  a running `clangd` for edited files, with syntax rules otherwise. A sync says how many compile commands
+  failed. Measured up to 5 million lines of LLVM: a new index takes 25 minutes on 10 cores and 8.4 GB, a first
+  query after a stop 1.3 s and a later edit 9 s.
 
 ### Changed
 
 - **The graph is kept in FlatBuffers files and read from disk.** After a stop, a first query on a project of
   100 000 symbols takes 0.16 s instead of 6.1 s and holds 37 MB instead of 356 MB. A later edit is about as
   fast as before or faster. Nothing has to be indexed again: a graph from before this is built anew once.
-- A bare name in `trace` and `read` prefers a symbol outside the tests.
+- A bare name in `trace` and `read` prefers a symbol outside the tests, then the one most called, then the
+  first by path.
+- **The Claude Code plugin refuses reading the project through the shell** every time once a session has used
+  Mimir, which shows that its tools work; before that it reminds once. Filters after a pipe, paths outside the
+  project, builds and tests go through, and the Read tool stays for what Mimir does not show.
+- `graph.json` is written only by `mimir sync --json`.
+- `tsrs` 0.22.0 and `pyrefly` 1.4.1.
 
 ### Fixed
 
@@ -26,6 +34,8 @@ All notable changes to Mimir are recorded here. The format follows
   the same files. A stop now ends every tool and server of the daemon, for all languages.
 - A sync longer than 30 minutes, or an index still being written after a query, no longer counts as idle.
 - A daemon whose graph actor failed stays no more: it stops, and the next command starts a new one.
+- A command cut off by a daemon's stop says so and what to do, instead of that the graph engine has stopped.
+- On Linux, opening or reading a file no longer counts as a change, nor does a full scan.
 - `mimir trace | head` and the like end quietly, with exit code 141, instead of a panic.
 - An exported view no longer calls the code in it Mimir's own.
 
