@@ -60,6 +60,7 @@ The probe also checks a site after an emoji, where UTF-16 columns differ from ch
 
 The declaration-movement mismatch is reproducible in the supplied probe.
 The probe uses minimal incremental edits, not fixed sleeps or repeated requests until a desired answer appears.
+
 A follow-up reproduced the same 12 failures on Roslyn main at `ff2e51158d0f18bf40381246097f2a5dbd83118e`.
 Frozen partial semantics retained a target from an old syntax tree. The LSP handler converted that offset with current document text.
 [Roslyn PR #86332](https://github.com/dotnet/roslyn/pull/86332) rejects stale target trees and retries full semantics.
