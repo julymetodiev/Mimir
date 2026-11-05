@@ -1,14 +1,14 @@
 <p align="center">
-  <img src="design/icon.svg" width="128" height="128" alt="Mimir">
+  <img src="design/icon.svg" width="128" height="128" alt="Lantern Lattice">
 </p>
 
-<h1 align="center">Mimir</h1>
+<h1 align="center">Lantern Lattice</h1>
 
 <p align="center"><strong>The call graph of your project for coding agents</strong></p>
 
 <p align="center">
-  <a href="https://github.com/julymetodiev/Mimir/actions/workflows/ci.yml"><img src="https://github.com/julymetodiev/Mimir/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/julymetodiev/Mimir/releases/latest"><img src="https://img.shields.io/github/v/release/julymetodiev/Mimir" alt="Latest release"></a>
+  <a href="https://github.com/julymetodiev/lantern-lattice/actions/workflows/ci.yml"><img src="https://github.com/julymetodiev/lantern-lattice/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/julymetodiev/lantern-lattice/releases/latest"><img src="https://img.shields.io/github/v/release/julymetodiev/lantern-lattice" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
 </p>
 
@@ -31,9 +31,9 @@ On macOS and Linux:
 | Java | Next | |
 
 <p align="center">
-  <a href="https://mimir.369.is/"><img src="docs/images/graph.jpg" alt="Mimir's own code as a graph: symbols grouped by crate and file, joined by calls and uses"></a>
+  <a href="https://mimir.369.is/"><img src="docs/images/graph.jpg" alt="Lantern Lattice's own code as a graph: symbols grouped by crate and file, joined by calls and uses"></a>
   <br>
-  <em>Mimir's own code: <a href="https://mimir.369.is/">Live</a></em>
+  <em>Lantern Lattice's own code: <a href="https://mimir.369.is/">Live</a></em>
 </p>
 
 <p align="center">
@@ -47,21 +47,21 @@ On macOS and Linux:
 With [Homebrew](https://brew.sh), on macOS and Linux:
 
 ```bash
-brew install julymetodiev/tap/mimir
+brew install julymetodiev/tap/latt
 ```
 
 Or download an archive for your platform from the
-[latest release](https://github.com/julymetodiev/Mimir/releases/latest) and put `mimir` on your `PATH`.
+[latest release](https://github.com/julymetodiev/lantern-lattice/releases/latest) and put `latt` on your `PATH`.
 The binaries are not signed, so on macOS one downloaded in a browser may need
-`xattr -d com.apple.quarantine mimir`.
+`xattr -d com.apple.quarantine latt`.
 
 Or build it, with Rust 1.95 or newer:
 
 ```bash
-cargo install --git https://github.com/julymetodiev/Mimir mimir-cli
+cargo install --git https://github.com/julymetodiev/lantern-lattice lantern-lattice
 ```
 
-For exact answers, Mimir needs `rust-analyzer` for Rust, [`tsrs`](https://github.com/oxc-project/tsrs) for TypeScript and JavaScript, [`pyrefly`](https://github.com/facebook/pyrefly) for Python, `go` with [`scip-go`](https://github.com/scip-code/scip-go) and `gopls` for Go, and `clangd` with `clangd-indexer` for C and C++. In a Python project, install its packages in a `.venv` at the top: without them less is answered. A C or C++ project needs a `compile_commands.json`, at the top or in `build/`, and Mimir never runs what makes one, as that runs the project's code.
+For exact answers, Lantern Lattice needs `rust-analyzer` for Rust, [`tsrs`](https://github.com/oxc-project/tsrs) for TypeScript and JavaScript, [`pyrefly`](https://github.com/facebook/pyrefly) for Python, `go` with [`scip-go`](https://github.com/scip-code/scip-go) and `gopls` for Go, and `clangd` with `clangd-indexer` for C and C++. In a Python project, install its packages in a `.venv` at the top: without them less is answered. A C or C++ project needs a `compile_commands.json`, at the top or in `build/`, and Lantern Lattice never runs what makes one, as that runs the project's code.
 
 ```bash
 rustup component add rust-analyzer rust-src
@@ -79,27 +79,27 @@ In a git repository, nothing else is needed. The first command starts a daemon, 
 idle minutes or when the project is gone.
 
 ```bash
-mimir trace -s process_data              # who calls it, what it calls
-mimir trace -s process_data --callers    # only who calls it
-mimir impact                             # what the uncommitted changes touch, and what depends on them
-mimir impact --base main                 # the same for a whole branch
-mimir search --pattern "^process"        # symbols by regular expression
-mimir grep "TODO" --path "*.rs"          # text in any file, with the symbol it is in
-mimir read -s process_data               # the source of a symbol
-mimir files "crates/**/*.rs"             # files by glob, skipping what git ignores
-mimir cat src/lib.rs --first 10 --last 40  # a file, numbered
-mimir write src/new.rs --content "fn new() {}"  # a new file; --overwrite to replace one
-mimir edit --symbol process_data --mode symbol --content "fn process_data() {}"
-mimir edit --file src/lib.rs --mode text --old "a = 1" --content "a = 2"  # exact text, found once
-mimir sync                               # up to date, wait until nothing is provisional
+latt trace -s process_data              # who calls it, what it calls
+latt trace -s process_data --callers    # only who calls it
+latt impact                             # what the uncommitted changes touch, and what depends on them
+latt impact --base main                 # the same for a whole branch
+latt search --pattern "^process"        # symbols by regular expression
+latt grep "TODO" --path "*.rs"          # text in any file, with the symbol it is in
+latt read -s process_data               # the source of a symbol
+latt files "crates/**/*.rs"             # files by glob, skipping what git ignores
+latt cat src/lib.rs --first 10 --last 40  # a file, numbered
+latt write src/new.rs --content "fn new() {}"  # a new file; --overwrite to replace one
+latt edit --symbol process_data --mode symbol --content "fn process_data() {}"
+latt edit --file src/lib.rs --mode text --old "a = 1" --content "a = 2"  # exact text, found once
+latt sync                               # up to date, wait until nothing is provisional
 ```
 
 ## Connect your agent
 
 Through MCP, the same operations are tools the model can use: `trace`, `impact`, `search`, `read`,
 `edit_symbols`, `insert_after`, `grep`, `files`, `read_file`, `edit_lines`, `replace_text`,
-`write_file`, `sync`, `status`. The server is `mimir mcp`, and it serves the git repository of the
-directory it runs in. So for most agents, add it to the project's own settings. `mimir` must be on the
+`write_file`, `sync`, `status`. The server is `latt mcp`, and it serves the git repository of the
+directory it runs in. So for most agents, add it to the project's own settings. `latt` must be on the
 `PATH` the agent sees.
 
 ### Claude Code
@@ -108,21 +108,21 @@ The plugin brings the server and a skill that tells the model when to use it ins
 Read, Edit and Write:
 
 ```
-/plugin marketplace add julymetodiev/Mimir
-/plugin install mimir@mimir
+/plugin marketplace add julymetodiev/lantern-lattice
+/plugin install latt@latt
 ```
 
 Or only the server, without the skill:
 
 ```bash
-claude mcp add --scope user mimir -- mimir mcp
+claude mcp add --scope user latt -- latt mcp
 ```
 
 ### Other agents
 
 There is no plugin for these yet: add the server to the file shown. Claude Code is the one agent
-Mimir has been used with so far, so these come from each agent's configuration format and are untested.
-If one does not work, please [open an issue](https://github.com/julymetodiev/Mimir/issues).
+Lantern Lattice has been used with so far, so these come from each agent's configuration format and are untested.
+If one does not work, please [open an issue](https://github.com/julymetodiev/lantern-lattice/issues).
 
 | Agent | File in the project |
 |---|---|
@@ -131,46 +131,46 @@ If one does not work, please [open an issue](https://github.com/julymetodiev/Mim
 | Roo Code | `.roo/mcp.json` |
 
 ```json
-{ "mcpServers": { "mimir": { "command": "mimir", "args": ["mcp"] } } }
+{ "mcpServers": { "latt": { "command": "latt", "args": ["mcp"] } } }
 ```
 
 Codex, in `.codex/config.toml`:
 
 ```toml
-[mcp_servers.mimir]
-command = "mimir"
+[mcp_servers.latt]
+command = "latt"
 args = ["mcp"]
 ```
 
 VS Code, in `.vscode/mcp.json`:
 
 ```json
-{ "servers": { "mimir": { "type": "stdio", "command": "mimir", "args": ["mcp"] } } }
+{ "servers": { "latt": { "type": "stdio", "command": "latt", "args": ["mcp"] } } }
 ```
 
 Zed, in `.zed/settings.json`:
 
 ```json
-{ "context_servers": { "mimir": { "command": "mimir", "args": ["mcp"] } } }
+{ "context_servers": { "latt": { "command": "latt", "args": ["mcp"] } } }
 ```
 
 OpenCode, in `opencode.json`:
 
 ```json
-{ "mcp": { "mimir": { "type": "local", "command": ["mimir", "mcp"], "enabled": true } } }
+{ "mcp": { "latt": { "type": "local", "command": ["latt", "mcp"], "enabled": true } } }
 ```
 
-Any other MCP client: run `mimir mcp` over stdio in the project's directory. To teach an agent when to
-use the tools, put [the skill's text](integrations/claude-code/skills/mimir-code/SKILL.md) in its
+Any other MCP client: run `latt mcp` over stdio in the project's directory. To teach an agent when to
+use the tools, put [the skill's text](integrations/claude-code/skills/latt-code/SKILL.md) in its
 instructions, such as `AGENTS.md`.
 
 ## See it
 
-[Look at Mimir's own code this way](https://mimir.369.is/), in a browser with WebGPU. On
+[Look at Lantern Lattice's own code this way](https://mimir.369.is/), in a browser with WebGPU. On
 your project:
 
 ```bash
-mimir view
+latt view
 ```
 
 A browser opens on the whole graph, which changes as the code and the agents do. Symbols are placed by
@@ -179,12 +179,12 @@ What a query or an edit touches lights up as it happens, blue for a read and red
 watch an agent work. It only reads, loads nothing from the network, and listens on `127.0.0.1` with a
 private token in the address. It needs a browser with WebGPU; it has been tried in Chrome.
 
-`mimir view --export DIR` writes the same page as files for any static host, with the graph as it is and
+`latt view --export DIR` writes the same page as files for any static host, with the graph as it is and
 the source of every symbol, so use it only on code that may be public.
 
 ## What an answer means
 
-- A call in `trace` is exact. A call Mimir cannot be sure of is left out, never guessed.
+- A call in `trace` is exact. A call Lantern Lattice cannot be sure of is left out, never guessed.
 - `[via trait, possible]` and `[implementation, possible]`: which implementation runs is decided at
   runtime.
 - `[as value, possible]`: a function named without being called, as in `.map(helper)`, or a constant
@@ -194,7 +194,7 @@ the source of every symbol, so use it only on code that may be public.
   only for what you traced, not further along a chain.
 - `Partial:` analysis is still running, so calls may be missing. Ask again shortly.
 
-Without `rust-analyzer`, `tsrs`, `pyrefly` or `scip-go`, or with `MIMIR_NO_SCIP=1`, only syntax rules apply, and `mimir
+Without `rust-analyzer`, `tsrs`, `pyrefly` or `scip-go`, or with `LATT_NO_SCIP=1`, only syntax rules apply, and `latt
 sync` says how many files that covers. In Rust they find about half the calls. In the others they link only
 functions of the same file or of an import in the project, and no methods.
 
@@ -217,7 +217,7 @@ minutes too:
 | | hono | nest | three.js | flask | requests | django |
 |---|---|---|---|---|---|---|
 | Symbols | 12 497 | 27 854 | 27 387 | 2 046 | 1 114 | 67 865 |
-| A first `mimir sync` | 11 s | 48 s | 45 s | 2.1 s | 1.5 s | 65 s |
+| A first `latt sync` | 11 s | 48 s | 45 s | 2.1 s | 1.5 s | 65 s |
 | A new daemon with nothing changed | 1.0 s | 2.9 s | 4.2 s | 0.1 s | 0.1 s | 12 s |
 | Daemon after asking | 121 MB | 187 MB | 373 MB | 31 MB | 27 MB | 539 MB |
 | The server while in use | 963 MB | 1.6 GB | 603 MB | 233 MB | 178 MB | 614 MB |
@@ -230,30 +230,30 @@ On Go projects, which work as Rust does, with an index and `gopls` for the files
 | | hugo | kubernetes |
 |---|---|---|
 | Symbols | 19 065 | 221 808 |
-| A first `mimir sync`, compiling what the project needs | 331 s | 513 s, and 14 GB in Go's build cache |
+| A first `latt sync`, compiling what the project needs | 331 s | 513 s, and 14 GB in Go's build cache |
 | A new daemon with nothing changed | 1.3 to 1.9 s | 32 s |
 | A first answer after an edit | under 0.9 s | not measured |
 | Daemon after asking | 96 MB | 1.7 GB, and a peak of 4.7 GB while it reads the indexes |
 
 ## Accuracy
 
-On Mimir's own code, 1326 of 1326 calls between its functions match what `rust-analyzer` reports. The
+On Lantern Lattice's own code, 1326 of 1326 calls between its functions match what `rust-analyzer` reports. The
 measurement says 1325, and the one difference is the measurement's: SCIP gives two functions in
 different test binaries one symbol. Every entry of a hand-written list of traps in
-[crates/mimir-resolve-ra/tests/fixture/expected.rs](crates/mimir-resolve-ra/tests/fixture/expected.rs) holds too: same
+[crates/latt-resolve-ra/tests/fixture/expected.rs](crates/latt-resolve-ra/tests/fixture/expected.rs) holds too: same
 names across types and crates, calls inside macros, trait methods. Scripts behind these numbers are in
 [scripts/bench](scripts/bench/README.md).
 
 Who uses what, against `rust-analyzer`'s find-references on the project above:
 
-| | Compared | Both agree | Only Mimir | Only the server |
+| | Compared | Both agree | Only Lantern Lattice | Only the server |
 |---|---|---|---|---|
 | Constants and statics | all 944 | 1814 | 46 | 13 |
 | Types and traits | a sample of 40 | 420 | 0 | 0 |
 | Variants | a sample of 40 | 295 | 0 | 0 |
 | Fields | a sample of 40 | 157 | 0 | 0 |
 
-"Only Mimir" is mostly code a server on this machine does not compile, as behind `#[cfg(...)]` or a
+"Only Lantern Lattice" is mostly code a server on this machine does not compile, as behind `#[cfg(...)]` or a
 feature. A graph kept up to date through edits had 0 differences from a new index, on edits of comment
 lines in 3 files. These are measurements of one project, not a guarantee for yours.
 
@@ -261,13 +261,13 @@ In TypeScript and JavaScript, against `scip-typescript`, the targets inside a pr
 
 In Python, against `scip-python`, the targets of places that name a function agree at 739 of 778 on flask and 414 of 434 on requests; on django that comparison did not finish. Most other differences read are local variables assigned twice, which give no edge. `pyrefly` gave the same targets at all 299 205 calls and attributes on django with files asked in reverse order, and after edits of 3 files on django the graph had 0 differences from a clean start. Agreement is not proof.
 
-Known limits in Python: **`pyrefly` runs a project's `.venv/bin/python`** (see [SECURITY.md](SECURITY.md)). What has no type has no target, about a fifth of the calls in django's own code, and Mimir leaves those out and does not guess. A call through a variable, as `alias()` after `alias = plain`, or `cls()`, gives no edge. A call the source does not spell gives none either, as `a + b` running `__add__`. A class that fits a `Protocol` without naming it is not shown as implementing it. A package installed without a change to a lock file leaves saved answers stale. Environments other than a `.venv` at the top of a project are not measured.
+Known limits in Python: **`pyrefly` runs a project's `.venv/bin/python`** (see [SECURITY.md](SECURITY.md)). What has no type has no target, about a fifth of the calls in django's own code, and Lantern Lattice leaves those out and does not guess. A call through a variable, as `alias()` after `alias = plain`, or `cls()`, gives no edge. A call the source does not spell gives none either, as `a + b` running `__add__`. A class that fits a `Protocol` without naming it is not shown as implementing it. A package installed without a change to a lock file leaves saved answers stale. Environments other than a `.venv` at the top of a project are not measured.
 
-Known limits in TypeScript and JavaScript: what has no type has no target, so plain JavaScript gets about two thirds of its calls (62% on express, 66% on three.js, against 91% and 94% on TypeScript projects). Mimir leaves the rest out and does not guess. `list[0].area()` on a union of types shows one member. pnpm and yarn workspaces are not measured, and `.vue` and `.svelte` files are left out. `tsrs` is a young beta.
+Known limits in TypeScript and JavaScript: what has no type has no target, so plain JavaScript gets about two thirds of its calls (62% on express, 66% on three.js, against 91% and 94% on TypeScript projects). Lantern Lattice leaves the rest out and does not guess. `list[0].area()` on a union of types shows one member. pnpm and yarn workspaces are not measured, and `.vue` and `.svelte` files are left out. `tsrs` is a young beta.
 
 In Go, against `gopls`, all 103 967 places on hugo that name something agree or fall in a known class: 50 369 at the same place, 36 908 outside the project in the same package, and the rest definitions, built-in names and files outside the build.
 
-Known limits in Go: a first index compiles the project, as a build does, and a `go.mod` may make Go fetch the toolchain it names (see [SECURITY.md](SECURITY.md)). A file behind a build tag or for another system has syntax rules only, and `mimir sync` says how many there are. A file over 500 KB is left out, in any language. `C.f()` is not linked. A call the source does not spell, as through `reflect`, has no edge, and neither has `f()` on a variable holding a function.
+Known limits in Go: a first index compiles the project, as a build does, and a `go.mod` may make Go fetch the toolchain it names (see [SECURITY.md](SECURITY.md)). A file behind a build tag or for another system has syntax rules only, and `latt sync` says how many there are. A file over 500 KB is left out, in any language. `C.f()` is not linked. A call the source does not spell, as through `reflect`, has no edge, and neither has `f()` on a variable holding a function.
 
 Known limits in Rust: a proc macro that fails silently while the index is written loses its calls;
 one that says so is handled. A read and a write of a field are not told apart. A constant inside a format string has a read only in macros known to take one, and only if it is an item of the same module or imported by a project path: an attribute such as `#[error("{NAME}")]`, a glob import or a renamed import leaves it out. A function named in an attribute, as in `#[serde(skip_serializing_if = "name")]`, has no call. Replacing a file by renaming breaks a hard link to it.

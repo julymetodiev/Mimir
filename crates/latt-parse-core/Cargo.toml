@@ -1,0 +1,20 @@
+[package]
+name = "latt-parse-core"
+description = "Core parsing traits and types for Lantern Lattice"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+latt-types.workspace = true
+
+tree-sitter.workspace = true
+dashmap.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

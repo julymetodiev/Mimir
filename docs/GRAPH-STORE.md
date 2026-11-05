@@ -9,11 +9,11 @@ minutes, so this recurred. `SymbolId` came from a counter, so an id meant nothin
 
 ## 2. The files
 
-Three files in `.mimir/graph`, FlatBuffers, each read whole into one buffer and checked once:
+Three files in `.latt/graph`, FlatBuffers, each read whole into one buffer and checked once:
 
-- `graph.fb`: symbols, names and files. The schema is `crates/mimir-graph-fb/graph.fbs`.
-- `edges.fb`: the edges, with a stamp, a hash of the ids of the symbols they are between. The schema is `crates/mimir-graph-fb/edges.fbs`.
-- `references.fb`: the references of each file with a hash of its text. The schema is `crates/mimir-graph-fb/references.fbs`.
+- `graph.fb`: symbols, names and files. The schema is `crates/latt-graph-fb/graph.fbs`.
+- `edges.fb`: the edges, with a stamp, a hash of the ids of the symbols they are between. The schema is `crates/latt-graph-fb/edges.fbs`.
+- `references.fb`: the references of each file with a hash of its text. The schema is `crates/latt-graph-fb/references.fbs`.
 
 `symbols` is sorted by id, so an id is found by binary search. `from` and `to` in an edge are positions in `symbols`; `edges` is sorted
 by `from`, so a symbol's edges are one slice, and `incoming` does the same the other way. A name and a qualified name are found by binary
@@ -23,7 +23,7 @@ Edges are apart from the symbols so that a link writes no symbol: encoding every
 whose stamp is not that of the symbols are refused, so a crash between two writes leaves the symbols and asks for a link. References are apart
 so that a change to the graph does not write them, as they are needed only by a link.
 
-Each file is written to a new file and renamed. A file of another format version, of another version of Mimir, or broken, is treated as no
+Each file is written to a new file and renamed. A file of another format version, of another version of Lantern Lattice, or broken, is treated as no
 file: it is built and written again.
 
 ## 3. Ids
@@ -35,11 +35,11 @@ free id, which then depends on which came first, until the file holds it.
 ## 4. Reading
 
 `CodeGraph` holds the buffers, the same bytes as the files. The offsets are checked by the safe `root_as_graph_with_opts`, and positions by
-`check` in `mimir-graph/src/file.rs`, because a position out of range would otherwise stop a query. No symbol is copied for that.
+`check` in `latt-graph/src/file.rs`, because a position out of range would otherwise stop a query. No symbol is copied for that.
 
 A query builds a `Symbol` only for what it returns: its answer copies these strings anyway. Nothing is built at start.
 
-The generated code has the `unsafe` it takes to read bytes as numbers, and is in `mimir-graph-fb`, so no other crate needs any. `self_cell`
+The generated code has the `unsafe` it takes to read bytes as numbers, and is in `latt-graph-fb`, so no other crate needs any. `self_cell`
 keeps the checked bytes and the view on them together. The generated code is in the repository, so that building needs no `flatc`;
 `scripts/generate-graph-fb.sh --check` compares it with the schema.
 
@@ -60,7 +60,7 @@ promised. The buffer stays in memory, which the system could not drop as it can 
   References are encoded there too, the larger part of the cost: 24 ms on yaml-cpp and 50 ms on curl, against 1 to 6 ms to write `graph.fb`.
   What a crash loses, the next start sees by the hash of each file. Stopping waits for what is left to write.
 - A tool installed after the last link does not improve edges until `sync --full`, as a start with no change does not link.
-- `graph.json` is written only by `mimir sync --json`, for `scripts/bench`.
+- `graph.json` is written only by `latt sync --json`, for `scripts/bench`.
 
 ## 6. Measured
 
@@ -136,5 +136,5 @@ a few edges: 5 of 22 345 on leveldb. The comparisons above keep one index, and s
 - **`kept_definitions` once.** Reads and decodes the whole index for each answer of `clangd`. Not yet measured how much of the 9 s of a later
   edit above is this.
 - **`Dex`: shared paths and ids.** One `String` per reference.
-- **Progress of an index outside the daemon's log.** `mimir sync` says nothing while one is written.
+- **Progress of an index outside the daemon's log.** `latt sync` says nothing while one is written.
 - **All of LLVM, with `clang` and the rest.** Only on the owner's word.

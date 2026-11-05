@@ -1,5 +1,5 @@
 <svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <title>Mimir: a call graph growing as a tree out of a well</title>
+  <title>Lantern Lattice: a call graph growing as a tree out of a well</title>
   <rect width="512" height="512" rx="96" fill="#0F172A"/>
   <!-- The well -->
   <path d="M136 372 V404 C136 434 190 452 256 452 C322 452 376 434 376 404 V372" stroke="#475569" stroke-width="14" stroke-linecap="round"/>

@@ -13,24 +13,24 @@ Left out: `.vue`, `.svelte`, `.astro`, code inside HTML, and any other file that
 ## 2. The parts
 
 ```
-  mimir-parse-ts ── symbols and references, through tree-sitter
-  mimir-resolve  ── the same rules and the same port
-  mimir-resolve-lsp ── the port, over a running language server such as `tsrs --lsp -stdio`
-  mimir-lsp      ── starting a language server, its messages, file URIs
+  latt-parse-ts ── symbols and references, through tree-sitter
+  latt-resolve  ── the same rules and the same port
+  latt-resolve-lsp ── the port, over a running language server such as `tsrs --lsp -stdio`
+  latt-lsp      ── starting a language server, its messages, file URIs
 ```
 
 | Crate | Layer | Owns |
 |---|---|---|
-| `mimir-parse-ts` | domain | TypeScript and JavaScript through `tree-sitter-typescript` and `tree-sitter-javascript` |
-| `mimir-resolve-lsp` | adapter | the running server, the saved answers, which sites to ask about; what is `tsrs`'s own is the module `tsrs.rs`; Python uses it too |
-| `mimir-lsp` | adapter | what `mimir-resolve-ra/src/live/lsp.rs` holds that no one language needs; both adapters use it (rule 9) |
+| `latt-parse-ts` | domain | TypeScript and JavaScript through `tree-sitter-typescript` and `tree-sitter-javascript` |
+| `latt-resolve-lsp` | adapter | the running server, the saved answers, which sites to ask about; what is `tsrs`'s own is the module `tsrs.rs`; Python uses it too |
+| `latt-lsp` | adapter | what `latt-resolve-ra/src/live/lsp.rs` holds that no one language needs; both adapters use it (rule 9) |
 
-- **More than one source.** `SemanticSources`, in `mimir-resolve`, holds a list and is itself a
+- **More than one source.** `SemanticSources`, in `latt-resolve`, holds a list and is itself a
   `SemanticSource`: each one picks the files of its language, and they work at the same time.
   `commands/daemon.rs` stays the only place that names the sources.
 - **More than one parser.** The engine gets its list of adapters from `commands/daemon.rs`, so it names
   no language.
-- **The source is `tsrs`.** `scip-typescript` is used only to measure (section 7): Mimir does not run
+- **The source is `tsrs`.** `scip-typescript` is used only to measure (section 7): Lantern Lattice does not run
   it and does not need Node.
 
 ## 3. Symbols and references
@@ -101,7 +101,7 @@ itself, so a name in TypeScript never lands on a name in Rust.
 
 - It is found on `PATH`, never in the project's `node_modules`, because a repository must not choose
   what the daemon runs.
-- One exact version is the tested one, a constant in `mimir-resolve-lsp/src/tsrs.rs`, and `scripts/check-deps.py`
+- One exact version is the tested one, a constant in `latt-resolve-lsp/src/tsrs.rs`, and `scripts/check-deps.py`
   compares it with the newest on npm (rule 10). Another version still runs, and the daemon's log says so.
 - Without it only syntax rules apply, and `sync` reports how many files that covers. A `package.json` without
   `node_modules` gets a note from `sync`, since less is answered.
@@ -114,13 +114,13 @@ Added to section 2 of the architecture when they hold, each checked by `scripts/
 
 | # | Target |
 |---|---|
-| TS1 | Every entry of the hand-written list in `crates/mimir-resolve-lsp/tests/tsrs/main.rs` holds, covering each row of the table in section 3 |
+| TS1 | Every entry of the hand-written list in `crates/latt-resolve-lsp/tests/tsrs/main.rs` holds, covering each row of the table in section 3 |
 | TS2 | Against `scip-typescript`: every disagreement falls in a named class of section 7; unclassified 0 |
 | TS3 | After edits, the graph equals the graph from a clean start with no saved answers: 0 differences |
 | TS4 | T1, T2, T3 and T4 hold on a TypeScript project of 20 000 symbols |
 | TS5 | All sites of a project of 20 000 symbols are answered in under 60 s, on a current laptop |
 
-Where they stand, measured through `mimir` on an M1 Pro:
+Where they stand, measured through `latt` on an M1 Pro:
 
 | | State |
 |---|---|
@@ -141,8 +141,8 @@ Those are with `tsrs` 0.21.0, and every edge of the three graphs is the same as 
 
 ## 6. Machine checks
 
-- `scripts/check-architecture.sh`: the new crates in `allowed`; `mimir-engine` depends on no parser of
-  a language; `mimir-parse-ts` is in the pure domain list.
+- `scripts/check-architecture.sh`: the new crates in `allowed`; `latt-engine` depends on no parser of
+  a language; `latt-parse-ts` is in the pure domain list.
 - `scripts/check-deps.py`: the `tsrs` version, as in section 4.
 - `cargo test`: the fixture of TS1, skipped with a message when `tsrs` is not installed, as the
   `rust-analyzer` tests are.
@@ -225,7 +225,7 @@ stops at `.d.ts`. Outside targets give no edge, so this changes nothing.
 ## 8. Open
 
 1. **Union types behind a call.** `tsrs` gives one member for `x.area()` on `Circle | Square`, and
-   TypeScript 7.0.2 does the same. Mimir asks `typeDefinition` on the receiver and, with several types,
+   TypeScript 7.0.2 does the same. Lantern Lattice asks `typeDefinition` on the receiver and, with several types,
    `implementation`, so each member is a possible target. At `make().area()` the type is asked for at
    `make`. `list[0].area()` and `(a ?? b).area()` have no name to ask about, so there one member stays,
    as a certain call: a known limit.
@@ -251,9 +251,9 @@ stops at `.d.ts`. Outside targets give no edge, so this changes nothing.
 
 1. Move the comparison script to `scripts/bench`, and measure plain JavaScript, a monorepo and a project
    with many libraries. Done.
-2. `mimir-lsp`, taken out of `mimir-resolve-ra`, with no change in behaviour: T5 and T6 still hold. Done.
+2. `latt-lsp`, taken out of `latt-resolve-ra`, with no change in behaviour: T5 and T6 still hold. Done.
 3. `SemanticSources` and the adapter list, still only Rust. Done.
-4. `mimir-parse-ts`, with syntax rules only. Done.
+4. `latt-parse-ts`, with syntax rules only. Done.
 5. The source over `tsrs`, with the fixture of TS1. Done.
 6. Saved answers and edits, with TS3. Done.
 7. README and the MCP instructions. Done. The targets move to the architecture once TS4 is measured.

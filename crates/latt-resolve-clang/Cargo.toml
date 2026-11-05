@@ -1,0 +1,24 @@
+[package]
+name = "latt-resolve-clang"
+description = "C and C++ as Lantern Lattice's semantic source: a compilation database, clangd-indexer and clangd"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+latt-types.workspace = true
+latt-resolve.workspace = true
+latt-resolve-scip.workspace = true
+latt-lsp.workspace = true
+latt-parse-core.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+latt-graph.workspace = true
+latt-parse-c.workspace = true
+tempfile.workspace = true

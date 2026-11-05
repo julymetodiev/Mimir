@@ -76,12 +76,12 @@ scripts/check.sh
 
 git add Cargo.toml Cargo.lock CHANGELOG.md integrations/claude-code/.claude-plugin/plugin.json
 git commit --quiet -m "Release $tag"
-git tag -a "$tag" -m "Mimir $version"
+git tag -a "$tag" -m "Lantern Lattice $version"
 echo "Made $tag"
 
 if [ $push = 1 ]; then
   git push --atomic origin main "$tag"
-  echo "Pushed: the build is at https://github.com/julymetodiev/Mimir/actions"
+  echo "Pushed: the build is at https://github.com/julymetodiev/lantern-lattice/actions"
 else
   echo "To publish: git push --atomic origin main $tag"
 fi

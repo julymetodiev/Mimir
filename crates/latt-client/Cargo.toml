@@ -1,0 +1,17 @@
+[package]
+name = "latt-client"
+description = "The client of the Lantern Lattice daemon: connect, start it when needed, one call per operation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+latt-types.workspace = true
+latt-protocol.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true

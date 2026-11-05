@@ -1,0 +1,20 @@
+[package]
+name = "latt-protocol"
+description = "Command and event protocol for Lantern Lattice actor system"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+latt-types.workspace = true
+
+serde.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt", "macros"] }
+serde_json.workspace = true

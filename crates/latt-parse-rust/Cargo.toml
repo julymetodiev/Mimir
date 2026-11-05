@@ -1,0 +1,20 @@
+[package]
+name = "latt-parse-rust"
+description = "Rust language adapter for Lantern Lattice"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+latt-types.workspace = true
+latt-parse-core.workspace = true
+
+tree-sitter.workspace = true
+tree-sitter-rust.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

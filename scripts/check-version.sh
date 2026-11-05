@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 workspace=$(awk '/^\[workspace.package\]/{on=1;next} /^\[/{on=0} on&&/^version/{gsub(/"/,"",$3);print $3}' Cargo.toml)
-locked=$(awk '/^name = "mimir-cli"$/{getline; gsub(/"/,"",$3); print $3}' Cargo.lock)
+locked=$(awk '/^name = "lantern-lattice"$/{getline; gsub(/"/,"",$3); print $3}' Cargo.lock)
 plugin=$(sed -n 's/^ *"version": "\(.*\)",$/\1/p' integrations/claude-code/.claude-plugin/plugin.json)
 
 [ -n "$workspace" ] || { echo "no version in Cargo.toml" >&2; exit 1; }

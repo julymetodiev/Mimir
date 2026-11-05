@@ -14,19 +14,19 @@ Left out: notebooks, code inside strings, and any other file that is not one of 
 ## 2. The parts
 
 ```
-  mimir-parse-python ── symbols and references, through tree-sitter
-  mimir-resolve      ── the same rules and the same port
-  mimir-resolve-lsp  ── asking a language server about each site, and saving the answers;
+  latt-parse-python ── symbols and references, through tree-sitter
+  latt-resolve      ── the same rules and the same port
+  latt-resolve-lsp  ── asking a language server about each site, and saving the answers;
                         `tsrs.rs` and `pyrefly.rs` say what is each server's own
-  mimir-lsp          ── starting a language server, its messages, file URIs
+  latt-lsp          ── starting a language server, its messages, file URIs
 ```
 
 | Crate | Layer | Owns |
 |---|---|---|
-| `mimir-parse-python` | domain | Python through `tree-sitter-python` |
-| `mimir-resolve-lsp` | adapter | the state, the saved answers, which files to ask about after a change, stopping when idle; the module `pyrefly.rs` has the program, its version, its project files, its language id |
+| `latt-parse-python` | domain | Python through `tree-sitter-python` |
+| `latt-resolve-lsp` | adapter | the state, the saved answers, which files to ask about after a change, stopping when idle; the module `pyrefly.rs` has the program, its version, its project files, its language id |
 
-- **Nothing is copied.** A server is a module of a few lines in `mimir-resolve-lsp`, and its tests are a
+- **Nothing is copied.** A server is a module of a few lines in `latt-resolve-lsp`, and its tests are a
   folder of its own there. Go is expected to use it too.
 - **Saved answers** are per source: `ty-answers.txt` beside `tsrs-answers.txt`, in the same format.
 - **`commands/daemon.rs`** stays the only place that names the sources and the parsers.
@@ -99,7 +99,7 @@ Finding importers needs Python's own rules for a path: `from . import a`, `from 
 a package's `__init__.py`, and a `src/` layout.
 
 Told that a file changed on disk, `pyrefly` takes that in by itself and keeps answering from before until it
-is done: 6 of 60 runs gave an importer the old target. So Mimir declares `window.workDoneProgress` and waits
+is done: 6 of 60 runs gave an importer the old target. So Lantern Lattice declares `window.workDoneProgress` and waits
 for the `end` of `$/progress`: 0 of 200. It reports that for every change told, of any file, and only then.
 That holds for a change nothing imports, which keeps the server. One with importers gets a new one: section 5.
 `tsrs` needs no wait, 0 of 100 without one, and reports nothing.
@@ -114,14 +114,14 @@ one public symbol of that name. No methods, no `import *`.
 - **It runs the project's Python.** A `.venv/bin/python` put in a project to leave a mark was run. It asks that
   program where the packages are, so a repository can choose what runs, as its build scripts can with
   `rust-analyzer`. `pyrefly check` has `--skip-interpreter-query`, and `pyrefly lsp` does not. See `SECURITY.md`.
-- One exact version is the tested one, a constant in `mimir-resolve-lsp/src/pyrefly.rs`, and
+- One exact version is the tested one, a constant in `latt-resolve-lsp/src/pyrefly.rs`, and
   `scripts/check-deps.py` compares it with the newest on PyPI (rule 10). Another version still runs, and the
   daemon's log says so.
 - Without it only syntax rules apply, and `sync` reports how many files that covers.
 - It stops after 10 idle minutes, like the others. It is never linked.
 - Install: `pipx install pyrefly`, or `pip install pyrefly`. Neither needs Node.
 
-**The project's packages.** `pyrefly` finds `.venv` at the top of a project by itself. Mimir installs nothing.
+**The project's packages.** `pyrefly` finds `.venv` at the top of a project by itself. Lantern Lattice installs nothing.
 Without the packages less is answered, and `sync` says so.
 
 ## 5. Targets
@@ -130,13 +130,13 @@ Added to section 2 of the architecture when they hold, each checked by `scripts/
 
 | # | Target |
 |---|---|
-| PY1 | Every entry of the hand-written list in `crates/mimir-resolve-lsp/tests/pyrefly/main.rs` holds, covering each row of the table in section 3 |
+| PY1 | Every entry of the hand-written list in `crates/latt-resolve-lsp/tests/pyrefly/main.rs` holds, covering each row of the table in section 3 |
 | PY2 | Against a SCIP index by `scip-python`: every disagreement falls in a named class of section 7; unclassified 0 |
 | PY3 | After edits, the graph equals the graph from a clean start with no saved answers: 0 differences |
 | PY4 | T1, T2, T3 and T4 hold on a Python project of 20 000 symbols |
 | PY5 | All sites of a project of 20 000 symbols are answered in under 60 s, on a current laptop |
 
-Where they stand, measured through `mimir` on an M1 Pro:
+Where they stand, measured through `latt` on an M1 Pro:
 
 | | State |
 |---|---|
@@ -189,8 +189,8 @@ The first `trace` after an edit on django, depth 1, as against one `pyrefly` for
 
 ## 6. Machine checks
 
-- `scripts/check-architecture.sh`: the new crates in `allowed`; `mimir-engine` depends on no parser of a
-  language; `mimir-parse-python` is in the pure domain list.
+- `scripts/check-architecture.sh`: the new crates in `allowed`; `latt-engine` depends on no parser of a
+  language; `latt-parse-python` is in the pure domain list.
 - `scripts/check-deps.py`: the `pyrefly` version, from PyPI.
 - `cargo test`: the fixture of PY1, skipped with a message when `pyrefly` is not installed. CI installs it.
 - `scripts/bench`: PY2 to PY5, with `scip_compare.py`, which takes the server as an argument.
@@ -244,7 +244,7 @@ its getter and an overload against its signature.
 The index is no truth. On django `ty` disagreed with it at 5 476 places where it named another class, as
 `models.CharField` at `class DateTimeField`, in every sample read.
 
-**`pyrefly` against `ty`, by the edges of Mimir's graphs:**
+**`pyrefly` against `ty`, by the edges of Lantern Lattice's graphs:**
 
 | Calls | Both | Only `ty` | Only `pyrefly` |
 |---|---|---|---|
@@ -314,9 +314,9 @@ project's `.venv` without `VIRTUAL_ENV`: flask gave 71.8% either way.
 
 ## 9. Order
 
-1. `mimir-resolve-lsp`, from what was `mimir-resolve-tsrs`, with no change in behaviour. Done.
+1. `latt-resolve-lsp`, from what was `latt-resolve-tsrs`, with no change in behaviour. Done.
 2. `scip_compare.py`, and `scip-python` on flask and requests. Done. Django is open, PY2.
-3. `mimir-parse-python`, with syntax rules only. Done.
+3. `latt-parse-python`, with syntax rules only. Done.
 4. `pyrefly.rs`, with the fixture of PY1, after `ty.rs` failed the check of order. Done.
 5. Saved answers and edits, with PY3, and what `sync` says of missing packages. Done.
 6. PY5, and the README and the Homebrew text. Done. PY4 is open.

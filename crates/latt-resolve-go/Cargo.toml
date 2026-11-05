@@ -1,0 +1,25 @@
+[package]
+name = "latt-resolve-go"
+description = "Go as Lantern Lattice's semantic source: go.mod roots, scip-go and gopls"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+latt-types.workspace = true
+latt-resolve.workspace = true
+latt-resolve-scip.workspace = true
+latt-lsp.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+latt-graph.workspace = true
+latt-parse-core.workspace = true
+latt-parse-go.workspace = true
+tempfile.workspace = true

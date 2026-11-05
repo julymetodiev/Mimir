@@ -1,5 +1,5 @@
 // Package fixture holds the traps of docs/GO.md: every row of its section 3. What each line must
-// give is listed by hand in crates/mimir-resolve-go/tests/fixture/expected.rs.
+// give is listed by hand in crates/latt-resolve-go/tests/fixture/expected.rs.
 package fixture
 
 import "example.com/fixture/inner"

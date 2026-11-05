@@ -21,7 +21,7 @@ def fields(b):
         else: raise ValueError(w)
         yield f, v
 idx = []
-for p in sorted(glob.glob(str(proj/".mimir/graph/*.scip")), key=os.path.getmtime):
+for p in sorted(glob.glob(str(proj/".latt/graph/*.scip")), key=os.path.getmtime):
     docs = []; meta = ""
     for f, v in fields(pathlib.Path(p).read_bytes()):
         if f == 1:

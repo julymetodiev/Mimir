@@ -1,0 +1,18 @@
+[package]
+name = "latt-graph"
+description = "Code graph facade combining symbols and relations"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+latt-graph-fb.workspace = true
+latt-types.workspace = true
+
+arc-swap.workspace = true
+serde = { workspace = true, features = ["rc"] }
+

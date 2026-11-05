@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Every language, every kind of edit: the graph after the edit against a clean start of the same files.
 
-Usage: edit_matrix.py [MIMIR]
+Usage: edit_matrix.py [LATT]
 Each case is a small project in a temporary git repository, so this takes under a minute and needs only
 the language servers. Exit 1 if any case differs.
 """
@@ -14,7 +14,7 @@ import tempfile
 import time
 
 ENV = dict(os.environ, GIT_CONFIG_GLOBAL="/dev/null")
-MIMIR = sys.argv[1] if len(sys.argv) > 1 else "mimir"
+LATT = sys.argv[1] if len(sys.argv) > 1 else "latt"
 
 
 def script(ext):
@@ -109,7 +109,7 @@ def run(*args, cwd):
 
 
 def graph(root):
-    g = json.load(open(root + "/.mimir/graph/graph.json"))
+    g = json.load(open(root + "/.latt/graph/graph.json"))
     files = {v: k for k, v in g["file_ids"].items()}
     symbols = {s["id"]: s for s in g["symbols"]}
 
@@ -130,15 +130,15 @@ for name, language in LANGUAGES.items():
                 open(f"{root}/{path}", "w").write(content)
             run("git", "init", "-q", cwd=root)
             started = time.time()
-            run(MIMIR, "sync", "--json", cwd=root)
+            run(LATT, "sync", "--json", cwd=root)
             open(f"{root}/{language['main']}", "w").write(text)
-            run(MIMIR, "sync", "--json", cwd=root)
+            run(LATT, "sync", "--json", cwd=root)
             edited = graph(root)
-            run(MIMIR, "daemon", "stop", cwd=root)
-            shutil.rmtree(root + "/.mimir")
-            run(MIMIR, "sync", "--json", cwd=root)
+            run(LATT, "daemon", "stop", cwd=root)
+            shutil.rmtree(root + "/.latt")
+            run(LATT, "sync", "--json", cwd=root)
             clean = graph(root)
-            run(MIMIR, "daemon", "stop", cwd=root)
+            run(LATT, "daemon", "stop", cwd=root)
             extra, lost = sorted(edited - clean), sorted(clean - edited)
             same = not extra and not lost
             bad += not same

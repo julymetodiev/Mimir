@@ -1,36 +1,36 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/mimir-types",
+    "crates/latt-types",
     # M2: Graph crates
-    "crates/mimir-parse-core",
-    "crates/mimir-parse-rust",
-    "crates/mimir-parse-ts",
-    "crates/mimir-parse-python",
-    "crates/mimir-parse-go",
-    "crates/mimir-parse-c",
-    "crates/mimir-graph",
-    "crates/mimir-graph-fb",
-    "crates/mimir-resolve",
-    "crates/mimir-lsp",
-    "crates/mimir-resolve-scip",
-    "crates/mimir-resolve-ra",
-    "crates/mimir-resolve-go",
-    "crates/mimir-resolve-clang",
-    "crates/mimir-resolve-lsp",
+    "crates/latt-parse-core",
+    "crates/latt-parse-rust",
+    "crates/latt-parse-ts",
+    "crates/latt-parse-python",
+    "crates/latt-parse-go",
+    "crates/latt-parse-c",
+    "crates/latt-graph",
+    "crates/latt-graph-fb",
+    "crates/latt-resolve",
+    "crates/latt-lsp",
+    "crates/latt-resolve-scip",
+    "crates/latt-resolve-ra",
+    "crates/latt-resolve-go",
+    "crates/latt-resolve-clang",
+    "crates/latt-resolve-lsp",
     # M3: Actor crates
-    "crates/mimir-edit",
-    "crates/mimir-protocol",
-    "crates/mimir-engine",
-    "crates/mimir-daemon",
-    "crates/mimir-client",
-    "crates/mimir-hook",
-    "crates/mimir-mcp",
-    "crates/mimir-view-wire",
-    "crates/mimir-view",
-    "crates/mimir-view-page",
+    "crates/latt-edit",
+    "crates/latt-protocol",
+    "crates/latt-engine",
+    "crates/latt-daemon",
+    "crates/latt-client",
+    "crates/latt-hook",
+    "crates/latt-mcp",
+    "crates/latt-view-wire",
+    "crates/latt-view",
+    "crates/latt-view-page",
     # CLI
-    "crates/mimir-cli",
+    "crates/latt-cli",
 ]
 
 [workspace.package]
@@ -39,39 +39,39 @@ edition = "2024"
 rust-version = "1.95"
 authors = ["JuliusML"]
 license = "MIT"
-repository = "https://github.com/julymetodiev/Mimir"
+repository = "https://github.com/julymetodiev/lantern-lattice"
 
 [workspace.dependencies]
 # Internal crates - Layer 0
-mimir-types = { path = "crates/mimir-types" }
+latt-types = { path = "crates/latt-types" }
 
 # Internal crates - Layer 2 (Parsing)
-mimir-parse-core = { path = "crates/mimir-parse-core" }
-mimir-parse-rust = { path = "crates/mimir-parse-rust" }
-mimir-parse-ts = { path = "crates/mimir-parse-ts" }
-mimir-parse-python = { path = "crates/mimir-parse-python" }
-mimir-parse-go = { path = "crates/mimir-parse-go" }
-mimir-parse-c = { path = "crates/mimir-parse-c" }
+latt-parse-core = { path = "crates/latt-parse-core" }
+latt-parse-rust = { path = "crates/latt-parse-rust" }
+latt-parse-ts = { path = "crates/latt-parse-ts" }
+latt-parse-python = { path = "crates/latt-parse-python" }
+latt-parse-go = { path = "crates/latt-parse-go" }
+latt-parse-c = { path = "crates/latt-parse-c" }
 
 # Internal crates - Layer 3
-mimir-graph = { path = "crates/mimir-graph" }
-mimir-graph-fb = { path = "crates/mimir-graph-fb" }
-mimir-resolve = { path = "crates/mimir-resolve" }
-mimir-lsp = { path = "crates/mimir-lsp" }
-mimir-resolve-scip = { path = "crates/mimir-resolve-scip" }
-mimir-resolve-ra = { path = "crates/mimir-resolve-ra" }
-mimir-resolve-go = { path = "crates/mimir-resolve-go" }
-mimir-resolve-clang = { path = "crates/mimir-resolve-clang" }
-mimir-resolve-lsp = { path = "crates/mimir-resolve-lsp" }
-mimir-edit = { path = "crates/mimir-edit" }
-mimir-protocol = { path = "crates/mimir-protocol" }
-mimir-engine = { path = "crates/mimir-engine" }
-mimir-daemon = { path = "crates/mimir-daemon" }
-mimir-client = { path = "crates/mimir-client" }
-mimir-hook = { path = "crates/mimir-hook" }
-mimir-mcp = { path = "crates/mimir-mcp" }
-mimir-view = { path = "crates/mimir-view" }
-mimir-view-wire = { path = "crates/mimir-view-wire" }
+latt-graph = { path = "crates/latt-graph" }
+latt-graph-fb = { path = "crates/latt-graph-fb" }
+latt-resolve = { path = "crates/latt-resolve" }
+latt-lsp = { path = "crates/latt-lsp" }
+latt-resolve-scip = { path = "crates/latt-resolve-scip" }
+latt-resolve-ra = { path = "crates/latt-resolve-ra" }
+latt-resolve-go = { path = "crates/latt-resolve-go" }
+latt-resolve-clang = { path = "crates/latt-resolve-clang" }
+latt-resolve-lsp = { path = "crates/latt-resolve-lsp" }
+latt-edit = { path = "crates/latt-edit" }
+latt-protocol = { path = "crates/latt-protocol" }
+latt-engine = { path = "crates/latt-engine" }
+latt-daemon = { path = "crates/latt-daemon" }
+latt-client = { path = "crates/latt-client" }
+latt-hook = { path = "crates/latt-hook" }
+latt-mcp = { path = "crates/latt-mcp" }
+latt-view = { path = "crates/latt-view" }
+latt-view-wire = { path = "crates/latt-view-wire" }
 
 # MCP
 rmcp = { version = "3.9", features = ["server", "macros", "transport-io"] }

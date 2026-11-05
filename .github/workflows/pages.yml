@@ -1,6 +1,6 @@
 name: Pages
 
-# Mimir's own graph as a page, for anyone to look at. Only the code of this repository goes in.
+# Lantern Lattice's own graph as a page, for anyone to look at. Only the code of this repository goes in.
 on:
   push:
     tags:
@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   publish:
-    name: Publish the view of Mimir's own code
+    name: Publish the view of Lantern Lattice's own code
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -30,9 +30,9 @@ jobs:
           components: rust-analyzer, rust-src
       - uses: Swatinem/rust-cache@v2
       - name: Build
-        run: cargo build --release --locked -p mimir-cli
+        run: cargo build --release --locked -p lantern-lattice
       - name: Export
-        run: target/release/mimir view --export "$RUNNER_TEMP/site"
+        run: target/release/latt view --export "$RUNNER_TEMP/site"
       - uses: actions/upload-pages-artifact@v5
         with:
           path: ${{ runner.temp }}/site

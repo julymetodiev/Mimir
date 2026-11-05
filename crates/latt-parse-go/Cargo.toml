@@ -1,0 +1,16 @@
+[package]
+name = "latt-parse-go"
+description = "Go through tree-sitter, for Lantern Lattice"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+latt-types.workspace = true
+latt-parse-core.workspace = true
+tree-sitter.workspace = true
+tree-sitter-go.workspace = true

@@ -25,7 +25,7 @@ def declared():
 
 
 def latest(name):
-    request = urllib.request.Request(f"https://crates.io/api/v1/crates/{name}", headers={"User-Agent": "mimir-check-deps"})
+    request = urllib.request.Request(f"https://crates.io/api/v1/crates/{name}", headers={"User-Agent": "latt-check-deps"})
     with urllib.request.urlopen(request, timeout=20) as response:
         return json.load(response)["crate"]["max_stable_version"]
 
@@ -40,18 +40,18 @@ stale = [(name, version, latest(name)) for name, version in sorted(declared().it
 stale = [entry for entry in stale if behind(entry[1], entry[2])]
 
 # `tsrs` and `pyrefly` run as programs, and the version each was measured with is in the code.
-tested = re.search(r'TESTED_VERSION: &str = "(.+?)"', pathlib.Path("crates/mimir-resolve-lsp/src/tsrs.rs").read_text()).group(1)
+tested = re.search(r'TESTED_VERSION: &str = "(.+?)"', pathlib.Path("crates/latt-resolve-lsp/src/tsrs.rs").read_text()).group(1)
 with urllib.request.urlopen("https://registry.npmjs.org/tsrs/latest", timeout=20) as response:
     newest_tsrs = json.load(response)["version"].split("-")[0]
 if tested != newest_tsrs:
     stale.append(("tsrs", tested, newest_tsrs))
-tested = re.search(r'TESTED_VERSION: &str = "(.+?)"', pathlib.Path("crates/mimir-resolve-lsp/src/pyrefly.rs").read_text()).group(1)
+tested = re.search(r'TESTED_VERSION: &str = "(.+?)"', pathlib.Path("crates/latt-resolve-lsp/src/pyrefly.rs").read_text()).group(1)
 with urllib.request.urlopen("https://pypi.org/pypi/pyrefly/json", timeout=20) as response:
     newest_pyrefly = json.load(response)["info"]["version"]
 if tested != newest_pyrefly:
     stale.append(("pyrefly", tested, newest_pyrefly))
 # So do `scip-go` and `gopls`, whose newest version is what the Go proxy says.
-tools = pathlib.Path("crates/mimir-resolve-go/src/tools.rs").read_text()
+tools = pathlib.Path("crates/latt-resolve-go/src/tools.rs").read_text()
 for name, module in (("scip-go", "github.com/scip-code/scip-go"), ("gopls", "golang.org/x/tools/gopls")):
     tested = re.search(rf'{name.upper().replace("-", "_")}_TESTED: &str = "(.+?)"', tools).group(1)
     with urllib.request.urlopen(f"https://proxy.golang.org/{module}/@latest", timeout=20) as response:
@@ -59,7 +59,7 @@ for name, module in (("scip-go", "github.com/scip-code/scip-go"), ("gopls", "gol
     if tested != newest:
         stale.append((name, tested, newest))
 # So does `clangd-indexer`, whose newest version is what clangd's releases say.
-tools = pathlib.Path("crates/mimir-resolve-clang/src/tools.rs").read_text()
+tools = pathlib.Path("crates/latt-resolve-clang/src/tools.rs").read_text()
 tested = re.search(r'CLANGD_INDEXER_TESTED: &str = "(.+?)"', tools).group(1)
 with urllib.request.urlopen("https://api.github.com/repos/clangd/clangd/releases/latest", timeout=20) as response:
     newest = json.load(response)["tag_name"]

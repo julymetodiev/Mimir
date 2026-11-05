@@ -1,0 +1,39 @@
+// The graph on disk: docs/GRAPH-STORE.md. Generate with scripts/generate-graph-fb.sh.
+namespace store;
+
+struct Range { start_line:uint32; start_col:uint32; end_line:uint32; end_col:uint32; }
+struct Span { start:uint32; end:uint32; }
+
+table Parameter { name:string; type_annotation:string; default_value:string; }
+table Signature { parameters:[Parameter]; return_type:string; type_parameters:[string]; raw:string; }
+
+table Symbol {
+  id:uint64 (key);
+  name:string;
+  qualified:[string];
+  kind:uint8;
+  language:uint8;
+  file:uint64;
+  visibility:uint8;
+  range:Range;
+  span:Span;
+  signature:Signature;
+  doc:string;
+}
+
+// A name and the positions of its symbols, sorted by name.
+table Name { name:string (key); symbols:[uint32]; }
+
+table File { path:string; id:uint64 (key); hash:[uint8]; size:uint64; modified:int64; symbols:[uint32]; }
+
+table Graph {
+  version:uint32;
+  built_by:string;    // the Lantern Lattice that wrote it: another one may read code otherwise
+  symbols:[Symbol];   // sorted by id
+  names:[Name];
+  qualified:[Name];
+  files:[File];       // sorted by id
+  stamp:uint64;       // a hash of the ids, which edges.fb names: its positions are in these symbols
+}
+
+root_type Graph;

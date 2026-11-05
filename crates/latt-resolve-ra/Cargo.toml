@@ -1,0 +1,24 @@
+[package]
+name = "latt-resolve-ra"
+description = "rust-analyzer as Lantern Lattice's semantic source: its SCIP index and a running language server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+latt-types.workspace = true
+latt-parse-core.workspace = true
+latt-resolve.workspace = true
+latt-resolve-scip.workspace = true
+latt-lsp.workspace = true
+tracing.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+latt-graph.workspace = true
+latt-parse-rust.workspace = true
+tempfile.workspace = true

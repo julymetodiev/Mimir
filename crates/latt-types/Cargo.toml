@@ -1,0 +1,18 @@
+[package]
+name = "latt-types"
+description = "Core types for the Lantern Lattice semantic code intelligence engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+serde = { workspace = true }
+blake3 = { workspace = true }
+hex = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

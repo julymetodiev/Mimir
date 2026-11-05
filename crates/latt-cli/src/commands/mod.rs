@@ -1,0 +1,318 @@
+//! CLI commands.
+
+pub mod daemon;
+pub mod edit;
+pub mod files;
+pub mod grep;
+pub mod impact;
+pub mod init;
+pub mod read;
+pub mod search;
+pub mod status;
+pub mod sync;
+pub mod trace;
+
+use clap::Subcommand;
+use std::path::PathBuf;
+
+/// Daemon subcommands.
+#[derive(Subcommand)]
+pub enum DaemonCommands {
+    /// Start the daemon. Any command does this when needed.
+    Start,
+    /// Serve this project in this process. A client starts this.
+    #[command(hide = true)]
+    Run,
+    /// Stop the daemon.
+    Stop,
+    /// Show daemon status.
+    Status,
+}
+
+/// Available commands.
+#[derive(Subcommand)]
+pub enum Commands {
+    /// Manage the Lantern Lattice daemon, which any command starts when needed.
+    Daemon {
+        #[command(subcommand)]
+        command: DaemonCommands,
+    },
+
+    /// Serve MCP on stdin and stdout, for coding agents.
+    Mcp,
+
+    /// Open a browser on the graph, which changes as the code and the agents do.
+    View {
+        /// Only say the address, without opening a browser.
+        #[arg(long)]
+        no_open: bool,
+
+        /// Write the view as files for a static host, with the project's source, and stop.
+        #[arg(long, value_name = "DIR")]
+        export: Option<std::path::PathBuf>,
+    },
+
+    /// Initialize Lantern Lattice in the current directory.
+    Init,
+
+    /// Show project status.
+    Status,
+
+    /// Sync the code graph from project files.
+    Sync {
+        /// Write a new semantic index instead of asking a running analyzer about edited files.
+        #[arg(long)]
+        full: bool,
+        /// Also write the graph to `.latt/graph/graph.json`, for measuring it from outside.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Trace call chains for a symbol.
+    Trace {
+        /// Only a symbol in this file.
+        #[arg(short, long)]
+        file: Option<PathBuf>,
+
+        /// Symbol name to trace.
+        #[arg(short, long)]
+        symbol: String,
+
+        /// Maximum trace depth.
+        #[arg(short, long, default_value = "3")]
+        depth: usize,
+
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+
+        /// Show source code snippet.
+        #[arg(short, long)]
+        /// Show source code snippet.
+        #[arg(short, long)]
+        code: bool,
+
+        /// Show only callers (who calls this symbol).
+        #[arg(long)]
+        callers: bool,
+
+        /// Show only callees (what this symbol calls).
+        #[arg(long)]
+        callees: bool,
+    },
+
+    /// What the uncommitted changes touch: symbols added, changed and removed, and what depends on them.
+    Impact {
+        /// Compare with where this branch or commit split off, instead of the last commit.
+        #[arg(short, long)]
+        base: Option<String>,
+
+        /// How many levels of dependents to follow.
+        #[arg(short, long)]
+        depth: Option<u32>,
+
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Answer a coding agent's hook, from what it sends on standard input. Its plugin runs this.
+    #[command(hide = true)]
+    Hook {
+        /// Where to remember each session.
+        #[arg(long)]
+        state: PathBuf,
+    },
+
+    /// Edit a file with conflict detection.
+    Edit {
+        /// File to edit (optional if --symbol is provided).
+        #[arg(short, long)]
+        file: Option<PathBuf>,
+
+        /// Symbol name to edit (resolves file and line automatically).
+        #[arg(long)]
+        symbol: Option<String>,
+
+        /// Edit mode: replace, insert, delete, lines, symbol, after, text.
+        /// 'symbol' replaces a whole symbol; 'after' adds new code right after one;
+        /// 'text' replaces --old with --content.
+        #[arg(short, long, default_value = "replace")]
+        mode: String,
+
+        /// Start position (byte offset for replace/insert/delete, line number for lines).
+        /// When --symbol is used with lines mode, this is relative to the symbol's start.
+        /// Not needed for 'symbol' mode.
+        #[arg(short, long)]
+        start: Option<u32>,
+
+        /// End position (byte offset for replace/delete, line number for lines).
+        /// When --symbol is used with lines mode, this is relative to the symbol's start.
+        /// Not needed for 'symbol' mode.
+        #[arg(short, long)]
+        end: Option<u32>,
+
+        /// New content to insert or replace with.
+        #[arg(short, long)]
+        content: Option<String>,
+
+        /// The exact text to replace, for 'text' mode. It must occur once unless --all is given.
+        #[arg(long)]
+        old: Option<String>,
+
+        /// Replace every place --old occurs.
+        #[arg(long)]
+        all: bool,
+
+        /// Preview changes without applying.
+        #[arg(short, long)]
+        preview: bool,
+
+        /// Create backup file before editing.
+        #[arg(short, long)]
+        backup: bool,
+    },
+
+    /// Apply batch symbol edits from JSON.
+    /// JSON format: [{"symbol": "name", "content": "new code"}, ...]
+    /// Use --json=- to read from stdin.
+    EditSymbols {
+        /// JSON string or "-" to read from stdin.
+        #[arg(short, long)]
+        json: String,
+
+        /// Preview changes without applying.
+        #[arg(short, long)]
+        preview: bool,
+
+        /// Create backup files before editing.
+        #[arg(short, long)]
+        backup: bool,
+    },
+
+    /// Search for symbols by pattern.
+    Search {
+        /// Pattern to search for (supports regex).
+        #[arg(short, long)]
+        pattern: String,
+
+        /// Filter by symbol kind (function, struct, enum, etc.).
+        #[arg(short, long)]
+        kind: Option<String>,
+
+        /// Maximum results to return.
+        #[arg(short, long, default_value = "20")]
+        limit: usize,
+
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+
+        /// Show source code snippet.
+        #[arg(short, long)]
+        code: bool,
+    },
+
+    /// Search the text of the project's files, as grep does, saying which symbol each match is in.
+    Grep {
+        /// A regular expression.
+        pattern: String,
+
+        /// Take the pattern as text, not as a regular expression.
+        #[arg(short = 'F', long)]
+        literal: bool,
+
+        /// Letter case does not matter.
+        #[arg(short, long)]
+        ignore_case: bool,
+
+        /// Only files matching this glob, such as `*.md` or `crates/**/*.rs`.
+        #[arg(short, long)]
+        path: Option<String>,
+
+        /// Lines to show around each match.
+        #[arg(short = 'C', long, default_value = "0")]
+        context: u32,
+
+        /// The most matches to return.
+        #[arg(short, long)]
+        limit: Option<u32>,
+
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// List the project's files, skipping what git ignores.
+    Files {
+        /// Only files matching this glob, such as `*.md` or `crates/**/*.rs`.
+        glob: Option<String>,
+
+        /// The most files to return.
+        #[arg(short, long)]
+        limit: Option<u32>,
+
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Create a file of the project, from --content or standard input.
+    Write {
+        /// The file. Missing directories are made.
+        file: PathBuf,
+
+        /// The whole text of the file. Without this, it is read from standard input.
+        #[arg(long)]
+        content: Option<String>,
+
+        /// Replace the file if it exists.
+        #[arg(long)]
+        overwrite: bool,
+    },
+
+    /// Show a file of the project, with line numbers.
+    Cat {
+        /// The file.
+        file: PathBuf,
+
+        /// The first line to show, from 1.
+        #[arg(long)]
+        first: Option<u32>,
+
+        /// The last line to show.
+        #[arg(long)]
+        last: Option<u32>,
+
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Read source code by symbol name.
+    Read {
+        /// Symbol name to read.
+        #[arg(short, long)]
+        symbol: String,
+
+        /// Only a symbol in this file, when several share the name.
+        #[arg(short, long)]
+        file: Option<PathBuf>,
+
+        /// Lines of context before the symbol.
+        #[arg(short = 'B', long, default_value = "0")]
+        before: usize,
+
+        /// Lines of context after the symbol.
+        #[arg(short = 'A', long, default_value = "0")]
+        after: usize,
+
+        /// Show line numbers.
+        #[arg(short, long, default_value = "true")]
+        numbers: bool,
+
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}

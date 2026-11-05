@@ -17,19 +17,19 @@ opens it: section 7 shows what that does to other files' answers. Code under an 
 ## 2. The parts
 
 ```
-  mimir-parse-c        ── symbols and references of both languages, through tree-sitter
-  mimir-resolve        ── the same rules and the same port
-  mimir-resolve-scip   ── keeping an index by a hash, and the choice between kept index, server and new index, as it is
-  mimir-resolve-clang  ── what is C's own: the database, `clangd-indexer`, `clangd`
-  mimir-lsp            ── starting a language server, its messages, file URIs
+  latt-parse-c        ── symbols and references of both languages, through tree-sitter
+  latt-resolve        ── the same rules and the same port
+  latt-resolve-scip   ── keeping an index by a hash, and the choice between kept index, server and new index, as it is
+  latt-resolve-clang  ── what is C's own: the database, `clangd-indexer`, `clangd`
+  latt-lsp            ── starting a language server, its messages, file URIs
 ```
 
 | Crate | Layer | Owns |
 |---|---|---|
-| `mimir-parse-c` | domain | C through `tree-sitter-c`, C++ through `tree-sitter-cpp` |
-| `mimir-resolve-clang` | adapter | finding the database, running `clangd-indexer`, turning its output into a SCIP index, asking `clangd`, the versions tested |
+| `latt-parse-c` | domain | C through `tree-sitter-c`, C++ through `tree-sitter-cpp` |
+| `latt-resolve-clang` | adapter | finding the database, running `clangd-indexer`, turning its output into a SCIP index, asking `clangd`, the versions tested |
 
-- **Nothing is copied.** `mimir-resolve-clang` implements `IndexLanguage` and calls `load_root`, as `mimir-resolve-go` does.
+- **Nothing is copied.** `latt-resolve-clang` implements `IndexLanguage` and calls `load_root`, as `latt-resolve-go` does.
 - **`clangd-indexer`'s output becomes a SCIP file** in `write_index`, so `decode`, `SemanticIndex` and the port stay as they are.
   A symbol is its id from the index. A definition has role 1. Pairs of an override and what it overrides become `implementations`.
 - **`Language::family`** gives C for `Cpp` too.
@@ -75,7 +75,7 @@ A caller is the innermost named function around the site. A lambda belongs to th
 
 ## 4. Resolution
 
-**The database.** `compile_commands.json` in the project's root, or else in `build/`. Mimir never runs `cmake`, `make` or `bear`, as
+**The database.** `compile_commands.json` in the project's root, or else in `build/`. Lantern Lattice never runs `cmake`, `make` or `bear`, as
 each runs the project's code. With none, only syntax rules apply, `clangd` is not started, and `sync` and `status` say so, with what
 to run:
 
@@ -122,7 +122,7 @@ of that name, not after `.`, `->` or `::`. Section 7 has its numbers. It is not 
 **The tools.**
 
 - They are found on `PATH`, never in the project.
-- `clangd-indexer` has one tested version, a constant in `mimir-resolve-clang`, which `scripts/check-deps.py` compares with the
+- `clangd-indexer` has one tested version, a constant in `latt-resolve-clang`, which `scripts/check-deps.py` compares with the
   newest release of `clangd/clangd`. `clangd` is whichever is there: Apple's follows Xcode. The daemon's log says when either is
   not the tested one.
 - Without `clangd-indexer`, or when it fails: `clangd` is not asked either, only syntax rules apply, and `sync` says why. Without
@@ -143,7 +143,7 @@ Added to section 2 of the architecture when they hold, each checked by `scripts/
 
 | # | Target |
 |---|---|
-| CPP1 | Every entry of the hand-written list in `crates/mimir-resolve-clang/tests/`, covering each row of the table in section 3, holds |
+| CPP1 | Every entry of the hand-written list in `crates/latt-resolve-clang/tests/`, covering each row of the table in section 3, holds |
 | CPP2 | Against `clangd` with its own index over all sites of a project: every disagreement falls in a named class of section 7; unclassified 0 |
 | CPP3 | After edits, the graph differs from the graph from a new index only in the named classes of section 7, each of an edit's own files |
 | CPP4 | T1, T2, T3 and T4 hold on a project of 20 000 symbols, T3 with the index kept |
@@ -151,8 +151,8 @@ Added to section 2 of the architecture when they hold, each checked by `scripts/
 
 ## 6. Machine checks
 
-- `scripts/check-architecture.sh`: the new crates in `allowed`; `mimir-engine` depends on no parser of a language;
-  `mimir-parse-c` is in the pure domain list.
+- `scripts/check-architecture.sh`: the new crates in `allowed`; `latt-engine` depends on no parser of a language;
+  `latt-parse-c` is in the pure domain list.
 - `scripts/check-deps.py`: the version of `clangd-indexer`, and `tree-sitter-c` and `tree-sitter-cpp` as any crate.
 - `cargo test`: the fixture of CPP1 and CPP5, skipped with a message when the tools are not installed. CI installs them.
 - `scripts/bench`: CPP2, CPP3 and CPP4.
@@ -160,7 +160,7 @@ Added to section 2 of the architecture when they hold, each checked by `scripts/
 ## 7. What was measured
 
 `clangd` Apple 21.0.0, `clangd-indexer` 23.1.0, `scip-clang` 0.4.1, `norn` 0.25.0, `cpp_ls` 0.1.4, on an arm64 Mac, 2026-11-04,
-without `mimir`. curl at `116c5ae`, fmt at `4ed3535`, leveldb at `bb74ef7`, yaml-cpp at `c5e6536`, and a fixture of 7 files by
+without `latt`. curl at `116c5ae`, fmt at `4ed3535`, leveldb at `bb74ef7`, yaml-cpp at `c5e6536`, and a fixture of 7 files by
 hand. A site is a name before `(`, or after `.`, `->` or `::`, by a regular expression outside comments and strings. Times marked
 loaded ran beside other runs.
 
@@ -243,7 +243,7 @@ and there is no flag. **The same run twice** gives leveldb 0 differences of 3 62
 | leveldb | 106 | 0 | 1 |
 | fmt | 399 | 18 | 93 |
 
-**What `mimir-parse-c` finds,** through `mimir` at this draft with syntax rules alone, against the functions `clangd-indexer` has defined in the project.
+**What `latt-parse-c` finds,** through `latt` at this draft with syntax rules alone, against the functions `clangd-indexer` has defined in the project.
 Left out as what a parser cannot see: what a macro generates, as `TEST` and curl's `typecheck-gcc.h`, and a test library in the project:
 
 | | Functions | Found | With no blanking of macros | Syntax `Calls` that agree with `scip-clang` | Differ | The index has nothing there |
@@ -253,14 +253,14 @@ Left out as what a parser cannot see: what a macro generates, as `TEST` and curl
 | yaml-cpp | 1 202 | 1 123, 93.4% | 978, by an older count | 114 | 3 | 1 241 |
 | fmt | 1 861 | 1 370, 73.6% | not comparable | 373 | 47 | 123 |
 
-A whole `mimir sync` of it took 0.4 to 1.6 s. Of curl's 22, 20 are a name that is a function under one `#if` and a macro under another. Of fmt's 47, those read are
+A whole `latt sync` of it took 0.4 to 1.6 s. Of curl's 22, 20 are a name that is a function under one `#if` and a macro under another. Of fmt's 47, those read are
 `open_buffered_file`, defined in two files, which is the case of section 8, item 4. Why fmt is low was not worked out to the end: `FMT_ENABLE_IF` in a template's
 parameters, as `isfinite` in `format.h`, is part of it, but plain functions in the same file, as `equal2`, are missing too. leveldb's rest is `#if` inside a
 function's parts and classes inside functions, by the examples read.
 
-**Through `mimir`, with the index and no `clangd` yet,** on an idle machine. `Calls` from the index against `scip-clang`, at the same place and target:
+**Through `latt`, with the index and no `clangd` yet,** on an idle machine. `Calls` from the index against `scip-clang`, at the same place and target:
 
-| | A first `mimir sync` | Kept index | Same | Another target | `scip-clang` has no definition | Files in the index, and with syntax rules |
+| | A first `latt sync` | Kept index | Same | Another target | `scip-clang` has no definition | Files in the index, and with syntax rules |
 |---|---|---|---|---|---|---|
 | curl | 6.7 s | 12 MB | 8 027 | 3 | 0 | 535, 586 |
 | yaml-cpp | 4.6 s | 0.6 MB | 1 611 | 23 | 1 | 125, 181 |
@@ -272,9 +272,9 @@ Files with syntax rules are those in no database, as curl's other platforms and 
 and a class against its constructor. They were not read one by one. Calls to a local function in a file of the index have no edge until `clangd` answers: `scip-clang`
 has about 8 000 on curl, 300 on yaml-cpp, 500 on leveldb and 3 900 on fmt, some counted twice.
 
-**With `clangd` for local symbols,** by what calls what, each pair once, against `scip-clang`, in a function and to a symbol of the graph. A first `mimir sync` on an idle machine:
+**With `clangd` for local symbols,** by what calls what, each pair once, against `scip-clang`, in a function and to a symbol of the graph. A first `latt sync` on an idle machine:
 
-| | A first `mimir sync` | Kept index | Local: has an edge | No edge | Elsewhere: has an edge | No edge |
+| | A first `latt sync` | Kept index | Local: has an edge | No edge | Elsewhere: has an edge | No edge |
 |---|---|---|---|---|---|---|
 | curl | 23 s | 12.6 MB | 2 533 | 3 | 5 935 | 10 |
 | yaml-cpp | 7.6 s | 0.6 MB | 565 | 1 | 1 080 | 0 |
@@ -285,7 +285,7 @@ Of leveldb's 24, those read are `new` of a class known only in its file, where `
 those read are `TEST`, a macro. Calls to what the parser has no symbol for are left out above: on curl 42 576 sites of what `CURLWARNING` generates, and on fmt 12 623 of
 `gmock-gtest-all.cc`, over the scanner's 500 KB. An index is written only when the database changes, over 50 files are edited, or by `sync --full`, so the time for `clangd` is paid then.
 
-**After edits, the whole graph,** `mimir sync` against `sync --full` of the same files, with `clangd` from before them. In each project 5 lines moved in 3 files of which one a header, a new local function, and a
+**After edits, the whole graph,** `latt sync` against `sync --full` of the same files, with `clangd` from before them. In each project 5 lines moved in 3 files of which one a header, a new local function, and a
 new function called from another file. A first answer in 0.5 to 0.8 s:
 
 | Edges only after the edit, only in the new index | yaml-cpp | curl | leveldb | fmt |
@@ -313,7 +313,7 @@ fmt's row above is not from the edit. Leaving out the pairs of files that differ
 One edge has no explanation: on leveldb `Repairer::WriteDescriptor` to `log::Writer::Writer`, at `log::Writer log(file)`. The parser has the site there and `clangd` names that constructor at its bracket, and the edge is
 still only in the new index.
 
-**LLVM,** only `clangd-indexer`, not Mimir as a whole, since a whole run could take over an hour of the machine and the owner cannot spare that. The `llvm` folder, AArch64 only, 3 291 units, 8 cores: 665 s, 2.26 GB, 2.1 GB of YAML, 370 973 symbols, and 7 errors for files the build makes. Before it, 245 s to make the generated files, and 111 s to clone and 29 s for `cmake`. The parser alone reads the tree in 32 s: 17 719 files and 334 220 symbols.
+**LLVM,** only `clangd-indexer`, not Lantern Lattice as a whole, since a whole run could take over an hour of the machine and the owner cannot spare that. The `llvm` folder, AArch64 only, 3 291 units, 8 cores: 665 s, 2.26 GB, 2.1 GB of YAML, 370 973 symbols, and 7 errors for files the build makes. Before it, 245 s to make the generated files, and 111 s to clone and 29 s for `cmake`. The parser alone reads the tree in 32 s: 17 719 files and 334 220 symbols.
 
 **The database.** With none, `clangd` gave 13 of 77 fixture answers at a declaration. `clangd` found one in `build/` itself, and needed no
 `-isysroot`, 0 of 77 changed.
@@ -333,7 +333,7 @@ still only in the new index.
 ## 8. Open
 
 1. **`.h` as C++ grammar and no edge through a pointer** are by the owner's word, with the costs of items 7 and 20 known.
-2. **A large project is not proven.** Nothing over 73 114 sites went through Mimir as a whole. On LLVM the index takes 665 s, within the limit of 1 hour in `crates/mimir-resolve-clang/src/index.rs`. An indexer that hangs holds its index that long. Reading 2.1 GB of output, `clangd` for local symbols and T1 to T4 there are not known. T4 over 20 000 symbols fails for Go, and may for this.
+2. **A large project is not proven.** Nothing over 73 114 sites went through Lantern Lattice as a whole. On LLVM the index takes 665 s, within the limit of 1 hour in `crates/latt-resolve-clang/src/index.rs`. An indexer that hangs holds its index that long. Reading 2.1 GB of output, `clangd` for local symbols and T1 to T4 there are not known. T4 over 20 000 symbols fails for Go, and may for this.
 3. **CPP3 allows the classes of section 7, where other languages have 0 differences:** the owner had the constructor checked first and left this to be decided after it. It stays, since what is left is what `clangd` does not say at a site, and fmt's new indexes differ from each other, so 0 could not be measured there. They go at the next index. An edit to a header also changes what its includers mean, and they stay as the index says until then.
 4. **A method added since an index** that overrides another has no edge until the next index.
 5. **The ids that differ:** 3.5% of yaml-cpp's positions and 0.4% of curl's, between `clangd` 21 and `clangd-indexer` 23. Why is not known,
@@ -367,8 +367,8 @@ still only in the new index.
 
 ## 9. Order
 
-1. `mimir-parse-c`, with syntax rules only, and what it finds against the index. Done, and section 8, items 7 and 8 stay open.
-2. `mimir-resolve-clang` with `clangd-indexer`, its output as a SCIP file, and the fixture of CPP1 without local functions. Done.
+1. `latt-parse-c`, with syntax rules only, and what it finds against the index. Done, and section 8, items 7 and 8 stay open.
+2. `latt-resolve-clang` with `clangd-indexer`, its output as a SCIP file, and the fixture of CPP1 without local functions. Done.
 3. `clangd` for local symbols and edited files, the rule of section 4, and CPP5. Done on the fixture; item 5 stays open.
 4. CPP3, and item 3. Done on four projects.
 5. A project larger than curl: only the index of LLVM was measured, by the owner's word. Item 2 stays open.

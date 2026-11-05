@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build call-edge truth from a rust-analyzer SCIP index, check it, and score resolvers on it.
 
-Usage: scip_eval.py INDEX.scip MIMIR_GRAPH.json RA.jsonl REPO OUT.json
+Usage: scip_eval.py INDEX.scip LATT_GRAPH.json RA.jsonl REPO OUT.json
 Scoring unit: unique (caller fn, callee fn) under crates/. Function values passed as arguments
 are not calls and are excluded from truth and from both resolvers.
 """
@@ -169,7 +169,7 @@ for rel, occ in docs.items():
         T_macro_only[e] = T_macro_only.get(e, True) and in_macro
         sites[e].append((rel, line, col, lines[line].strip()[:110]))
 
-# Mimir, mapped into the same keys
+# Lantern Lattice, mapped into the same keys
 g = json.load(open(graph_path))
 FILES = {v: k for k, v in g["file_ids"].items()}
 syms = {s["id"]: s for s in g["symbols"]}
@@ -185,7 +185,7 @@ def to_key(s):
 
 
 M = set()
-mimir_unmapped = 0
+latt_unmapped = 0
 for f, t, kind, *_ in g["edges"]:
     if kind != "Calls":
         continue
@@ -196,7 +196,7 @@ for f, t, kind, *_ in g["edges"]:
         continue
     ka, kb = to_key(a), to_key(b)
     if ka is None or kb is None:
-        mimir_unmapped += 1
+        latt_unmapped += 1
         continue
     M.add((ka, kb))
 
@@ -323,12 +323,12 @@ report = {
         "documents": len(docs), "fns_treesitter": len(fns), "scip_fn_defs_matched": len(defs),
         "call_refs": scip_refs, "call_refs_to_outside_or_derive": skipped_no_def,
         "fn_refs_not_followed_by_paren": skipped_value, "truth_edges": len(T),
-        "truth_macro_only": sum(1 for e in T if T_macro_only[e]), "mimir_edges_mapped": len(M),
-        "mimir_edges_unmapped": mimir_unmapped,
+        "truth_macro_only": sum(1 for e in T if T_macro_only[e]), "latt_edges_mapped": len(M),
+        "latt_edges_unmapped": latt_unmapped,
     },
     "hierarchy_vs_scip": {"hierarchy": len(H), "both": len(H & T), "only_hierarchy": len(H - T), "only_scip": len(T - H),
                           "only_scip_macro_only": sum(1 for e in T - H if T_macro_only[e])},
-    "mimir": prf(T, M), "mimir_slices": slice_all(T, M),
+    "latt": prf(T, M), "latt_slices": slice_all(T, M),
     "ts_resolver_no_method_guess": prf(T, R_strict), "ts_resolver_no_method_guess_slices": slice_all(T, R_strict),
     "ts_resolver_unique_method_guess": prf(T, R_guess), "ts_resolver_unique_method_guess_slices": slice_all(T, R_guess),
 }
@@ -349,8 +349,8 @@ sample = lambda s, n: random.sample(sorted(s), min(n, len(s)))
 report["audit_truth_sample"] = [{"edge": fmt(e), "site": sites[e][0]} for e in sample(T, 15)]
 report["audit_only_hierarchy"] = [fmt(e) for e in sample(H - T, 10)]
 report["audit_only_scip"] = [{"edge": fmt(e), "site": sites[e][0]} for e in sample(T - H, 10)]
-report["audit_mimir_fp"] = [fmt(e) for e in sample(M - T, 12)]
-report["audit_mimir_fn"] = [fmt(e) for e in sample(T - M, 12)]
+report["audit_latt_fp"] = [fmt(e) for e in sample(M - T, 12)]
+report["audit_latt_fn"] = [fmt(e) for e in sample(T - M, 12)]
 report["audit_ts_guess_fp"] = [fmt(e) for e in sample(R_guess - T, 12)]
 report["check"] = {t: sorted(fmt(e) for e in T if e[1][2] == t) for t in ("apply_batch", "find_by_name", "handle_trace")}
 

@@ -1,0 +1,35 @@
+[package]
+name = "latt-engine"
+description = "The one writer of the Lantern Lattice graph: sync, watch, query"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+latt-types.workspace = true
+latt-protocol.workspace = true
+latt-edit.workspace = true
+latt-graph.workspace = true
+latt-parse-core.workspace = true
+latt-resolve.workspace = true
+chrono.workspace = true
+ignore.workspace = true
+
+tokio = { workspace = true, features = ["sync", "rt", "time", "macros", "fs", "rt-multi-thread"] }
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+notify.workspace = true
+regex.workspace = true
+
+[dev-dependencies]
+latt-parse-rust.workspace = true
+latt-parse-ts.workspace = true
+latt-resolve-ra.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tempfile.workspace = true

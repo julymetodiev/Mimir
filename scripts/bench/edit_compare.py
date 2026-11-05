@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
 """After edits, is a graph from a running analyzer the same as one from a new index?
 
-Usage: edit_compare.py MIMIR PROJECT OUT_DIR FILE [FILE...]
+Usage: edit_compare.py LATT PROJECT OUT_DIR FILE [FILE...]
 PROJECT must be a git repository you can throw away: each FILE gets two comment lines on top
 and the project is synced four times, ending with `sync --full`. Graphs land in OUT_DIR, and
 graph_diff.py compares them. Prints time and peak memory per sync. The memory is the sum over
-mimir and rust-analyzer processes (the daemon and its analyzer included), sampled every 0.2 s.
+latt and rust-analyzer processes (the daemon and its analyzer included), sampled every 0.2 s.
 The daemon is stopped before and after, so the first sync starts from none.
 """
 import pathlib, re, shutil, subprocess, sys, tempfile, time
 
-mimir, project, out, *files = sys.argv[1:]
+latt, project, out, *files = sys.argv[1:]
 project, out = pathlib.Path(project), pathlib.Path(out)
 out.mkdir(parents=True, exist_ok=True)
 
 
 def rss_kb():
-    """Summed resident set size, in KB, of processes named mimir or containing rust-analyzer."""
+    """Summed resident set size, in KB, of processes named latt or containing rust-analyzer."""
     total = 0
     for line in subprocess.run(["ps", "-axo", "rss=,comm="], capture_output=True, text=True).stdout.splitlines():
         fields = line.split(None, 1)
-        if len(fields) == 2 and (fields[1].endswith("/mimir") or "rust-analyzer" in fields[1]):
+        if len(fields) == 2 and (fields[1].endswith("/latt") or "rust-analyzer" in fields[1]):
             total += int(fields[0])
     return total
 
@@ -30,7 +30,7 @@ def sync(label, *args):
     peak = 0
     # To a file, not a pipe: a pipe is read to its end, which waits for every process holding it.
     with tempfile.TemporaryFile("w+") as log:
-        proc = subprocess.Popen([mimir, "sync", "--json", *args], cwd=project, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+        proc = subprocess.Popen([latt, "sync", "--json", *args], cwd=project, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
         while True:
             peak = max(peak, rss_kb())
             try:
@@ -45,11 +45,11 @@ def sync(label, *args):
     for line in text.splitlines():
         if re.search(r"Calls:|Edited since|Functions used|Trait method", line):
             print("   ", line[:120], flush=True)
-    shutil.copy(project / ".mimir/graph/graph.json", out / f"{label}.json")
+    shutil.copy(project / ".latt/graph/graph.json", out / f"{label}.json")
 
 
-subprocess.run([mimir, "daemon", "stop"], cwd=project, capture_output=True)
-subprocess.run([mimir, "init"], cwd=project, capture_output=True)
+subprocess.run([latt, "daemon", "stop"], cwd=project, capture_output=True)
+subprocess.run([latt, "init"], cwd=project, capture_output=True)
 sync("base")
 sync("cached")
 for name in files:
@@ -58,5 +58,5 @@ for name in files:
     path.write_text(f"{comment} edited\n{comment} edited\n" + path.read_text())
 sync("edited")
 sync("full", "--full")
-subprocess.run([mimir, "daemon", "stop"], cwd=project, capture_output=True)
+subprocess.run([latt, "daemon", "stop"], cwd=project, capture_output=True)
 print(f"Compare with: graph_diff.py {out}/edited.json {out}/full.json")

@@ -1,0 +1,32 @@
+[package]
+name = "latt-resolve-lsp"
+description = "A language server as Lantern Lattice's semantic source: asking about each site, saving the answers"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+latt-types.workspace = true
+latt-parse-core.workspace = true
+latt-resolve.workspace = true
+latt-lsp.workspace = true
+tracing.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+latt-graph.workspace = true
+latt-parse-python.workspace = true
+latt-parse-ts.workspace = true
+tempfile.workspace = true
+
+[[test]]
+name = "tsrs"
+path = "tests/tsrs/main.rs"
+
+[[test]]
+name = "pyrefly"
+path = "tests/pyrefly/main.rs"

@@ -1,0 +1,311 @@
+//! The MCP server from outside, as a client speaks to it: JSON-RPC, one message per line.
+
+use serde_json::{Value, json};
+use std::fs;
+use std::io::{BufRead, BufReader, Write};
+use std::path::Path;
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use tempfile::TempDir;
+
+struct Server {
+    child: Child,
+    input: ChildStdin,
+    output: BufReader<ChildStdout>,
+    next_id: u64,
+}
+
+impl Server {
+    fn start(dir: &Path) -> Self {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_latt"))
+            .arg("mcp")
+            .current_dir(dir)
+            .env("LATT_NO_SCIP", "1")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let input = child.stdin.take().unwrap();
+        let output = BufReader::new(child.stdout.take().unwrap());
+        let mut server = Self {
+            child,
+            input,
+            output,
+            next_id: 1,
+        };
+        server.request(
+            "initialize",
+            json!({
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "test", "version": "0"},
+            }),
+        );
+        server.send(&json!({"jsonrpc": "2.0", "method": "notifications/initialized"}));
+        server
+    }
+
+    fn send(&mut self, message: &Value) {
+        writeln!(self.input, "{message}").unwrap();
+        self.input.flush().unwrap();
+    }
+
+    fn request(&mut self, method: &str, params: Value) -> Value {
+        let id = self.next_id;
+        self.next_id += 1;
+        self.send(&json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}));
+        loop {
+            let mut line = String::new();
+            assert_ne!(self.output.read_line(&mut line).unwrap(), 0, "server ended");
+            let message: Value = serde_json::from_str(&line).unwrap();
+            if message["id"] == json!(id) {
+                return message["result"].clone();
+            }
+        }
+    }
+
+    /// Call a tool; gives its text and whether it reported an error.
+    fn call(&mut self, tool: &str, arguments: Value) -> (String, bool) {
+        let result = self.request("tools/call", json!({"name": tool, "arguments": arguments}));
+        (
+            result["content"][0]["text"].as_str().unwrap().to_string(),
+            result["isError"].as_bool().unwrap_or(false),
+        )
+    }
+}
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        self.child.kill().unwrap();
+        self.child.wait().unwrap();
+    }
+}
+
+fn project() -> TempDir {
+    let dir = TempDir::new().unwrap();
+    fs::create_dir(dir.path().join(".git")).unwrap();
+    fs::create_dir(dir.path().join("src")).unwrap();
+    fs::write(
+        dir.path().join("src/lib.rs"),
+        "pub fn helper() -> u32 {\n    1\n}\n\npub fn compute() -> u32 {\n    helper()\n}\n",
+    )
+    .unwrap();
+    dir
+}
+
+#[test]
+fn test_tools_work_end_to_end() {
+    let project = project();
+    let mut server = Server::start(project.path());
+
+    let tools = server.request("tools/list", json!({}));
+    let names: Vec<&str> = tools["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tool| tool["name"].as_str().unwrap())
+        .collect();
+    for name in [
+        "trace",
+        "search",
+        "read",
+        "edit_symbols",
+        "insert_after",
+        "grep",
+        "files",
+        "read_file",
+        "edit_lines",
+        "replace_text",
+        "write_file",
+        "sync",
+        "status",
+    ] {
+        assert!(names.contains(&name), "{name} is missing from {names:?}");
+    }
+
+    let (trace, failed) = server.call("trace", json!({"symbol": "helper", "direction": "callers"}));
+    assert!(!failed, "{trace}");
+    let trace: Value = serde_json::from_str(&trace).unwrap();
+    assert_eq!(trace["callers"][0]["name"], "compute");
+    assert_eq!(trace["callers"][0]["at"], "src/lib.rs:5-7");
+    assert!(trace["callers"][0].get("possible").is_none());
+    assert!(trace.get("id").is_none());
+
+    let (read, failed) = server.call("read", json!({"symbol": "compute"}));
+    assert!(!failed && read.contains("helper()"), "{read}");
+
+    let (found, failed) = server.call("search", json!({"pattern": "^comp"}));
+    assert!(!failed && found.contains("compute"), "{found}");
+
+    let (edited, failed) = server.call(
+        "edit_symbols",
+        json!({"edits": [{"symbol": "helper", "content": "pub fn helper() -> u32 {\n    2\n}"}]}),
+    );
+    assert!(!failed, "{edited}");
+    assert!(
+        fs::read_to_string(project.path().join("src/lib.rs"))
+            .unwrap()
+            .contains("    2\n")
+    );
+
+    let (added, failed) = server.call(
+        "insert_after",
+        json!({"symbol": "helper", "content": "pub fn added() -> u32 {\n    helper()\n}\n"}),
+    );
+    assert!(!failed, "{added}");
+    let (trace, failed) = server.call("trace", json!({"symbol": "added"}));
+    assert!(!failed && trace.contains("helper"), "{trace}");
+
+    let (found, failed) = server.call(
+        "grep",
+        json!({"pattern": "^ +helper\\(\\)", "path": "src/*"}),
+    );
+    assert!(!failed, "{found}");
+    let found: Value = serde_json::from_str(&found).unwrap();
+    assert!(found["total"].as_u64().unwrap() >= 1);
+    assert_eq!(found["matches"][0]["at"], "src/lib.rs:6", "{found}");
+    assert_eq!(found["matches"][0]["symbol"], "added", "{found}");
+
+    let (files, failed) = server.call("files", json!({"glob": "src/*"}));
+    assert!(!failed, "{files}");
+    let files: Value = serde_json::from_str(&files).unwrap();
+    assert_eq!(files["files"], json!(["src/lib.rs"]));
+    assert_eq!(files["total"], 1);
+
+    let (text, failed) = server.call(
+        "read_file",
+        json!({"file": "src/lib.rs", "first": 2, "last": 2}),
+    );
+    assert!(!failed, "{text}");
+    let text: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(text["text"], "2\t    2");
+
+    let (outside, failed) = server.call("read_file", json!({"file": "/etc/hosts"}));
+    assert!(
+        failed && outside.contains("outside the project"),
+        "{outside}"
+    );
+
+    let (written, failed) = server.call(
+        "write_file",
+        json!({"file": "src/made/new.rs", "content": "pub fn fresh() -> u32 {\n    1\n}\n"}),
+    );
+    assert!(!failed, "{written}");
+    let (found, failed) = server.call("search", json!({"pattern": "^fresh$"}));
+    assert!(!failed && found.contains("src/made/new.rs"), "{found}");
+
+    let (again, failed) = server.call(
+        "write_file",
+        json!({"file": "src/made/new.rs", "content": "pub fn other() {}\n"}),
+    );
+    assert!(failed && again.contains("already exists"), "{again}");
+    assert!(
+        fs::read_to_string(project.path().join("src/made/new.rs"))
+            .unwrap()
+            .contains("fresh")
+    );
+
+    let (replaced, failed) = server.call(
+        "write_file",
+        json!({"file": "src/made/new.rs", "content": "pub fn other() {}\n", "overwrite": true}),
+    );
+    assert!(!failed, "{replaced}");
+    let (found, failed) = server.call("search", json!({"pattern": "^(fresh|other)$"}));
+    assert!(!failed, "{found}");
+    assert!(
+        found.contains("other") && !found.contains("fresh"),
+        "{found}"
+    );
+
+    let (outside, failed) = server.call(
+        "write_file",
+        json!({"file": "../outside.txt", "content": "x"}),
+    );
+    assert!(
+        failed && outside.contains("outside the project"),
+        "{outside}"
+    );
+
+    fs::write(project.path().join("notes.md"), "one two\nthree one\n").unwrap();
+    fs::write(project.path().join("more.md"), "keep\n").unwrap();
+    let (many, failed) = server.call(
+        "replace_text",
+        json!({"edits": [
+            {"file": "more.md", "old": "keep", "new": "changed"},
+            {"file": "notes.md", "old": "one", "new": "1"}
+        ]}),
+    );
+    assert!(failed && many.contains("on lines 1, 2"), "{many}");
+    assert_eq!(
+        fs::read_to_string(project.path().join("more.md")).unwrap(),
+        "keep\n"
+    );
+
+    let (preview, failed) = server.call(
+        "replace_text",
+        json!({"edits": [{"file": "more.md", "old": "keep", "new": "changed"}], "preview": true}),
+    );
+    assert!(!failed && preview.contains("+changed"), "{preview}");
+    assert_eq!(
+        fs::read_to_string(project.path().join("more.md")).unwrap(),
+        "keep\n"
+    );
+
+    let (done, failed) = server.call(
+        "replace_text",
+        json!({"edits": [
+            {"file": "notes.md", "old": "one two", "new": "1 2"},
+            {"file": "notes.md", "old": "1 2", "new": "first"},
+            {"file": "more.md", "old": "keep", "new": "changed"}
+        ]}),
+    );
+    assert!(!failed, "{done}");
+    assert_eq!(
+        fs::read_to_string(project.path().join("notes.md")).unwrap(),
+        "first\nthree one\n"
+    );
+    assert_eq!(
+        fs::read_to_string(project.path().join("more.md")).unwrap(),
+        "changed\n"
+    );
+
+    let (done, failed) = server.call(
+        "replace_text",
+        json!({"edits": [{"file": "src/lib.rs", "old": "helper()", "new": "helper_two()", "all": true}]}),
+    );
+    assert!(!failed, "{done}");
+    let (found, failed) = server.call("search", json!({"pattern": "^helper_two$"}));
+    assert!(!failed && found.contains("src/lib.rs"), "{found}");
+
+    let (outside, failed) = server.call(
+        "replace_text",
+        json!({"edits": [{"file": "/etc/hosts", "old": "a", "new": "b"}]}),
+    );
+    assert!(
+        failed && outside.contains("outside the project"),
+        "{outside}"
+    );
+
+    let (missing, failed) = server.call("trace", json!({"symbol": "no_such_symbol"}));
+    assert!(failed && missing.contains("no_such_symbol"), "{missing}");
+
+    let (stats, failed) = server.call("status", json!({}));
+    assert!(!failed && stats.contains("\"symbols\""), "{stats}");
+
+    let stop = Command::new(env!("CARGO_BIN_EXE_latt"))
+        .args(["daemon", "stop"])
+        .current_dir(project.path())
+        .status()
+        .unwrap();
+    assert!(stop.success());
+}
+
+#[test]
+fn test_outside_a_project_a_tool_says_so_and_the_server_stays() {
+    let dir = TempDir::new().unwrap();
+    let mut server = Server::start(dir.path());
+    let (message, failed) = server.call("status", json!({}));
+    assert!(failed && message.contains("latt init"), "{message}");
+    let tools = server.request("tools/list", json!({}));
+    assert!(tools["tools"].is_array());
+}

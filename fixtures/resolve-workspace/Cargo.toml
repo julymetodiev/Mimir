@@ -1,4 +1,4 @@
-# Hand-checked calls for crates/mimir-resolve/tests/fixture.rs. Its own workspace, never built.
+# Hand-checked calls for crates/latt-resolve/tests/fixture.rs. Its own workspace, never built.
 [workspace]
 resolver = "2"
 members = ["alpha", "beta"]

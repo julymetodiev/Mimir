@@ -1,0 +1,24 @@
+[package]
+name = "latt-daemon"
+description = "The Lantern Lattice daemon: a socket server over the engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+latt-protocol.workspace = true
+latt-engine.workspace = true
+latt-parse-core.workspace = true
+latt-resolve.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+latt-parse-rust.workspace = true
+tempfile.workspace = true

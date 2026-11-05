@@ -1,0 +1,20 @@
+[package]
+name = "latt-resolve-scip"
+description = "A SCIP index as Lantern Lattice's semantic source: reading it, keeping it by a hash of the sources, and what to ask about after an edit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+latt-types.workspace = true
+latt-resolve.workspace = true
+latt-lsp.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

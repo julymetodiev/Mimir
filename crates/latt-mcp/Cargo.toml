@@ -1,0 +1,21 @@
+[package]
+name = "latt-mcp"
+description = "The Lantern Lattice MCP server: tools over the client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+latt-protocol.workspace = true
+latt-client.workspace = true
+rmcp.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+

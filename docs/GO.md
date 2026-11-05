@@ -19,22 +19,22 @@ up to the limit every language has: a file over 500 KB is left out by the scanne
 ## 2. The parts
 
 ```
-  mimir-parse-go      ── symbols and references, through tree-sitter
-  mimir-resolve       ── the same rules and the same port, with implementations and several indexes
-  mimir-resolve-scip  ── reading a SCIP index, keeping it by a hash of the sources, which files to ask
-                         about after an edit: what is now in mimir-resolve-ra
-  mimir-resolve-ra    ── what is Rust's own: Cargo roots, failed macros, `rust-analyzer`
-  mimir-resolve-go    ── what is Go's own: `go.mod` roots, `scip-go`, `gopls`
-  mimir-lsp           ── starting a language server, its messages, file URIs
+  latt-parse-go      ── symbols and references, through tree-sitter
+  latt-resolve       ── the same rules and the same port, with implementations and several indexes
+  latt-resolve-scip  ── reading a SCIP index, keeping it by a hash of the sources, which files to ask
+                         about after an edit: what is now in latt-resolve-ra
+  latt-resolve-ra    ── what is Rust's own: Cargo roots, failed macros, `rust-analyzer`
+  latt-resolve-go    ── what is Go's own: `go.mod` roots, `scip-go`, `gopls`
+  latt-lsp           ── starting a language server, its messages, file URIs
 ```
 
 | Crate | Layer | Owns |
 |---|---|---|
-| `mimir-parse-go` | domain | Go through `tree-sitter-go` |
-| `mimir-resolve-scip` | adapter | `decode.rs`, the snapshot of what an index was made from, the choice between kept index, running server and new index |
-| `mimir-resolve-go` | adapter | finding roots, running `scip-go`, asking `gopls`, the versions tested |
+| `latt-parse-go` | domain | Go through `tree-sitter-go` |
+| `latt-resolve-scip` | adapter | `decode.rs`, the snapshot of what an index was made from, the choice between kept index, running server and new index |
+| `latt-resolve-go` | adapter | finding roots, running `scip-go`, asking `gopls`, the versions tested |
 
-- **Nothing is copied.** `decode.rs` and the flow of `load_root` move from `mimir-resolve-ra` to `mimir-resolve-scip`
+- **Nothing is copied.** `decode.rs` and the flow of `load_root` move from `latt-resolve-ra` to `latt-resolve-scip`
   with no change in what Rust does, and each language gives what is its own.
 - **`commands/daemon.rs`** stays the only place that names the sources and the parsers.
 - **`Language::Go`** already exists, and is a family of its own: linking never crosses to another.
@@ -75,12 +75,12 @@ goes through `reflect`.
    compile, which `scip-go` does not. A package with `Incomplete` is reported by `sync` and `status`, with the reason from its
    `Error` or `DepsErrors`. What resolved in it stays. Without `-export` an undefined name is not seen, and without `-test`
    nothing in a test file is.
-2. `scip-go --output FILE`, with no network: `HTTPS_PROXY` and `HTTP_PROXY` name a local port that Mimir took and let go, so
+2. `scip-go --output FILE`, with no network: `HTTPS_PROXY` and `HTTP_PROXY` name a local port that Lantern Lattice took and let go, so
    nothing listens there, and `NO_PROXY` and `no_proxy` are unset.
 
 The second is a way around a fault in `scip-go`, and goes when that is fixed. For each package of another module of a `go.work`,
 it asks that module's host over HTTP for the repository, twice and with no memory of the answer (`hasSameRepoRoot` in
-`internal/loader/loader.go`), only to choose the version in a symbol, which Mimir drops. So it waits on the network, and it sends
+`internal/loader/loader.go`), only to choose the version in a symbol, which Lantern Lattice drops. So it waits on the network, and it sends
 the names of private modules out. Section 7 has the cost. Go itself has no network in this step either, which is why the first
 comes before it.
 
@@ -139,7 +139,7 @@ of the project. No methods. Two definitions, as `f` in `a_linux.go` and `a_windo
 **The tools.**
 
 - They are found on `PATH`, never in the project. `go` itself must be there too, as both run it.
-- One exact version of each is the tested one, constants in `mimir-resolve-go`, and `scripts/check-deps.py` compares
+- One exact version of each is the tested one, constants in `latt-resolve-go`, and `scripts/check-deps.py` compares
   them with the newest, from `proxy.golang.org` (rule 10). Another version still runs, and the daemon's log says so.
 - Without `scip-go`, or when it fails: `gopls` is not asked either, only syntax rules apply, and `sync` says why. Without
   `gopls`: the index stays, and edited files have syntax rules until the next index.
@@ -148,7 +148,7 @@ of the project. No methods. Two definitions, as `f` in `a_linux.go` and `a_windo
 
 **What runs.** An index compiles the project and what it needs, through `go list -export`: the compiler, and for `cgo` the C
 compiler, with what the source asks for as far as Go's list of allowed flags lets it. A `//go:generate` in a project was not run
-(section 7). No test and no code of the project is run. Mimir does not set `GOTOOLCHAIN`, so as for any `go` command a
+(section 7). No test and no code of the project is run. Lantern Lattice does not set `GOTOOLCHAIN`, so as for any `go` command a
 `go.mod` may make Go fetch the toolchain it names. See `SECURITY.md`.
 
 **What goes out.** The first step of an index talks to whatever fetches modules for this machine, as any `go` command does. The
@@ -163,19 +163,19 @@ Added to section 2 of the architecture when they hold, each checked by `scripts/
 
 | # | Target |
 |---|---|
-| GO1 | Every entry of the hand-written list in `crates/mimir-resolve-go/tests/`, covering each row of the table in section 3, holds |
+| GO1 | Every entry of the hand-written list in `crates/latt-resolve-go/tests/`, covering each row of the table in section 3, holds |
 | GO2 | Against `gopls` over all sites of a project: every disagreement falls in a named class of section 7; unclassified 0 |
 | GO3 | After edits, the graph equals the graph from a new index: 0 differences |
 | GO4 | T1, T2, T3 and T4 hold on a Go project of 20 000 symbols, T3 with the build cache filled |
 | GO5 | Across two modules of one `go.work`, a call has its edge |
 
-Section 7 has the numbers, through `mimir` in its last part. GO1, GO3 and GO5 are in `crates/mimir-resolve-go/tests/`, GO2 is
+Section 7 has the numbers, through `latt` in its last part. GO1, GO3 and GO5 are in `crates/latt-resolve-go/tests/`, GO2 is
 `scripts/bench/go_compare.py` and GO4 `scripts/bench/daemon_latency.py`.
 
 ## 6. Machine checks
 
-- `scripts/check-architecture.sh`: the new crates in `allowed`; `mimir-engine` depends on no parser of a language;
-  `mimir-parse-go` is in the pure domain list.
+- `scripts/check-architecture.sh`: the new crates in `allowed`; `latt-engine` depends on no parser of a language;
+  `latt-parse-go` is in the pure domain list.
 - `scripts/check-deps.py`: the versions of `scip-go` and `gopls`, and `tree-sitter-go` as any crate.
 - `cargo test`: the fixture of GO1, skipped with a message when the tools are not installed. CI installs them.
 - `cargo test`: a module of a `go.work`, indexed with the closed port and with a local server named as the proxy that refuses
@@ -186,7 +186,7 @@ Section 7 has the numbers, through `mimir` in its last part. GO1, GO3 and GO5 ar
 
 ## 7. What was measured
 
-`gopls` 0.24.0, `scip-go` 0.2.9, Go 1.27.1, 2026-11-04, on an M1 Pro with 32 GB, without `mimir`. hugo at `fa5a3d4`, 912 files;
+`gopls` 0.24.0, `scip-go` 0.2.9, Go 1.27.1, 2026-11-04, on an M1 Pro with 32 GB, without `latt`. hugo at `fa5a3d4`, 912 files;
 cobra at `adbc881`, 36 files. A site is a name before `(`, or after a `.`, found by a regular expression outside comments and strings.
 
 **Why an index.** All of hugo:
@@ -299,13 +299,13 @@ the same occurrences apart from the version.
 **Across modules,** over the 39 without the root: 1 033 758 uses of a symbol of another of them, of which 7 247 have no definition by
 the symbol without its version. 6 418 of those have one in the other form of section 4. 829 have none.
 
-**Through `mimir`,** at `mimir` of 2026-11-04, with Go's cache on another disk and symbols added in one step.
+**Through `latt`,** at `latt` of 2026-11-04, with Go's cache on another disk and symbols added in one step.
 
 | | hugo | kubernetes |
 |---|---|---|
 | Files, symbols, edges | 936, 19 065, 50 780 | 13 689, 221 808, 1 003 288 |
 | Files outside the build | 14 | 358 |
-| A first `mimir sync`, Go's cache without this project | 331 s | 513 s, from an empty cache |
+| A first `latt sync`, Go's cache without this project | 331 s | 513 s, from an empty cache |
 | Longest root, in that run | 330 s | 202 s, the root, after the others filled the cache |
 | Go's cache grew by | not measured alone | 13.9 GB, from empty |
 | A new daemon, indexes kept | 1.3 to 1.9 s to a first answer | 32 s to a complete graph |
@@ -331,10 +331,10 @@ file not in the index, and the classes around it differ by as much. Why was not 
 | Not in the index, target outside the project | 4 |
 | `gopls` empty, outside the build | 2 |
 
-**What kubernetes found in `mimir`.** Two costs that grow faster than a project, neither seen at 20 000 symbols. For a language with
+**What kubernetes found in `latt`.** Two costs that grow faster than a project, neither seen at 20 000 symbols. For a language with
 an index, a byte offset summed every earlier line for each occurrence, with a scan of all a file's occurrences for each use of a
 constant: a new daemon took 1 246 s and then 131 s. For every language, adding a symbol copied the whole graph: then 33 s. Neither changed one edge
-of 1 003 288, on kubernetes, nor one of 9 006 on Mimir's own Rust.
+of 1 003 288, on kubernetes, nor one of 9 006 on Lantern Lattice's own Rust.
 
 ## 8. Open
 
@@ -370,14 +370,14 @@ of 1 003 288, on kubernetes, nor one of 9 006 on Mimir's own Rust.
 14. **Only `gopls` and `scip-go` were looked at.** There is no other maintained server for Go, by what is known and not by a search.
 15. **Homebrew** has `gopls` 0.24.0 and no `scip-go`, so the formula's caveats name `go install` for both.
 16. **Two modules with one path** have the same symbols, so an edge between them may be lost, and is never wrong.
-17. **Without an index,** as with `MIMIR_NO_SCIP`, `pkg.F()` has no edge, as what a module is imported as comes from `GoSource`.
+17. **Without an index,** as with `LATT_NO_SCIP`, `pkg.F()` has no edge, as what a module is imported as comes from `GoSource`.
 
 ## 9. Order
 
-1. `mimir-resolve-scip`, from `mimir-resolve-ra`, with no change in behaviour: T5 and T6 on Rust.
+1. `latt-resolve-scip`, from `latt-resolve-ra`, with no change in behaviour: T5 and T6 on Rust.
 2. The decoder's new fields, implementations in the port, and definitions across indexes, with no change for Rust.
-3. `mimir-parse-go`, with syntax rules only.
-4. `mimir-resolve-go` with `scip-go`, and the fixture of GO1.
+3. `latt-parse-go`, with syntax rules only.
+4. `latt-resolve-go` with `scip-go`, and the fixture of GO1.
 5. `gopls` for edited files, the second try, and GO3.
 6. GO5, kubernetes, and what they decide of section 8, items 1 and 2.
 7. GO2 and GO4 in `scripts/bench`, and the README, `SECURITY.md`, the Homebrew text and CI.

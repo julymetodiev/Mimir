@@ -13,7 +13,7 @@
 .DS_Store
 Thumbs.db
 
-# Mimir state (for testing)
+# Lantern Lattice state (for testing)
 .agent/
 
 # Environment
@@ -34,7 +34,7 @@ coverage/
 .claude/
 CLAUDE.md
 mcp.json
-.mimir/
+.latt/
 # test-project/
 test-project/target
 fixtures/resolve-workspace/target

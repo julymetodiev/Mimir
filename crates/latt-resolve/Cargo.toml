@@ -1,0 +1,18 @@
+[package]
+name = "latt-resolve"
+description = "Turns extracted references into graph edges: syntax rules, and SCIP where a semantic index exists"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+latt-types.workspace = true
+latt-graph.workspace = true
+latt-parse-core.workspace = true
+
+[dev-dependencies]
+latt-parse-rust.workspace = true

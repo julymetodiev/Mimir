@@ -1,0 +1,185 @@
+//! Applying edits to files, and taking the edited files into the graph at once.
+
+use latt_types::Symbol;
+use std::path::Path;
+use std::sync::Arc;
+
+use crate::actor::GraphActor;
+use crate::error::GraphError;
+use crate::{edit, project_files, scanner, source};
+use latt_edit::{EditError, EditOp, Editor};
+use latt_protocol::{ActivityKind, Edit, EditReport, EditTarget, FileEdit};
+use latt_types::Language;
+
+impl GraphActor {
+    /// Apply edits together. A symbol's lines come from the graph, so if a file changed on disk and
+    /// the watcher has not said so yet, the edit fails its hash check, and is tried once more after
+    /// a scan.
+    pub async fn handle_edit(
+        &mut self,
+        edits: &[Edit],
+        preview: bool,
+        backup: bool,
+    ) -> Result<EditReport, GraphError> {
+        let editor = Editor::new().with_root(&self.root);
+        let editor = if backup {
+            editor.with_backups()
+        } else {
+            editor
+        };
+        match self.apply_edits(&editor, edits, preview).await {
+            Err(GraphError::Edit(EditError::HashMismatch { .. })) => {
+                self.scan_files(false).await?;
+                let report = self.apply_edits(&editor, edits, preview).await?;
+                self.reload_edited(&report, preview)?;
+                Ok(report)
+            }
+            Ok(report) => {
+                self.reload_edited(&report, preview)?;
+                Ok(report)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Write a whole file, new or replaced, and take it into the graph at once.
+    pub async fn handle_write_file(
+        &mut self,
+        path: &Path,
+        content: &str,
+        overwrite: bool,
+    ) -> Result<EditReport, GraphError> {
+        let real = project_files::writable(&self.root, path)?;
+        let written = Editor::new().write_file(&real, content, overwrite).await?;
+        let report = EditReport {
+            files: vec![FileEdit {
+                path: self.relative(&written.file_path),
+                bytes_changed: written.bytes_changed,
+                lines_changed: written.lines_changed,
+                diff: None,
+            }],
+        };
+        self.reload_edited(&report, false)?;
+        Ok(report)
+    }
+
+    async fn apply_edits(
+        &self,
+        editor: &Editor,
+        edits: &[Edit],
+        preview: bool,
+    ) -> Result<EditReport, GraphError> {
+        let ops = edits
+            .iter()
+            .map(|edit| self.edit_op(edit))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut files = Vec::new();
+        if preview {
+            for op in &ops {
+                let diff = editor.preview(op).await?;
+                files.push(FileEdit {
+                    path: self.relative(op.file_path()),
+                    bytes_changed: diff.new_content.len() as i64 - diff.old_content.len() as i64,
+                    lines_changed: diff.new_content.lines().count() as i64
+                        - diff.old_content.lines().count() as i64,
+                    diff: Some(diff.unified),
+                });
+            }
+        } else {
+            for result in editor.apply_batch(&ops).await? {
+                files.push(FileEdit {
+                    path: self.relative(&result.file_path),
+                    bytes_changed: result.bytes_changed,
+                    lines_changed: result.lines_changed,
+                    diff: None,
+                });
+            }
+        }
+        Ok(EditReport { files })
+    }
+
+    fn edit_op(&self, edit: &Edit) -> Result<EditOp, GraphError> {
+        match &edit.target {
+            EditTarget::File(path) => {
+                edit::on_file(&project_files::inside(&self.root, path)?, &edit.change)
+            }
+            EditTarget::Symbol { name, file } => {
+                let found = self.named(name, file.as_deref())?;
+                let symbol = self.the_one_meant(&found, name)?;
+                let path = self
+                    .root
+                    .join(self.file_paths.get(&symbol.file_id).ok_or_else(|| {
+                        GraphError::SymbolNotFound {
+                            name: name.to_string(),
+                        }
+                    })?);
+                let hash = self
+                    .files
+                    .get(&path)
+                    .map(|tracked| tracked.content_hash)
+                    .ok_or_else(|| GraphError::FileNotFound { path: path.clone() })?;
+                let text = self.text_of(symbol.file_id).unwrap_or_else(|| "".into());
+                edit::on_symbol(&path, symbol, hash, &text, &edit.change)
+            }
+        }
+    }
+
+    /// The symbol an edit means. Unlike a question, an edit does not settle for the likeliest: among
+    /// equals it would change the wrong code, so it asks which.
+    fn the_one_meant<'a>(
+        &self,
+        found: &'a [Arc<Symbol>],
+        name: &str,
+    ) -> Result<&'a Arc<Symbol>, GraphError> {
+        match source::likeliest(found, name).as_slice() {
+            [] => Err(GraphError::SymbolNotFound {
+                name: name.to_string(),
+            }),
+            [one] => Ok(one),
+            many => Err(GraphError::AmbiguousSymbol {
+                name: name.to_string(),
+                places: many
+                    .iter()
+                    .map(|symbol| {
+                        let path = self.file_paths.get(&symbol.file_id).cloned();
+                        format!(
+                            "{}:{}",
+                            path.unwrap_or_default().display(),
+                            symbol.range.start_line
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            }),
+        }
+    }
+
+    /// Take edited files into the graph at once, without waiting for the watcher to report them.
+    fn reload_edited(&mut self, report: &EditReport, preview: bool) -> Result<(), GraphError> {
+        if preview {
+            return Ok(());
+        }
+        for file in &report.files {
+            let path = self.root.join(&file.path);
+            let content = std::fs::read_to_string(&path).map_err(|source| GraphError::Read {
+                path: path.clone(),
+                source,
+            })?;
+            let language = Language::from_path(&path);
+            if self.registry.get_by_language(language).is_none() {
+                continue;
+            }
+            if scanner::takes(&self.root, &path) {
+                self.handle_add_file(path, content, language)?;
+            } else {
+                self.handle_remove_path(&path);
+            }
+            if let Some(tracked) = self.files.get(&self.root.join(&file.path)) {
+                let touched = self.graph.symbols_in_file(tracked.file_id);
+                let touched = touched.iter().map(|symbol| symbol.id).collect();
+                self.announce_activity(touched, ActivityKind::Edit);
+            }
+        }
+        Ok(())
+    }
+}

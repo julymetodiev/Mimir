@@ -1,0 +1,13 @@
+[package]
+name = "latt-view-wire"
+description = "What latt view's page is sent, in binary"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+thiserror.workspace = true

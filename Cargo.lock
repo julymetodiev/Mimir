@@ -1012,6 +1012,363 @@ dependencies = [
 ]
 
 [[package]]
+name = "lantern-lattice"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "clap",
+ "futures-util",
+ "latt-client",
+ "latt-daemon",
+ "latt-hook",
+ "latt-mcp",
+ "latt-parse-c",
+ "latt-parse-core",
+ "latt-parse-go",
+ "latt-parse-python",
+ "latt-parse-rust",
+ "latt-parse-ts",
+ "latt-protocol",
+ "latt-resolve",
+ "latt-resolve-clang",
+ "latt-resolve-go",
+ "latt-resolve-lsp",
+ "latt-resolve-ra",
+ "latt-view",
+ "latt-view-wire",
+ "predicates",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite 0.30.0",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "latt-client"
+version = "0.5.0"
+dependencies = [
+ "latt-protocol",
+ "latt-types",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "latt-daemon"
+version = "0.5.0"
+dependencies = [
+ "latt-engine",
+ "latt-parse-core",
+ "latt-parse-rust",
+ "latt-protocol",
+ "latt-resolve",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "latt-edit"
+version = "0.5.0"
+dependencies = [
+ "latt-types",
+ "serde",
+ "tempfile",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "latt-engine"
+version = "0.5.0"
+dependencies = [
+ "chrono",
+ "ignore",
+ "latt-edit",
+ "latt-graph",
+ "latt-parse-core",
+ "latt-parse-rust",
+ "latt-parse-ts",
+ "latt-protocol",
+ "latt-resolve",
+ "latt-resolve-ra",
+ "latt-types",
+ "notify",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "latt-graph"
+version = "0.5.0"
+dependencies = [
+ "arc-swap",
+ "latt-graph-fb",
+ "latt-types",
+ "serde",
+]
+
+[[package]]
+name = "latt-graph-fb"
+version = "0.5.0"
+dependencies = [
+ "flatbuffers",
+ "self_cell",
+]
+
+[[package]]
+name = "latt-hook"
+version = "0.5.0"
+dependencies = [
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "latt-lsp"
+version = "0.5.0"
+dependencies = [
+ "latt-types",
+ "serde_json",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "latt-mcp"
+version = "0.5.0"
+dependencies = [
+ "latt-client",
+ "latt-protocol",
+ "rmcp",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "latt-parse-c"
+version = "0.5.0"
+dependencies = [
+ "latt-parse-core",
+ "latt-types",
+ "tree-sitter",
+ "tree-sitter-c",
+ "tree-sitter-cpp",
+]
+
+[[package]]
+name = "latt-parse-core"
+version = "0.5.0"
+dependencies = [
+ "dashmap",
+ "latt-types",
+ "serde",
+ "tempfile",
+ "tree-sitter",
+]
+
+[[package]]
+name = "latt-parse-go"
+version = "0.5.0"
+dependencies = [
+ "latt-parse-core",
+ "latt-types",
+ "tree-sitter",
+ "tree-sitter-go",
+]
+
+[[package]]
+name = "latt-parse-python"
+version = "0.5.0"
+dependencies = [
+ "latt-parse-core",
+ "latt-types",
+ "tree-sitter",
+ "tree-sitter-python",
+]
+
+[[package]]
+name = "latt-parse-rust"
+version = "0.5.0"
+dependencies = [
+ "latt-parse-core",
+ "latt-types",
+ "tempfile",
+ "tree-sitter",
+ "tree-sitter-rust",
+]
+
+[[package]]
+name = "latt-parse-ts"
+version = "0.5.0"
+dependencies = [
+ "latt-parse-core",
+ "latt-types",
+ "tree-sitter",
+ "tree-sitter-javascript",
+ "tree-sitter-typescript",
+]
+
+[[package]]
+name = "latt-protocol"
+version = "0.5.0"
+dependencies = [
+ "latt-types",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "latt-resolve"
+version = "0.5.0"
+dependencies = [
+ "latt-graph",
+ "latt-parse-core",
+ "latt-parse-rust",
+ "latt-types",
+]
+
+[[package]]
+name = "latt-resolve-clang"
+version = "0.5.0"
+dependencies = [
+ "latt-graph",
+ "latt-lsp",
+ "latt-parse-c",
+ "latt-parse-core",
+ "latt-resolve",
+ "latt-resolve-scip",
+ "latt-types",
+ "serde_json",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "latt-resolve-go"
+version = "0.5.0"
+dependencies = [
+ "latt-graph",
+ "latt-lsp",
+ "latt-parse-core",
+ "latt-parse-go",
+ "latt-resolve",
+ "latt-resolve-scip",
+ "latt-types",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "latt-resolve-lsp"
+version = "0.5.0"
+dependencies = [
+ "latt-graph",
+ "latt-lsp",
+ "latt-parse-core",
+ "latt-parse-python",
+ "latt-parse-ts",
+ "latt-resolve",
+ "latt-types",
+ "serde_json",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "latt-resolve-ra"
+version = "0.5.0"
+dependencies = [
+ "latt-graph",
+ "latt-lsp",
+ "latt-parse-core",
+ "latt-parse-rust",
+ "latt-resolve",
+ "latt-resolve-scip",
+ "latt-types",
+ "serde_json",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "latt-resolve-scip"
+version = "0.5.0"
+dependencies = [
+ "latt-lsp",
+ "latt-resolve",
+ "latt-types",
+ "tempfile",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "latt-types"
+version = "0.5.0"
+dependencies = [
+ "blake3",
+ "hex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "latt-view"
+version = "0.5.0"
+dependencies = [
+ "axum",
+ "getrandom 0.4.3",
+ "latt-client",
+ "latt-protocol",
+ "latt-types",
+ "latt-view-wire",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "latt-view-page"
+version = "0.5.0"
+dependencies = [
+ "bytemuck",
+ "js-sys",
+ "latt-view-wire",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "wgpu",
+]
+
+[[package]]
+name = "latt-view-wire"
+version = "0.5.0"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1092,363 +1449,6 @@ name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
-
-[[package]]
-name = "mimir-cli"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "assert_cmd",
- "clap",
- "futures-util",
- "mimir-client",
- "mimir-daemon",
- "mimir-hook",
- "mimir-mcp",
- "mimir-parse-c",
- "mimir-parse-core",
- "mimir-parse-go",
- "mimir-parse-python",
- "mimir-parse-rust",
- "mimir-parse-ts",
- "mimir-protocol",
- "mimir-resolve",
- "mimir-resolve-clang",
- "mimir-resolve-go",
- "mimir-resolve-lsp",
- "mimir-resolve-ra",
- "mimir-view",
- "mimir-view-wire",
- "predicates",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tokio-tungstenite 0.30.0",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "mimir-client"
-version = "0.5.0"
-dependencies = [
- "mimir-protocol",
- "mimir-types",
- "serde_json",
- "thiserror",
- "tokio",
-]
-
-[[package]]
-name = "mimir-daemon"
-version = "0.5.0"
-dependencies = [
- "mimir-engine",
- "mimir-parse-core",
- "mimir-parse-rust",
- "mimir-protocol",
- "mimir-resolve",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "mimir-edit"
-version = "0.5.0"
-dependencies = [
- "mimir-types",
- "serde",
- "tempfile",
- "thiserror",
- "tokio",
-]
-
-[[package]]
-name = "mimir-engine"
-version = "0.5.0"
-dependencies = [
- "chrono",
- "ignore",
- "mimir-edit",
- "mimir-graph",
- "mimir-parse-core",
- "mimir-parse-rust",
- "mimir-parse-ts",
- "mimir-protocol",
- "mimir-resolve",
- "mimir-resolve-ra",
- "mimir-types",
- "notify",
- "regex",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "mimir-graph"
-version = "0.5.0"
-dependencies = [
- "arc-swap",
- "mimir-graph-fb",
- "mimir-types",
- "serde",
-]
-
-[[package]]
-name = "mimir-graph-fb"
-version = "0.5.0"
-dependencies = [
- "flatbuffers",
- "self_cell",
-]
-
-[[package]]
-name = "mimir-hook"
-version = "0.5.0"
-dependencies = [
- "serde_json",
- "tempfile",
- "thiserror",
-]
-
-[[package]]
-name = "mimir-lsp"
-version = "0.5.0"
-dependencies = [
- "mimir-types",
- "serde_json",
- "thiserror",
- "tracing",
-]
-
-[[package]]
-name = "mimir-mcp"
-version = "0.5.0"
-dependencies = [
- "mimir-client",
- "mimir-protocol",
- "rmcp",
- "schemars",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
-]
-
-[[package]]
-name = "mimir-parse-c"
-version = "0.5.0"
-dependencies = [
- "mimir-parse-core",
- "mimir-types",
- "tree-sitter",
- "tree-sitter-c",
- "tree-sitter-cpp",
-]
-
-[[package]]
-name = "mimir-parse-core"
-version = "0.5.0"
-dependencies = [
- "dashmap",
- "mimir-types",
- "serde",
- "tempfile",
- "tree-sitter",
-]
-
-[[package]]
-name = "mimir-parse-go"
-version = "0.5.0"
-dependencies = [
- "mimir-parse-core",
- "mimir-types",
- "tree-sitter",
- "tree-sitter-go",
-]
-
-[[package]]
-name = "mimir-parse-python"
-version = "0.5.0"
-dependencies = [
- "mimir-parse-core",
- "mimir-types",
- "tree-sitter",
- "tree-sitter-python",
-]
-
-[[package]]
-name = "mimir-parse-rust"
-version = "0.5.0"
-dependencies = [
- "mimir-parse-core",
- "mimir-types",
- "tempfile",
- "tree-sitter",
- "tree-sitter-rust",
-]
-
-[[package]]
-name = "mimir-parse-ts"
-version = "0.5.0"
-dependencies = [
- "mimir-parse-core",
- "mimir-types",
- "tree-sitter",
- "tree-sitter-javascript",
- "tree-sitter-typescript",
-]
-
-[[package]]
-name = "mimir-protocol"
-version = "0.5.0"
-dependencies = [
- "mimir-types",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "mimir-resolve"
-version = "0.5.0"
-dependencies = [
- "mimir-graph",
- "mimir-parse-core",
- "mimir-parse-rust",
- "mimir-types",
-]
-
-[[package]]
-name = "mimir-resolve-clang"
-version = "0.5.0"
-dependencies = [
- "mimir-graph",
- "mimir-lsp",
- "mimir-parse-c",
- "mimir-parse-core",
- "mimir-resolve",
- "mimir-resolve-scip",
- "mimir-types",
- "serde_json",
- "tempfile",
- "tracing",
-]
-
-[[package]]
-name = "mimir-resolve-go"
-version = "0.5.0"
-dependencies = [
- "mimir-graph",
- "mimir-lsp",
- "mimir-parse-core",
- "mimir-parse-go",
- "mimir-resolve",
- "mimir-resolve-scip",
- "mimir-types",
- "serde",
- "serde_json",
- "tempfile",
- "tracing",
-]
-
-[[package]]
-name = "mimir-resolve-lsp"
-version = "0.5.0"
-dependencies = [
- "mimir-graph",
- "mimir-lsp",
- "mimir-parse-core",
- "mimir-parse-python",
- "mimir-parse-ts",
- "mimir-resolve",
- "mimir-types",
- "serde_json",
- "tempfile",
- "tracing",
-]
-
-[[package]]
-name = "mimir-resolve-ra"
-version = "0.5.0"
-dependencies = [
- "mimir-graph",
- "mimir-lsp",
- "mimir-parse-core",
- "mimir-parse-rust",
- "mimir-resolve",
- "mimir-resolve-scip",
- "mimir-types",
- "serde_json",
- "tempfile",
- "tracing",
-]
-
-[[package]]
-name = "mimir-resolve-scip"
-version = "0.5.0"
-dependencies = [
- "mimir-lsp",
- "mimir-resolve",
- "mimir-types",
- "tempfile",
- "thiserror",
- "tracing",
-]
-
-[[package]]
-name = "mimir-types"
-version = "0.5.0"
-dependencies = [
- "blake3",
- "hex",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "mimir-view"
-version = "0.5.0"
-dependencies = [
- "axum",
- "getrandom 0.4.3",
- "mimir-client",
- "mimir-protocol",
- "mimir-types",
- "mimir-view-wire",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "mimir-view-page"
-version = "0.5.0"
-dependencies = [
- "bytemuck",
- "js-sys",
- "mimir-view-wire",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
- "wgpu",
-]
-
-[[package]]
-name = "mimir-view-wire"
-version = "0.5.0"
-dependencies = [
- "thiserror",
-]
 
 [[package]]
 name = "mio"

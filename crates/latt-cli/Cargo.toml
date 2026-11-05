@@ -1,0 +1,47 @@
+[package]
+name = "lantern-lattice"
+description = "The call graph from your compiler or type checker, for humans and coding agents"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "latt"
+path = "src/main.rs"
+
+[dependencies]
+latt-protocol = { workspace = true }
+latt-client = { workspace = true }
+latt-hook = { workspace = true }
+latt-daemon = { workspace = true }
+latt-mcp = { workspace = true }
+latt-view = { workspace = true }
+latt-parse-core = { workspace = true }
+latt-parse-rust = { workspace = true }
+latt-parse-ts = { workspace = true }
+latt-parse-python = { workspace = true }
+latt-resolve = { workspace = true }
+latt-parse-go = { workspace = true }
+latt-parse-c = { workspace = true }
+latt-resolve-ra = { workspace = true }
+latt-resolve-go = { workspace = true }
+latt-resolve-clang = { workspace = true }
+latt-resolve-lsp = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+latt-view-wire = { workspace = true }
+tokio-tungstenite = "0.30.0"
+futures-util = { version = "0.3.34", default-features = false }
+assert_cmd = { workspace = true }
+predicates = { workspace = true }
+tempfile = { workspace = true }

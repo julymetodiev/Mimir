@@ -37,7 +37,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: page
-          path: crates/mimir-view/page
+          path: crates/latt-view/page
 
   build:
     name: Build ${{ matrix.target }}
@@ -58,21 +58,21 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: page
-          path: crates/mimir-view/page
+          path: crates/latt-view/page
       - name: Build
-        run: cargo build --release --locked -p mimir-cli --target ${{ matrix.target }}
+        run: cargo build --release --locked -p lantern-lattice --target ${{ matrix.target }}
       - name: The binary runs
         if: matrix.runs
-        run: target/${{ matrix.target }}/release/mimir --version
+        run: target/${{ matrix.target }}/release/latt --version
       - name: Package
         run: |
-          name="mimir-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          name="latt-${GITHUB_REF_NAME}-${{ matrix.target }}"
           mkdir -p "dist/$name"
-          cp "target/${{ matrix.target }}/release/mimir" LICENSE README.md CHANGELOG.md "dist/$name/"
+          cp "target/${{ matrix.target }}/release/latt" LICENSE README.md CHANGELOG.md "dist/$name/"
           tar -C dist -czf "dist/$name.tar.gz" "$name"
       - uses: actions/upload-artifact@v7
         with:
-          name: mimir-${{ matrix.target }}
+          name: latt-${{ matrix.target }}
           path: dist/*.tar.gz
 
   release:
@@ -86,7 +86,7 @@ jobs:
       # Only the archives: the page's artifact was for the builds.
       - uses: actions/download-artifact@v8
         with:
-          pattern: mimir-*
+          pattern: latt-*
           path: artifacts
           merge-multiple: true
       - name: Checksums
@@ -99,4 +99,4 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" artifacts/* --title "Mimir $GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+        run: gh release create "$GITHUB_REF_NAME" artifacts/* --title "Lantern Lattice $GITHUB_REF_NAME" --notes-file notes.md --verify-tag

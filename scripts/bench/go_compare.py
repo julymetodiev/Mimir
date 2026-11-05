@@ -9,7 +9,7 @@ once more at the end, as section 4 says. Whatever fits no class is printed, and 
 Usage: go_compare.py ROOT INDEX.scip [--limit N] [--out OUT.json]
 
 ROOT is a directory with a go.mod, on a throwaway copy that is a git repository. INDEX is its index, the
-largest `.scip` in `.mimir/graph` for a project of one module.
+largest `.scip` in `.latt/graph` for a project of one module.
 """
 import argparse, json, os, re, subprocess, time
 from collections import Counter, defaultdict

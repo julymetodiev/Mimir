@@ -1,4 +1,4 @@
-# Mimir code formatting configuration
+# Lantern Lattice code formatting configuration
 edition = "2024"
 max_width = 100
 tab_spaces = 4

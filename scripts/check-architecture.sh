@@ -11,7 +11,7 @@ for input in scripts/architecture-budget.txt scripts/approved-crate-items.txt; d
 done
 
 TEST_FILES='(^|/)tests?(/|\.rs$)|_tests?(/|\.rs$)|(^|/)test_[a-z_]+\.rs$|/benches/|/examples/|(^|/)build\.rs$'
-GENERATED='^crates/mimir-graph-fb/src/(generated|edges_generated|references_generated)\.rs$'
+GENERATED='^crates/latt-graph-fb/src/(generated|edges_generated|references_generated)\.rs$'
 src() { # $@ = path prefixes; prints non-test .rs files
   git ls-files --cached --others --exclude-standard -- "$@" | sort -u | grep -E '\.rs$' | grep -v -E "$TEST_FILES" | grep -v -E "$GENERATED" || true
 }
@@ -27,40 +27,40 @@ count() { # $1 = regex, files on stdin; drops inline test modules
   done
   echo "$n"
 }
-deps() { # $1 = crate dir; prints its normal mimir dependencies
+deps() { # $1 = crate dir; prints its normal latt dependencies
   [ -f "crates/$1/Cargo.toml" ] || return 0
-  awk '/^\[dependencies\]/{on=1;next} /^\[/{on=0} on && /^mimir-[a-z-]+ *[.=]/{sub(/ *[.=].*/,"");print}' "crates/$1/Cargo.toml"
+  awk '/^\[dependencies\]/{on=1;next} /^\[/{on=0} on && /^latt-[a-z-]+ *[.=]/{sub(/ *[.=].*/,"");print}' "crates/$1/Cargo.toml"
 }
 # Section 3: which crates each crate may depend on. A crate not listed here has no place.
 allowed() {
   case "$1" in
-    mimir-types) echo "" ;;
-    mimir-parse-core) echo "mimir-types" ;;
-    mimir-parse-rust) echo "mimir-types mimir-parse-core" ;;
-    mimir-parse-ts) echo "mimir-types mimir-parse-core" ;;
-    mimir-parse-python) echo "mimir-types mimir-parse-core" ;;
-    mimir-parse-go) echo "mimir-types mimir-parse-core" ;;
-    mimir-parse-c) echo "mimir-types mimir-parse-core" ;;
-    mimir-graph-fb) echo "" ;;
-    mimir-graph) echo "mimir-types mimir-graph-fb" ;;
-    mimir-resolve) echo "mimir-types mimir-graph mimir-parse-core" ;;
-    mimir-lsp) echo "mimir-types" ;;
-    mimir-resolve-scip) echo "mimir-types mimir-resolve mimir-lsp" ;;
-    mimir-resolve-ra) echo "mimir-types mimir-parse-core mimir-resolve mimir-resolve-scip mimir-lsp" ;;
-    mimir-resolve-go) echo "mimir-types mimir-resolve mimir-resolve-scip mimir-lsp" ;;
-    mimir-resolve-clang) echo "mimir-types mimir-parse-core mimir-resolve mimir-resolve-scip mimir-lsp" ;;
-    mimir-resolve-lsp) echo "mimir-types mimir-parse-core mimir-resolve mimir-lsp" ;;
-    mimir-edit) echo "mimir-types" ;;
-    mimir-hook) echo "" ;;
-    mimir-protocol) echo "mimir-types" ;;
-    mimir-engine) echo "mimir-types mimir-graph mimir-parse-core mimir-resolve mimir-edit mimir-protocol" ;;
-    mimir-daemon) echo "mimir-protocol mimir-engine mimir-parse-core mimir-resolve" ;;
-    mimir-client) echo "mimir-types mimir-protocol" ;;
-    mimir-mcp) echo "mimir-protocol mimir-client" ;;
-    mimir-view-wire) echo "" ;;
-    mimir-view) echo "mimir-types mimir-protocol mimir-client mimir-view-wire" ;;
-    mimir-view-page) echo "mimir-view-wire" ;;
-    mimir-cli) echo "mimir-types mimir-protocol mimir-client mimir-hook mimir-daemon mimir-mcp mimir-view mimir-parse-core mimir-parse-rust mimir-parse-ts mimir-parse-python mimir-parse-go mimir-parse-c mimir-resolve mimir-resolve-ra mimir-resolve-go mimir-resolve-clang mimir-resolve-lsp" ;;
+    latt-types) echo "" ;;
+    latt-parse-core) echo "latt-types" ;;
+    latt-parse-rust) echo "latt-types latt-parse-core" ;;
+    latt-parse-ts) echo "latt-types latt-parse-core" ;;
+    latt-parse-python) echo "latt-types latt-parse-core" ;;
+    latt-parse-go) echo "latt-types latt-parse-core" ;;
+    latt-parse-c) echo "latt-types latt-parse-core" ;;
+    latt-graph-fb) echo "" ;;
+    latt-graph) echo "latt-types latt-graph-fb" ;;
+    latt-resolve) echo "latt-types latt-graph latt-parse-core" ;;
+    latt-lsp) echo "latt-types" ;;
+    latt-resolve-scip) echo "latt-types latt-resolve latt-lsp" ;;
+    latt-resolve-ra) echo "latt-types latt-parse-core latt-resolve latt-resolve-scip latt-lsp" ;;
+    latt-resolve-go) echo "latt-types latt-resolve latt-resolve-scip latt-lsp" ;;
+    latt-resolve-clang) echo "latt-types latt-parse-core latt-resolve latt-resolve-scip latt-lsp" ;;
+    latt-resolve-lsp) echo "latt-types latt-parse-core latt-resolve latt-lsp" ;;
+    latt-edit) echo "latt-types" ;;
+    latt-hook) echo "" ;;
+    latt-protocol) echo "latt-types" ;;
+    latt-engine) echo "latt-types latt-graph latt-parse-core latt-resolve latt-edit latt-protocol" ;;
+    latt-daemon) echo "latt-protocol latt-engine latt-parse-core latt-resolve" ;;
+    latt-client) echo "latt-types latt-protocol" ;;
+    latt-mcp) echo "latt-protocol latt-client" ;;
+    latt-view-wire) echo "" ;;
+    latt-view) echo "latt-types latt-protocol latt-client latt-view-wire" ;;
+    latt-view-page) echo "latt-view-wire" ;;
+    latt-cli) echo "latt-types latt-protocol latt-client latt-hook latt-daemon latt-mcp latt-view latt-parse-core latt-parse-rust latt-parse-ts latt-parse-python latt-parse-go latt-parse-c latt-resolve latt-resolve-ra latt-resolve-go latt-resolve-clang latt-resolve-lsp" ;;
     *) echo "NOT-IN-SPEC" ;;
   esac
 }
@@ -83,8 +83,8 @@ unused_deps() { # dependencies declared but not named in the crate's source
   done
   echo "$n"
 }
-DOMAIN='crates/mimir-types crates/mimir-graph crates/mimir-graph-fb crates/mimir-parse-core crates/mimir-parse-rust crates/mimir-parse-ts crates/mimir-parse-python crates/mimir-parse-go crates/mimir-parse-c'
-TRANSPORT='crates/mimir-cli crates/mimir-mcp crates/mimir-daemon crates/mimir-client crates/mimir-view'
+DOMAIN='crates/latt-types crates/latt-graph crates/latt-graph-fb crates/latt-parse-core crates/latt-parse-rust crates/latt-parse-ts crates/latt-parse-python crates/latt-parse-go crates/latt-parse-c'
+TRANSPORT='crates/latt-cli crates/latt-mcp crates/latt-daemon crates/latt-client crates/latt-view'
 
 now() {
   case "$1" in
@@ -94,15 +94,15 @@ now() {
     wrong_deps) wrong_deps ;;
     unused_deps) unused_deps ;;
     # Rule 3: transports reach the world only through the client or the engine
-    transport_reach) src $TRANSPORT | grep -v -E '^crates/mimir-(client|daemon)/|^crates/mimir-cli/src/commands/daemon\.rs$' | count 'std::fs|tokio::fs|Command::new|mimir_(graph|resolve|engine|parse_core|parse_rust|edit)\b' ;;
+    transport_reach) src $TRANSPORT | grep -v -E '^crates/latt-(client|daemon)/|^crates/latt-cli/src/commands/daemon\.rs$' | count 'std::fs|tokio::fs|Command::new|latt_(graph|resolve|engine|parse_core|parse_rust|edit)\b' ;;
     # Rule 5
     allow_attrs) src crates | count '#!?\[allow\(' ;;
     unwrap_expect) src crates | count '\.unwrap\(\)|\.expect\(' ;;
     swallowed) src crates | count 'let _ = |\.ok\(\);' ;;
     debug_names) src crates | count 'format!\("\{:\?\}"' ;;
     string_errors) src crates | count 'to_string\(\)\.contains\(|err_str' ;;
-    anyhow_libs) src crates | grep -v '^crates/mimir-cli/' | count 'anyhow' ;;
-    env_below_root) src crates | grep -v '^crates/mimir-cli/' | count 'env::var(_os)?\(' ;;
+    anyhow_libs) src crates | grep -v '^crates/latt-cli/' | count 'anyhow' ;;
+    env_below_root) src crates | grep -v '^crates/latt-cli/' | count 'env::var(_os)?\(' ;;
     # Rule 7
     pub_super) src crates | count 'pub\(super\)' ;;
     super_paths) src crates | count '^[^/"]*(^|[^a-z_])super::' ;;
@@ -136,7 +136,7 @@ if [ "${1:-}" = "--new" ]; then
   hits=$( { for f in $( { git diff --name-only "$base" -- 'crates/*.rs'; git ls-files --others --exclude-standard -- 'crates/*.rs'; } | sort -u | grep -v -E "$TEST_FILES" | grep -v -E "$GENERATED" || true); do
               if [ -f "$f" ]; then added "$f"; fi
             done
-          } | { grep -E "$re|anyhow" || true; } | { grep -v -E '^crates/mimir-cli/.*anyhow' || true; } | { grep -v -E ': *use super::\*;' || true; } | { grep -v -E ': *//' || true; })
+          } | { grep -E "$re|anyhow" || true; } | { grep -v -E '^crates/latt-cli/.*anyhow' || true; } | { grep -v -E ': *use super::\*;' || true; } | { grep -v -E ': *//' || true; })
   if [ -n "$approved" ] && [ -n "$hits" ]; then
     while read -r file item; do
       hits=$(grep -v -E "^$file: .*pub\(crate\).*\b$item\b" <<<"$hits" || true)

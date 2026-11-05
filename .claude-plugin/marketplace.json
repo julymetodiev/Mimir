@@ -1,15 +1,15 @@
 {
-  "name": "mimir",
-  "description": "Mimir: the call graph of a project for coding agents",
+  "name": "latt",
+  "description": "Lantern Lattice: the call graph of a project for coding agents",
   "owner": {
     "name": "Julius ML",
     "url": "https://github.com/julymetodiev"
   },
   "plugins": [
     {
-      "name": "mimir",
+      "name": "latt",
       "source": "./integrations/claude-code",
-      "description": "Mimir MCP server and the mimir-code skill",
+      "description": "Lantern Lattice MCP server and the latt-code skill",
       "category": "development"
     }
   ]
