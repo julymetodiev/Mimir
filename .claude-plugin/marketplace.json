@@ -1,6 +1,6 @@
 {
   "name": "latt",
-  "description": "Lantern Lattice: the call graph of a project for coding agents",
+  "description": "Lantern Lattice: the call graph from your compiler or type checker, for humans and coding agents",
   "owner": {
     "name": "Julius ML",
     "url": "https://github.com/julymetodiev"

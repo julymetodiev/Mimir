@@ -4,7 +4,7 @@
 
 <h1 align="center">Lantern Lattice</h1>
 
-<p align="center"><strong>The call graph of your project for coding agents</strong></p>
+<p align="center"><strong>The call graph from your compiler or type checker, for humans and coding agents</strong></p>
 
 <p align="center">
   <a href="https://github.com/julymetodiev/lantern-lattice/actions/workflows/ci.yml"><img src="https://github.com/julymetodiev/lantern-lattice/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
