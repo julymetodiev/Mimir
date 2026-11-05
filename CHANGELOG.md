@@ -11,6 +11,16 @@ All notable changes to Mimir are recorded here. The format follows
 - The site at https://lanternlattice.com/ is published to Cloudflare after a release, instead of to GitHub Pages
   by a workflow of this repository.
 
+### Fixed
+
+- **A search right after an edit sees the edit.** The file watcher read a file when it heard of a write and
+  handed the text on later, so an edit taken in meanwhile could be replaced by the text before it: a symbol
+  just added was missing, or one just removed came back, until the next change of that file. The watcher now
+  hands on only the path, and the graph reads the file when it comes to it. Under load, 10 of 120 runs of the
+  end-to-end test failed before, and none of 240 after.
+- The README installs with `brew install julymetodiev/tap/lantern-lattice`, the formula's name since 0.6.0:
+  `julymetodiev/tap/latt` is no formula.
+
 ## [0.6.1] - 2026-11-05
 
 ### Changed

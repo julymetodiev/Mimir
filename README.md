@@ -47,7 +47,7 @@ On macOS and Linux:
 With [Homebrew](https://brew.sh), on macOS and Linux:
 
 ```bash
-brew install julymetodiev/tap/latt
+brew install julymetodiev/tap/lantern-lattice
 ```
 
 Or download an archive for your platform from the
