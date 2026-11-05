@@ -6,6 +6,25 @@ All notable changes to Mimir are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The Claude Code plugin refuses the first edit with `Edit` or `Write` of a project's file in a session
+  once**, with Lantern Lattice's tools to use instead, which keep the graph up to date. The first read of the
+  project through the shell is refused once too, instead of a reminder an agent could pass by: before, a
+  session that never used Lantern Lattice was never refused a read through the shell. Repeating the call
+  goes through, as before.
+
+- **The site is at https://lanternlattice.com/**, and https://latt.369.is/ leads there.
+
+### Fixed
+
+- **`latt view` starts again.** In 0.6.0 the page stopped at `WebAssembly.Table.set(): Argument 1 is invalid
+  for table`: the release built it with binaryen 108, which named the table of functions as the table of
+  JavaScript values. A page is now built only with the binaryen that `scripts/install-binaryen.sh` names, 133,
+  and `scripts/build-page.sh` refuses another.
+- The Claude Code plugin no longer takes a command after `cd $DIR` or `cd ~/...` for a read of the project: where
+  those lead only the shell can say.
+
 ## [0.6.0] - 2026-11-05
 
 ### Changed
