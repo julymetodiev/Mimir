@@ -32,7 +32,7 @@ jobs:
         run: |
           version=$(awk '/^name = "wasm-bindgen"$/{getline; gsub(/"/,"",$3); print $3}' Cargo.lock)
           cargo install wasm-bindgen-cli --version "$version" --locked
-          sudo apt-get update && sudo apt-get install -y binaryen
+          scripts/install-binaryen.sh "$RUNNER_TEMP/binaryen" >> "$GITHUB_PATH"
       - run: scripts/build-page.sh
       - uses: actions/upload-artifact@v7
         with:

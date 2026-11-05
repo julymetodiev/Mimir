@@ -22,7 +22,7 @@ clippy and tests.
 
 To change the page of `latt view` (`crates/latt-view-page`, or the wire it reads), you also need
 `rustup target add wasm32-unknown-unknown`, `wasm-bindgen-cli` at the version in `Cargo.lock`, and
-`wasm-opt` from binaryen. Then run `scripts/build-page.sh` and commit what it builds:
+`wasm-opt` from binaryen at the version `scripts/install-binaryen.sh --version` prints. Then run `scripts/build-page.sh` and commit what it builds:
 `scripts/check-page.sh` fails until the built page comes from the sources as they are.
 
 ## The rules
