@@ -88,11 +88,12 @@ fi
 place=repos/julymetodiev/homebrew-tap/contents/Formula/lantern-lattice.rb
 work=$(mktemp -d)
 formula > "$work/new.rb"
-# A first release has no file there yet, and so nothing to name as what it replaces.
-sha=$(gh api "$place" --jq .sha 2>/dev/null || true)
-if [ -n "$sha" ]; then
+# A first release has no file there yet, and so nothing to name as what it replaces. `gh` prints the error's
+# body as its answer then, so only its exit code says.
+if sha=$(gh api "$place" --jq .sha 2>/dev/null); then
   gh api "$place" --jq .content | base64 --decode > "$work/old.rb"
 else
+  sha=
   : > "$work/old.rb"
 fi
 diff "$work/old.rb" "$work/new.rb" | head -40 || true
