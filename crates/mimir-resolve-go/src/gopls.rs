@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use mimir_lsp::{Location, LspError, Server, ServerSpec};
+use mimir_lsp::{Location, LspError, Server, ServerSpec, Stopping};
 use mimir_resolve::{LiveDocument, ProjectFile, Target};
 use mimir_resolve_scip::{Answered, Running};
 use mimir_types::ReferenceKind;
@@ -27,7 +27,7 @@ pub struct Gopls {
 impl Gopls {
     /// `zeroConfig: false`, since otherwise opening a file for another system makes a view for that
     /// system and more memory is held.
-    fn start(root: &Path) -> Result<Self, LspError> {
+    fn start(root: &Path, stopping: &Stopping) -> Result<Self, LspError> {
         tools::check_gopls();
         let spec = ServerSpec {
             program: tools::GOPLS.to_string(),
@@ -41,6 +41,7 @@ impl Gopls {
                 },
             }),
             status_method: None,
+            stopping: stopping.clone(),
         };
         let server = Server::start(spec, root)?;
         info!("gopls ready for {}", root.display());
@@ -56,6 +57,7 @@ pub fn answer(
     root: &Path,
     files: &[ProjectFile],
     asked: &[&ProjectFile],
+    stopping: &Stopping,
 ) -> Result<Answered, String> {
     let project = project.canonicalize().map_err(|e| e.to_string())?;
     let root = root.canonicalize().map_err(|e| e.to_string())?;
@@ -65,7 +67,7 @@ pub fn answer(
         .collect();
     let result = servers.with(
         &root,
-        || Gopls::start(&root),
+        || Gopls::start(&root, stopping),
         |gopls| ask_all(&mut gopls.server, &project, &sources, asked),
     );
     match result {

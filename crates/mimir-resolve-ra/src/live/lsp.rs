@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use mimir_lsp::{Location, Server, ServerSpec};
+use mimir_lsp::{Location, Server, ServerSpec, Stopping};
 use serde_json::{Value, json};
 
 const LOAD_TIMEOUT: Duration = Duration::from_secs(600);
@@ -27,7 +27,7 @@ fn config() -> Value {
 }
 
 impl Analyzer {
-    pub fn start(root: &Path) -> Result<Self, String> {
+    pub fn start(root: &Path, stopping: Stopping) -> Result<Self, String> {
         let spec = ServerSpec {
             program: "rust-analyzer".to_string(),
             args: Vec::new(),
@@ -41,6 +41,7 @@ impl Analyzer {
                 "experimental": {"serverStatusNotification": true},
             }),
             status_method: Some("experimental/serverStatus".to_string()),
+            stopping,
         };
         let server = Server::start(spec, root).map_err(|e| e.to_string())?;
         if server.capabilities()["positionEncoding"] != "utf-8" {

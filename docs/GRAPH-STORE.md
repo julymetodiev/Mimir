@@ -106,6 +106,26 @@ On `llvm/lib/Support` with all of `llvm/include` as a project of its own, on `ml
 The first edit took 2.51 s. Before edges had a buffer of their own, a later edit took 1.53 s here. Two builds of one index differ by an edge, so
 a comparison is on one index.
 
+The `llvm`, `libc` and `third-party` folders of LLVM, on 10 cores: 5 million lines of C and C++, 334 729 symbols, 1 374 520 edges.
+
+| | New |
+|---|---|
+| A new index and link | 25 min 18 s |
+| Most memory of the daemon and all it runs | 8.4 GB |
+| Memory after that | 2.1 GB |
+| First query after a stop | 1.3 s, 121 MB |
+| First edit | 12 s |
+| A later edit | 9 s |
+| Memory after four edits | 3.9 to 4.5 GB |
+
+The version before this one did not finish here: it stopped as idle during its sync, twice, with each daemon and its `clangd` still running.
+That also means no old figures stand beside these, and edges were not compared at this size.
+
+`clangd-indexer` says something else each time when it works in parallel: 217 143 to 220 252 places in 8 runs on leveldb. With one thread it
+says 231 438 each time, but that is no fuller in the graph: against all threads, leveldb had 30 edges only with one and 73 only with all,
+yaml-cpp 70 and 10, fmt 6 and 0, curl none, for a sync 2 to 4 times as long. It stays parallel, so two new indexes of a project can differ by
+a few edges: 5 of 22 345 on leveldb. The comparisons above keep one index, and so say nothing of this.
+
 ## 7. Not built
 
 - **Linking only what changed.** At these sizes a link is about 0.1 s, and it can change edges, so it waits for a project that shows the need.
@@ -113,8 +133,8 @@ a comparison is on one index.
   in memory after a start, only from the first link until the daemon stops.
 - **Building new symbols without copying every symbol.** The first step of each edit, about 0.7 s at 101 304 symbols. A query waits for it only
   if it comes right after the edit.
-- **`fill_local_symbols`: several `clangd`, with progress.** One, in order, silent. Over 20 minutes on LLVM, not finished, with the bug of
-  reads counted as changes, since fixed.
-- **`kept_definitions` once.** Reads and decodes the whole index for each answer of `clangd`.
+- **`kept_definitions` once.** Reads and decodes the whole index for each answer of `clangd`. Not yet measured how much of the 9 s of a later
+  edit above is this.
 - **`Dex`: shared paths and ids.** One `String` per reference.
-- **A part of LLVM, as `llvm/lib/Support`, and all of LLVM.** Only on the owner's word.
+- **Progress of an index outside the daemon's log.** `mimir sync` says nothing while one is written.
+- **All of LLVM, with `clang` and the rest.** Only on the owner's word.

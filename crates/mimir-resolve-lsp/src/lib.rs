@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use mimir_lsp::{LspError, Server, ServerSpec};
+use mimir_lsp::{LspError, Server, ServerSpec, Stopping};
 use mimir_resolve::{ProjectFile, Refresh, SemanticIndex, SemanticSource};
 use mimir_types::{ContentHash, Language};
 use serde_json::json;
@@ -61,6 +61,7 @@ pub struct AskedSource {
     state: Mutex<State>,
     /// Whether a project had files of this language, which only then concerns a person.
     has_files: AtomicBool,
+    stopping: Stopping,
 }
 
 #[derive(Default)]
@@ -80,6 +81,7 @@ impl AskedSource {
             language,
             state: Mutex::default(),
             has_files: AtomicBool::new(false),
+            stopping: Stopping::default(),
         }
     }
 }
@@ -115,7 +117,7 @@ impl SemanticSource for AskedSource {
             state.known.clear();
             state.server = None;
         }
-        match state.bring_up_to_date(language, project, cache_dir, files, &own) {
+        match state.bring_up_to_date(language, project, cache_dir, files, &own, &self.stopping) {
             Ok(()) => vec![state.index(&own)],
             Err(LspError::Start { program, source }) => {
                 warn!(
@@ -144,6 +146,10 @@ impl SemanticSource for AskedSource {
             state.server = None;
             state.last_used = None;
         }
+    }
+
+    fn stop(&self) {
+        self.stopping.begin();
     }
 
     fn notes(&self, project: &Path) -> Vec<String> {
@@ -191,6 +197,7 @@ impl State {
         cache_dir: &Path,
         files: &[ProjectFile],
         own: &[&ProjectFile],
+        stopping: &Stopping,
     ) -> Result<(), LspError> {
         let project = project.canonicalize().map_err(|source| LspError::Root {
             path: project.to_path_buf(),
@@ -222,7 +229,7 @@ impl State {
         }
         let first_start = self.server.is_none();
         if first_start {
-            self.server = Some(start(language, &project)?);
+            self.server = Some(start(language, &project, stopping)?);
         }
         let Some(server) = self.server.as_mut() else {
             return Ok(());
@@ -255,7 +262,11 @@ impl State {
     }
 }
 
-fn start(language: &AskedLanguage, project: &Path) -> Result<Server, LspError> {
+fn start(
+    language: &AskedLanguage,
+    project: &Path,
+    stopping: &Stopping,
+) -> Result<Server, LspError> {
     let started = Instant::now();
     let program = language.program;
     let version = Command::new(program).arg("--version").output();
@@ -282,6 +293,7 @@ fn start(language: &AskedLanguage, project: &Path) -> Result<Server, LspError> {
                 "window": {"workDoneProgress": language.reports_recheck},
             }),
             status_method: language.reports_recheck.then(|| PROGRESS.to_string()),
+            stopping: stopping.clone(),
         },
         project,
     )?;

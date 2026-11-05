@@ -50,8 +50,9 @@ const CHECK_EVERY: Duration = Duration::from_secs(5);
 struct LastUsed {
     started: Instant,
     millis: AtomicU64,
-    /// Connections that watch: someone is looking, so the daemon is in use.
-    watching: AtomicUsize,
+    /// Requests being answered, as a sync of a large project is for over half an hour, and
+    /// connections that watch: someone is looking.
+    in_use: AtomicUsize,
 }
 
 impl LastUsed {
@@ -59,7 +60,7 @@ impl LastUsed {
         Self {
             started: Instant::now(),
             millis: AtomicU64::new(0),
-            watching: AtomicUsize::new(0),
+            in_use: AtomicUsize::new(0),
         }
     }
 
@@ -69,7 +70,7 @@ impl LastUsed {
     }
 
     fn idle(&self) -> Duration {
-        if self.watching.load(Ordering::Relaxed) > 0 {
+        if self.in_use.load(Ordering::Relaxed) > 0 {
             return Duration::ZERO;
         }
         let now = self.started.elapsed().as_millis() as u64;
@@ -140,7 +141,11 @@ pub async fn run(
                 Err(e) => error!("Accept failed: {e}"),
             },
             _ = tick.tick() => {
-                if last_used.idle() >= idle {
+                if engine.has_failed() {
+                    error!("The graph actor failed, stopping");
+                    break;
+                }
+                if last_used.idle() >= idle && !engine.is_working() {
                     info!("Idle for {idle:?}, stopping");
                     break;
                 }
@@ -187,7 +192,10 @@ async fn serve(
             }
             Ok(request) => {
                 let stopping = matches!(request.command, IpcCommand::Shutdown);
-                (answer(request, &handle, &identity).await, stopping)
+                last_used.in_use.fetch_add(1, Ordering::Relaxed);
+                let response = answer(request, &handle, &identity).await;
+                last_used.in_use.fetch_sub(1, Ordering::Relaxed);
+                (response, stopping)
             }
             Err(e) => (IpcResponse::err(0, format!("Invalid request: {e}")), false),
         };
@@ -220,7 +228,7 @@ async fn watch(
             return send(&mut writer, &refused).await;
         }
     };
-    last_used.watching.fetch_add(1, Ordering::Relaxed);
+    last_used.in_use.fetch_add(1, Ordering::Relaxed);
     let watched = async {
         send(&mut writer, &IpcResponse::ok(id, IpcData::Watching)).await?;
         let mut unread = String::new();
@@ -244,7 +252,7 @@ async fn watch(
         }
     };
     let ended = watched.await;
-    last_used.watching.fetch_sub(1, Ordering::Relaxed);
+    last_used.in_use.fetch_sub(1, Ordering::Relaxed);
     last_used.touch();
     ended
 }

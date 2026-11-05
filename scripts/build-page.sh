@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 out=crates/mimir-view/page
 wanted=$(awk '/^name = "wasm-bindgen"$/{getline; gsub(/"/,"",$3); print $3}' Cargo.lock)
-have=$(wasm-bindgen --version 2>/dev/null | awk '{print $2}')
+have=$( (wasm-bindgen --version 2>/dev/null || true) | awk '{print $2}')
 [ "$have" = "$wanted" ] || { echo "wasm-bindgen $wanted is needed, found ${have:-none}: cargo install wasm-bindgen-cli --version $wanted --locked" >&2; exit 1; }
 
 cargo build --release --locked --target wasm32-unknown-unknown -p mimir-view-page

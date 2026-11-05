@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
+use mimir_lsp::Stopping;
 use mimir_resolve::{ProjectFile, Refresh, SemanticIndex, SemanticSource};
 use mimir_resolve_scip::{Answered, IndexFiles, IndexLanguage, Running, ScipError, load_root};
 use mimir_types::Language;
@@ -24,6 +25,7 @@ use crate::gopls::Gopls;
 pub struct GoSource {
     servers: Mutex<Running<Gopls>>,
     notes: Mutex<Vec<String>>,
+    stopping: Stopping,
 }
 
 impl SemanticSource for GoSource {
@@ -41,10 +43,27 @@ impl SemanticSource for GoSource {
         // Reading what is saved uses no server, so it must not wait for one that is busy.
         if refresh == Refresh::Saved {
             let mut none = Running::default();
-            return load_all(project, cache_dir, files, &found, &mut none, refresh).0;
+            return load_all(
+                project,
+                cache_dir,
+                files,
+                &found,
+                &mut none,
+                refresh,
+                &self.stopping,
+            )
+            .0;
         }
         let mut servers = self.servers.lock().unwrap_or_else(|e| e.into_inner());
-        let (indexes, notes) = load_all(project, cache_dir, files, &found, &mut servers, refresh);
+        let (indexes, notes) = load_all(
+            project,
+            cache_dir,
+            files,
+            &found,
+            &mut servers,
+            refresh,
+            &self.stopping,
+        );
         *self.notes.lock().unwrap_or_else(|e| e.into_inner()) = notes;
         indexes
     }
@@ -55,6 +74,10 @@ impl SemanticSource for GoSource {
         {
             info!("Stopping {stopped} idle gopls");
         }
+    }
+
+    fn stop(&self) {
+        self.stopping.begin();
     }
 
     fn notes(&self, _project: &Path) -> Vec<String> {
@@ -71,6 +94,7 @@ fn load_all(
     found: &roots::Roots,
     servers: &mut Running<Gopls>,
     refresh: Refresh,
+    stopping: &Stopping,
 ) -> (Vec<SemanticIndex>, Vec<String>) {
     let mut indexes = Vec::new();
     let mut notes = Vec::new();
@@ -90,6 +114,7 @@ fn load_all(
             root: &root.path,
             owners: &found.owners,
             servers: &mut *servers,
+            stopping,
         };
         match load_root(
             &mut language,
@@ -156,6 +181,7 @@ struct Go<'a> {
     root: &'a Path,
     owners: &'a HashMap<&'a Path, PathBuf>,
     servers: &'a mut Running<Gopls>,
+    stopping: &'a Stopping,
 }
 
 impl IndexLanguage for Go<'_> {
@@ -178,7 +204,7 @@ impl IndexLanguage for Go<'_> {
     }
 
     fn write_index(&mut self, root: &Path, paths: &IndexFiles) -> Result<(), ScipError> {
-        index::write(root, paths)
+        index::write(root, paths, self.stopping)
     }
 
     fn answer(
@@ -188,6 +214,6 @@ impl IndexLanguage for Go<'_> {
         files: &[ProjectFile],
         asked: &[&ProjectFile],
     ) -> Result<Answered, String> {
-        gopls::answer(self.servers, project, root, files, asked)
+        gopls::answer(self.servers, project, root, files, asked, self.stopping)
     }
 }

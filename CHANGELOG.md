@@ -6,6 +6,32 @@ All notable changes to Mimir are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **C and C++**, resolved by an index from `clangd-indexer` over the project's `compile_commands.json`, and by
+  a running `clangd` for edited files. A sync says how many compile commands failed.
+
+### Changed
+
+- **The graph is kept in FlatBuffers files and read from disk.** After a stop, a first query on a project of
+  100 000 symbols takes 0.16 s instead of 6.1 s and holds 37 MB instead of 356 MB. A later edit is about as
+  fast as before or faster. Nothing has to be indexed again: a graph from before this is built anew once.
+- A bare name in `trace` and `read` prefers a symbol outside the tests.
+
+### Fixed
+
+- A stopped daemon went on until its index was written, and the next command started a second one writing
+  the same files. A stop now ends every tool and server of the daemon, for all languages.
+- A sync longer than 30 minutes, or an index still being written after a query, no longer counts as idle.
+- A daemon whose graph actor failed stays no more: it stops, and the next command starts a new one.
+- `mimir trace | head` and the like end quietly, with exit code 141, instead of a panic.
+- An exported view no longer calls the code in it Mimir's own.
+
+### Known issues
+
+- `clangd-indexer` differs a little from run to run when it works in parallel, so two new indexes of a project
+  can differ by a few edges (`docs/GRAPH-STORE.md`, section 6).
+
 ## [0.4.1] - 2026-11-04
 
 ### Added

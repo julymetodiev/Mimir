@@ -22,6 +22,10 @@ pub trait SemanticSource: Send + Sync {
     /// Give up whatever is held for the next edit, if unused for `idle`.
     fn stop_if_idle(&self, idle: Duration);
 
+    /// The daemon is stopping: end every tool and server, so that [`Self::load`] returns soon. What it
+    /// returns then is not to be kept.
+    fn stop(&self);
+
     /// What a person should know about the answers for this project, as that its packages are not
     /// installed. It returns at once.
     fn notes(&self, _project: &Path) -> Vec<String> {
@@ -38,6 +42,8 @@ impl SemanticSource for NoSemanticSource {
     }
 
     fn stop_if_idle(&self, _: Duration) {}
+
+    fn stop(&self) {}
 }
 
 /// Several sources as one. Each picks the files of its language out of what it is given, and each
@@ -79,6 +85,12 @@ impl SemanticSource for SemanticSources {
     fn stop_if_idle(&self, idle: Duration) {
         for source in &self.sources {
             source.stop_if_idle(idle);
+        }
+    }
+
+    fn stop(&self) {
+        for source in &self.sources {
+            source.stop();
         }
     }
 
@@ -187,6 +199,7 @@ mod tests {
     struct Fake {
         root: &'static str,
         idle: Mutex<Vec<Duration>>,
+        stopped: std::sync::atomic::AtomicUsize,
     }
 
     impl SemanticSource for Fake {
@@ -199,6 +212,11 @@ mod tests {
 
         fn stop_if_idle(&self, idle: Duration) {
             self.idle.lock().unwrap().push(idle);
+        }
+
+        fn stop(&self) {
+            self.stopped
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
     }
 
@@ -224,5 +242,9 @@ mod tests {
         all.stop_if_idle(Duration::from_secs(1));
         assert_eq!(first.idle.lock().unwrap().len(), 1);
         assert_eq!(second.idle.lock().unwrap().len(), 1);
+
+        all.stop();
+        let stopped = |fake: &Fake| fake.stopped.load(std::sync::atomic::Ordering::Relaxed);
+        assert_eq!((stopped(&first), stopped(&second)), (1, 1));
     }
 }

@@ -74,7 +74,7 @@ mimir-view = { path = "crates/mimir-view" }
 mimir-view-wire = { path = "crates/mimir-view-wire" }
 
 # MCP
-rmcp = { version = "3.8", features = ["server", "macros", "transport-io"] }
+rmcp = { version = "3.9", features = ["server", "macros", "transport-io"] }
 schemars = "1.2.3"
 
 # Error handling

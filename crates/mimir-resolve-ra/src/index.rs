@@ -119,7 +119,12 @@ impl IndexLanguage for Rust<'_> {
             .stderr(Stdio::null())
             .spawn()
             .map_err(|e| ScipError::ToolMissing(format!("cannot run rust-analyzer: {e}")))?;
-        wait_for(&mut child, Instant::now() + TIMEOUT, "rust-analyzer")
+        wait_for(
+            &mut child,
+            Instant::now() + TIMEOUT,
+            "rust-analyzer",
+            &self.analyzers.stopping(),
+        )
     }
 
     fn suspects<'f>(

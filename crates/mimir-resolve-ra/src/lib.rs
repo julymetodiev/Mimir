@@ -8,15 +8,28 @@ use std::path::Path;
 use std::sync::Mutex;
 use std::time::Duration;
 
+use mimir_lsp::Stopping;
 use mimir_resolve::{ProjectFile, Refresh, SemanticIndex, SemanticSource};
 
 pub use index::load_or_generate;
 pub use live::Analyzers;
 
 /// `rust-analyzer` as a semantic source.
-#[derive(Default)]
 pub struct RustAnalyzer {
     analyzers: Mutex<Analyzers>,
+    /// Apart from the analyzers, whose lock is held for as long as an index takes.
+    stopping: Stopping,
+}
+
+impl Default for RustAnalyzer {
+    fn default() -> Self {
+        let analyzers = Analyzers::default();
+        let stopping = analyzers.stopping();
+        Self {
+            analyzers: Mutex::new(analyzers),
+            stopping,
+        }
+    }
 }
 
 impl SemanticSource for RustAnalyzer {
@@ -40,5 +53,9 @@ impl SemanticSource for RustAnalyzer {
         if let Ok(mut analyzers) = self.analyzers.try_lock() {
             analyzers.stop_if_idle(idle);
         }
+    }
+
+    fn stop(&self) {
+        self.stopping.begin();
     }
 }

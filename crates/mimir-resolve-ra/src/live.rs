@@ -18,7 +18,7 @@ use mimir_resolve_scip::Running;
 
 mod lsp;
 
-use mimir_lsp::Location;
+use mimir_lsp::{Location, Stopping};
 
 use crate::live::lsp::Analyzer;
 
@@ -30,9 +30,15 @@ const FORWARDING_METHODS: [&str; 4] = ["into", "try_into", "parse", "to_string"]
 #[derive(Default)]
 pub struct Analyzers {
     running: Running<Analyzer>,
+    stopping: Stopping,
 }
 
 impl Analyzers {
+    /// What ends these analyzers and what writes an index for them.
+    pub fn stopping(&self) -> Stopping {
+        self.stopping.clone()
+    }
+
     /// Stop every analyzer if none was used for `idle`: each holds gigabytes.
     pub fn stop_if_idle(&mut self, idle: Duration) {
         if let Some(stopped) = self.running.stop_if_idle(idle) {
@@ -49,11 +55,12 @@ impl Analyzers {
         files: &[ProjectFile],
         stale: &[&ProjectFile],
     ) -> Result<HashMap<PathBuf, LiveDocument>, String> {
+        let stopping = self.stopping();
         self.running.with(
             root,
             || {
                 let started = Instant::now();
-                let analyzer = Analyzer::start(root)?;
+                let analyzer = Analyzer::start(root, stopping)?;
                 info!(
                     "rust-analyzer ready for {:?} in {:?}",
                     root,

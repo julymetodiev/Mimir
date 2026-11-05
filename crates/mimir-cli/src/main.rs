@@ -1,8 +1,32 @@
 //! CLI for the Mimir semantic code intelligence engine.
 
+/// A reader gone, as `| head` leaves behind, ends this as it ends any other program. Rust ignores the
+/// signal that would do that, and its own `println!` panics instead.
+macro_rules! println {
+    () => {
+        crate::write_line(format_args!(""))
+    };
+    ($($arg:tt)*) => {
+        crate::write_line(format_args!($($arg)*))
+    };
+}
+
 mod commands;
 
 use clap::Parser;
+use std::io::Write;
+
+/// What a shell says of a program a closed pipe ended: 128 and the signal's number.
+const READER_GONE: i32 = 141;
+
+fn write_line(line: std::fmt::Arguments<'_>) {
+    let mut out = std::io::stdout().lock();
+    match out.write_fmt(line).and_then(|()| out.write_all(b"\n")) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => std::process::exit(READER_GONE),
+        Err(e) => panic!("failed printing to stdout: {e}"),
+    }
+}
 
 #[derive(Parser)]
 #[command(name = "mimir")]

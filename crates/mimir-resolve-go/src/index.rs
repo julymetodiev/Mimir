@@ -7,6 +7,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+use mimir_lsp::Stopping;
 use mimir_resolve_scip::{IndexFiles, ScipError, wait_for};
 use serde::Deserialize;
 
@@ -26,16 +27,16 @@ fn failed(e: impl std::fmt::Display) -> ScipError {
 }
 
 /// Write the index of the root at this absolute path.
-pub fn write(root: &Path, paths: &IndexFiles) -> Result<(), ScipError> {
+pub fn write(root: &Path, paths: &IndexFiles, stopping: &Stopping) -> Result<(), ScipError> {
     let until = Instant::now() + TIMEOUT;
     let incomplete = paths.other(INCOMPLETE);
     remove_if_there(&incomplete)?;
-    list_packages(root, paths, until)?;
+    list_packages(root, paths, until, stopping)?;
     let listed = fs::read(paths.other(LISTED)).map_err(failed)?;
     let problems = incomplete_in(&listed);
     remove_if_there(&paths.other(LISTED))?;
     fs::write(&incomplete, problems.join("\n")).map_err(failed)?;
-    run_scip_go(root, paths, until)
+    run_scip_go(root, paths, until, stopping)
 }
 
 fn remove_if_there(path: &Path) -> Result<(), ScipError> {
@@ -53,7 +54,12 @@ fn log_of(paths: &IndexFiles) -> Result<(Stdio, Stdio), ScipError> {
 }
 
 /// Without `-export` an undefined name is not seen, and without `-test` nothing in a test file is.
-fn list_packages(root: &Path, paths: &IndexFiles, until: Instant) -> Result<(), ScipError> {
+fn list_packages(
+    root: &Path,
+    paths: &IndexFiles,
+    until: Instant,
+    stopping: &Stopping,
+) -> Result<(), ScipError> {
     let listed = File::create(paths.other(LISTED)).map_err(failed)?;
     let log = File::create(&paths.log).map_err(failed)?;
     let mut child = Command::new(tools::GO)
@@ -66,7 +72,7 @@ fn list_packages(root: &Path, paths: &IndexFiles, until: Instant) -> Result<(), 
         .stderr(log)
         .spawn()
         .map_err(|e| ScipError::ToolMissing(format!("cannot run go: {e}")))?;
-    wait_for(&mut child, until, tools::GO).map_err(|e| with_log(e, paths))
+    wait_for(&mut child, until, tools::GO, stopping).map_err(|e| with_log(e, paths))
 }
 
 /// A tool's own reason, as a `go.mod` asking for a Go that is not here.
@@ -82,9 +88,14 @@ fn with_log(e: ScipError, paths: &IndexFiles) -> ScipError {
 /// of another module of a `go.work`, twice and with no memory of the answer (`hasSameRepoRoot` in
 /// its `internal/loader/loader.go`), only to choose the version in a symbol, which Mimir drops. This
 /// goes when that is fixed. Go itself has no network in this step, which is why `go list` comes first.
-fn run_scip_go(root: &Path, paths: &IndexFiles, until: Instant) -> Result<(), ScipError> {
+fn run_scip_go(
+    root: &Path,
+    paths: &IndexFiles,
+    until: Instant,
+    stopping: &Stopping,
+) -> Result<(), ScipError> {
     let proxy = closed_port_address()?;
-    run_scip_go_through(root, paths, until, &proxy)
+    run_scip_go_through(root, paths, until, &proxy, stopping)
 }
 
 /// A local address nothing listens on: a port taken and let go.
@@ -101,6 +112,7 @@ pub fn run_scip_go_through(
     paths: &IndexFiles,
     until: Instant,
     proxy: &str,
+    stopping: &Stopping,
 ) -> Result<(), ScipError> {
     let (stdout, stderr) = log_of(paths)?;
     tools::check_scip_go();
@@ -117,7 +129,7 @@ pub fn run_scip_go_through(
         .stderr(stderr)
         .spawn()
         .map_err(|e| ScipError::ToolMissing(format!("cannot run scip-go: {e}")))?;
-    wait_for(&mut child, until, tools::SCIP_GO).map_err(|e| with_log(e, paths))
+    wait_for(&mut child, until, tools::SCIP_GO, stopping).map_err(|e| with_log(e, paths))
 }
 
 /// What `go list -json` says of one package.
@@ -234,7 +246,7 @@ mod tests {
         let cache = tempfile::tempdir().unwrap();
         let paths = IndexFiles::of(cache.path(), STEM_PREFIX, root);
         let until = Instant::now() + Duration::from_secs(60);
-        run_scip_go_through(root, &paths, until, proxy).unwrap();
+        run_scip_go_through(root, &paths, until, proxy, &Stopping::default()).unwrap();
         let index = decode(&fs::read(&paths.index).unwrap()).unwrap();
         index
             .documents

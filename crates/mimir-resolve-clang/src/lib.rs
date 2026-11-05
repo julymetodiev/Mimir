@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
+use mimir_lsp::Stopping;
 use mimir_resolve::{ProjectFile, Refresh, SemanticIndex, SemanticSource};
 use mimir_resolve_scip::{Answered, IndexFiles, IndexLanguage, Running, ScipError, load_root};
 use mimir_types::Language;
@@ -28,6 +29,7 @@ pub struct ClangSource {
     /// and remove the same files.
     servers: Mutex<Running<Clangd>>,
     notes: Mutex<Vec<String>>,
+    stopping: Stopping,
 }
 
 fn is_ours(path: &Path) -> bool {
@@ -48,10 +50,25 @@ impl SemanticSource for ClangSource {
         // Reading what is saved uses no server, so it must not wait for one that is busy.
         if refresh == Refresh::Saved {
             let mut none = Running::default();
-            return load_project(project, cache_dir, files, &mut none, refresh).0;
+            return load_project(
+                project,
+                cache_dir,
+                files,
+                &mut none,
+                refresh,
+                &self.stopping,
+            )
+            .0;
         }
         let mut servers = self.servers.lock().unwrap_or_else(|e| e.into_inner());
-        let (indexes, notes) = load_project(project, cache_dir, files, &mut servers, refresh);
+        let (indexes, notes) = load_project(
+            project,
+            cache_dir,
+            files,
+            &mut servers,
+            refresh,
+            &self.stopping,
+        );
         *self.notes.lock().unwrap_or_else(|e| e.into_inner()) = notes;
         indexes
     }
@@ -62,6 +79,10 @@ impl SemanticSource for ClangSource {
         {
             info!("Stopping {stopped} idle clangd");
         }
+    }
+
+    fn stop(&self) {
+        self.stopping.begin();
     }
 
     fn notes(&self, _project: &Path) -> Vec<String> {
@@ -75,6 +96,7 @@ fn load_project(
     files: &[ProjectFile],
     servers: &mut Running<Clangd>,
     refresh: Refresh,
+    stopping: &Stopping,
 ) -> (Vec<SemanticIndex>, Vec<String>) {
     let Some(database) = database::find(project) else {
         return (Vec::new(), vec![database::missing_note()]);
@@ -84,10 +106,16 @@ fn load_project(
         cache_dir,
         servers,
         files,
+        stopping,
     };
     let root = PathBuf::new();
+    let database = project.join(&language.database);
     match load_root(&mut language, project, cache_dir, &root, files, refresh) {
-        Ok(index) => (vec![index], Vec::new()),
+        Ok(index) => {
+            let paths = IndexFiles::of(cache_dir, index::STEM_PREFIX, &root);
+            let notes = index::failure_note(&paths.log, &database);
+            (vec![index], notes.into_iter().collect())
+        }
         Err(ScipError::NotSaved) => (Vec::new(), Vec::new()),
         Err(e) => {
             warn!("No index for C and C++, using syntax rules: {e}");
@@ -105,6 +133,7 @@ struct Clang<'a> {
     cache_dir: &'a Path,
     servers: &'a mut Running<Clangd>,
     files: &'a [ProjectFile],
+    stopping: &'a Stopping,
 }
 
 impl IndexLanguage for Clang<'_> {
@@ -121,7 +150,13 @@ impl IndexLanguage for Clang<'_> {
     }
 
     fn write_index(&mut self, root: &Path, paths: &IndexFiles) -> Result<(), ScipError> {
-        index::write(root, &root.join(&self.database), self.files, paths)
+        index::write(
+            root,
+            &root.join(&self.database),
+            self.files,
+            paths,
+            self.stopping,
+        )
     }
 
     fn answer(
@@ -133,6 +168,14 @@ impl IndexLanguage for Clang<'_> {
     ) -> Result<Answered, String> {
         let paths = IndexFiles::of(self.cache_dir, index::STEM_PREFIX, Path::new(""));
         let database = root.join(&self.database);
-        clangd::answer(self.servers, project, &database, &paths, files, asked)
+        clangd::answer(
+            self.servers,
+            project,
+            &database,
+            &paths,
+            files,
+            asked,
+            self.stopping,
+        )
     }
 }

@@ -7,7 +7,7 @@ use std::process::Child;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use mimir_lsp::stop;
+use mimir_lsp::{Stopping, stop};
 use mimir_resolve::{ProjectFile, Refresh, SemanticIndex};
 use mimir_types::ContentHash;
 use tracing::{info, warn};
@@ -209,12 +209,21 @@ fn edited_files<'a>(
         .collect()
 }
 
-/// Wait for a tool until a moment, and stop it if that comes first.
-pub fn wait_for(child: &mut Child, until: Instant, tool: &str) -> Result<(), ScipError> {
+/// Wait for a tool until a moment, and stop it if that comes first or the daemon is stopping.
+pub fn wait_for(
+    child: &mut Child,
+    until: Instant,
+    tool: &str,
+    stopping: &Stopping,
+) -> Result<(), ScipError> {
     loop {
         match child.try_wait().map_err(|e| e.to_string())? {
             Some(status) if status.success() => return Ok(()),
             Some(status) => return Err(format!("{tool} exited with {status}").into()),
+            None if stopping.has_begun() => {
+                stop(child);
+                return Err(format!("{tool} was stopped: the daemon is stopping").into());
+            }
             None if Instant::now() > until => {
                 stop(child);
                 return Err(format!("{tool} timed out").into());
@@ -259,6 +268,21 @@ mod tests {
         ) -> Result<Answered, String> {
             Ok(Answered::default())
         }
+    }
+
+    #[test]
+    fn a_tool_ends_when_the_daemon_stops() {
+        let mut child = std::process::Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .unwrap();
+        let stopping = Stopping::default();
+        stopping.begin();
+        let started = Instant::now();
+        let until = started + Duration::from_secs(60);
+        assert!(wait_for(&mut child, until, "sleep", &stopping).is_err());
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert!(child.try_wait().unwrap().is_some(), "it is still running");
     }
 
     #[test]

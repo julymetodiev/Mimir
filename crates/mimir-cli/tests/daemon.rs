@@ -285,6 +285,21 @@ fn test_trace_of_a_constant_shows_who_reads_it() {
 }
 
 #[test]
+fn test_a_reader_gone_ends_the_program_without_a_panic() {
+    let project = project();
+    let (reader, writer) = std::io::pipe().unwrap();
+    drop(reader);
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_mimir"))
+        .args(["daemon", "status"])
+        .current_dir(project.path())
+        .stdout(writer)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(141));
+    assert!(output.stderr.is_empty(), "{:?}", output.stderr);
+}
+
+#[test]
 fn test_files_and_cat_work_from_a_subdirectory() {
     let project = project();
     let dir = project.path();

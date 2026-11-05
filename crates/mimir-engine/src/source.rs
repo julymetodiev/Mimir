@@ -6,9 +6,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 /// The symbol a bare name most likely means: one with exactly that name, then an impl, a type, a
-/// function; a field and a variant last. Among equals the one most called, as what a name means is
-/// most often what is most used, then the first by path and place, so the same question gets the
-/// same symbol.
+/// function; a field and a variant last. Among equals one outside the tests, as a helper of a test is
+/// called often and is rarely what is asked about; then the one most called, as what a name means is
+/// most often what is most used; then the first by path and place, so the same question gets the same
+/// symbol.
 pub fn most_likely<'a>(
     found: &'a [Arc<Symbol>],
     name: &str,
@@ -16,13 +17,37 @@ pub fn most_likely<'a>(
     callers: impl Fn(&Symbol) -> usize,
 ) -> Option<&'a Arc<Symbol>> {
     likeliest(found, name).into_iter().min_by_key(|symbol| {
+        let path = paths.get(&symbol.file_id);
         (
+            path.is_some_and(|path| in_tests(path)),
             std::cmp::Reverse(callers(symbol)),
-            paths.get(&symbol.file_id),
+            path,
             symbol.range.start_line,
             symbol.range.start_col,
         )
     })
+}
+
+/// A file of tests by the common names: in a folder for them, or named for them.
+fn in_tests(path: &std::path::Path) -> bool {
+    let is_folder = |part: &std::ffi::OsStr| {
+        matches!(
+            part.to_str(),
+            Some("test" | "tests" | "testing" | "unittest" | "unittests" | "__tests__")
+        )
+    };
+    let stem = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("");
+    path.parent()
+        .is_some_and(|parent| parent.iter().any(is_folder))
+        || stem.starts_with("test_")
+        || stem.ends_with("_test")
+        || stem.ends_with("_tests")
+        || stem.ends_with("_unittest")
+        || stem.ends_with(".test")
+        || stem.ends_with(".spec")
 }
 
 /// The symbols a bare name is equally likely to mean.
@@ -76,6 +101,28 @@ mod tests {
     use super::*;
 
     const TEXT: &str = "one\ntwo\nthree\nfour\nfive";
+
+    #[test]
+    fn test_files_of_tests_by_their_common_names() {
+        for path in [
+            "db/db_test.cc",
+            "llvm/unittests/Support/Path.cpp",
+            "tests/run.rs",
+            "src/test_io.py",
+            "src/a.test.ts",
+            "pkg/io_test.go",
+        ] {
+            assert!(in_tests(std::path::Path::new(path)), "{path}");
+        }
+        for path in [
+            "db/db_impl.cc",
+            "src/contest.rs",
+            "test.c",
+            "src/testing_utils.rs",
+        ] {
+            assert!(!in_tests(std::path::Path::new(path)), "{path}");
+        }
+    }
 
     #[test]
     fn test_cut_with_context() {

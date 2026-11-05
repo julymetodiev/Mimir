@@ -26,6 +26,7 @@ use mimir_types::{ContentHash, FileId, Symbol};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::sync::{broadcast, oneshot};
 use tracing::{debug, info};
@@ -44,6 +45,30 @@ const QUERY_WAIT: Duration = Duration::from_millis(500);
 
 /// How many events a watcher may fall behind by before it is told that it did.
 const EVENTS_KEPT: usize = 256;
+
+/// How many semantic resolutions are running. They outlive the requests that started them.
+#[derive(Clone, Default)]
+pub struct Working(Arc<AtomicUsize>);
+
+impl Working {
+    fn begin(&self) -> OneRunning {
+        self.0.fetch_add(1, Ordering::Relaxed);
+        OneRunning(self.clone())
+    }
+
+    pub fn any(&self) -> bool {
+        self.0.load(Ordering::Relaxed) > 0
+    }
+}
+
+/// One of [`Working`], for as long as it is held.
+struct OneRunning(Working);
+
+impl Drop for OneRunning {
+    fn drop(&mut self) {
+        (self.0).0.fetch_sub(1, Ordering::Relaxed);
+    }
+}
 
 /// Tracked file info.
 #[derive(Clone)]
@@ -75,6 +100,7 @@ pub struct GraphActor {
     /// What knows more than syntax about the files.
     semantics: Arc<dyn SemanticSource>,
     pending: Option<PendingLink>,
+    working: Working,
     /// What the engine announces, to whoever watches.
     events: broadcast::Sender<GraphEvent>,
     /// Rises each time the edges are resolved anew.
@@ -157,12 +183,18 @@ impl GraphActor {
             writer,
             semantics,
             pending: None,
+            working: Working::default(),
             events: broadcast::channel(EVENTS_KEPT).0,
             generation: 0,
             announced_change: false,
             waiting_syncs: Vec::new(),
             query_wait: QUERY_WAIT,
         }
+    }
+
+    /// What says whether semantic resolution is running.
+    pub fn working(&self) -> Working {
+        self.working.clone()
     }
 
     /// Set how long a query waits for semantic resolution.

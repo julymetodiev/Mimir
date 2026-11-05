@@ -8,7 +8,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum GraphError {
     /// The actor has stopped, so a command was not taken or no answer came back.
-    #[error("The graph engine has stopped")]
+    #[error("The daemon stopped before this finished. Run it again to start a new one.")]
     EngineStopped,
 
     #[error("Symbol not found: {name}")]

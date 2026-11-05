@@ -5,8 +5,9 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use mimir_lsp::{LspError, Server, ServerSpec};
+use mimir_lsp::{LspError, Server, ServerSpec, Stopping};
 use mimir_resolve::{LiveDocument, ProjectFile, Target};
 use mimir_resolve_scip::{Answered, IndexFiles, Running, decode};
 use mimir_types::Language;
@@ -20,6 +21,10 @@ use crate::tools;
 
 const SYMBOL_INFO: &str = "textDocument/symbolInfo";
 const DOCUMENT_SYMBOL: &str = "textDocument/documentSymbol";
+/// Running at once while the local symbols are filled in. More only hold more memory on most machines.
+const MAX_WORKERS: usize = 8;
+/// How many files of them go by between two lines in the daemon's log.
+const PROGRESS_EVERY: usize = 200;
 
 /// One `clangd`. Dropping it ends the process.
 pub struct Clangd {
@@ -28,7 +33,7 @@ pub struct Clangd {
 
 impl Clangd {
     /// With no index of its own, it writes nothing into the project.
-    fn start(project: &Path, database: &Path) -> Result<Self, LspError> {
+    fn start(project: &Path, database: &Path, stopping: &Stopping) -> Result<Self, LspError> {
         let directory = database.parent().unwrap_or(project);
         let spec = ServerSpec {
             program: tools::CLANGD.to_string(),
@@ -46,6 +51,7 @@ impl Clangd {
                 },
             }),
             status_method: None,
+            stopping: stopping.clone(),
         };
         let server = Server::start(spec, project)?;
         info!("clangd ready for {}", project.display());
@@ -67,6 +73,7 @@ pub fn fill_local_symbols(
     root: &Path,
     database: &Path,
     files: &[ProjectFile],
+    stopping: &Stopping,
 ) -> Result<(), LspError> {
     let mut local: HashMap<&str, HashSet<&str>> = HashMap::new();
     for symbol in index.symbols.values().filter(|s| s.local) {
@@ -86,47 +93,104 @@ pub fn fill_local_symbols(
         path: root.to_path_buf(),
         source,
     })?;
-    let mut clangd = Clangd::start(&project, database)?;
-    let mut found = Vec::new();
-    for (file, names) in wanted {
-        let references: Vec<_> = file
-            .references
-            .iter()
-            .filter(|r| is_site(r.kind) && (names.contains(r.name.as_str()) || runs_at_variable(r)))
-            .collect();
-        if references.is_empty() {
-            continue;
-        }
-        let path = project.join(&file.path);
-        clangd
-            .server
-            .update(&path, language_id(&file.path), &file.source)?;
-        let sites: Vec<Site<'_>> = references.iter().map(|r| site_of(r)).collect();
-        let ids = ids_at(&mut clangd.server, &path, &file.source, &sites)?;
-        clangd.server.close(&path)?;
-        let lines: Vec<&str> = file.source.split('\n').collect();
-        for (reference, ids) in references.iter().zip(ids) {
-            let line = reference.range.start_line - 1;
-            let text = lines.get(line as usize).copied().unwrap_or("");
-            for symbol in ids.named.into_iter().chain(ids.built) {
-                found.push(Reference {
-                    symbol,
-                    at: Place {
-                        path: file.path.to_string_lossy().into_owned(),
-                        line,
-                        column: utf16_column(text, reference.range.start_col),
-                        end_column: utf16_column(text, reference.range.end_col),
-                    },
-                });
+    let next = AtomicUsize::new(0);
+    let finished = AtomicUsize::new(0);
+    let ask = || -> Result<Vec<(usize, Vec<Reference>)>, LspError> {
+        let mut clangd = Clangd::start(&project, database, stopping)?;
+        let mut answers = Vec::new();
+        loop {
+            let at = next.fetch_add(1, Ordering::Relaxed);
+            let Some((file, names)) = wanted.get(at) else {
+                return Ok(answers);
+            };
+            answers.push((at, local_uses(&mut clangd, &project, file, names)?));
+            let count = finished.fetch_add(1, Ordering::Relaxed) + 1;
+            if count.is_multiple_of(PROGRESS_EVERY) {
+                info!(
+                    "Local symbols of C and C++: {count} of {} files",
+                    wanted.len()
+                );
             }
         }
-    }
+    };
+    let mut found = std::thread::scope(|scope| {
+        let running: Vec<_> = (0..workers(wanted.len()))
+            .map(|_| scope.spawn(ask))
+            .collect();
+        let mut found = Vec::new();
+        let mut failure = None;
+        for worker in running {
+            match worker.join() {
+                Ok(Ok(answers)) => found.extend(answers),
+                Ok(Err(e)) => {
+                    // The others have nothing to add to a list that stays incomplete.
+                    next.store(wanted.len(), Ordering::Relaxed);
+                    failure.get_or_insert(e);
+                }
+                Err(panic) => std::panic::resume_unwind(panic),
+            }
+        }
+        failure.map_or(Ok(found), Err)
+    })?;
+    // In the order of the files, however the work fell out.
+    found.sort_unstable_by_key(|(at, _)| *at);
+    let found: Vec<Reference> = found.into_iter().flat_map(|(_, uses)| uses).collect();
     index.references.extend(
         found
             .into_iter()
             .filter(|r| index.symbols.contains_key(&r.symbol)),
     );
     Ok(())
+}
+
+/// How many `clangd` to run: each takes more than a core, and on a large project over a gigabyte.
+fn workers(files: usize) -> usize {
+    let cores = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
+    (cores / 2).clamp(1, MAX_WORKERS).min(files)
+}
+
+/// What one `clangd` says of the sites in one file whose name is a local symbol there.
+fn local_uses(
+    clangd: &mut Clangd,
+    project: &Path,
+    file: &ProjectFile,
+    names: &HashSet<&str>,
+) -> Result<Vec<Reference>, LspError> {
+    let references: Vec<_> = file
+        .references
+        .iter()
+        .filter(|r| is_site(r.kind) && (names.contains(r.name.as_str()) || runs_at_variable(r)))
+        .collect();
+    let mut found = Vec::new();
+    if references.is_empty() {
+        return Ok(found);
+    }
+    let path = project.join(&file.path);
+    clangd
+        .server
+        .update(&path, language_id(&file.path), &file.source)?;
+    let sites: Vec<Site<'_>> = references.iter().map(|r| site_of(r)).collect();
+    let ids = ids_at(&mut clangd.server, &path, &file.source, &sites)?;
+    clangd.server.close(&path)?;
+    let lines: Vec<&str> = file.source.split('\n').collect();
+    for (reference, ids) in references.iter().zip(ids) {
+        let line = reference.range.start_line - 1;
+        let end_line = reference.range.end_line - 1;
+        let text_of = |line: u32| lines.get(line as usize).copied().unwrap_or("");
+        for symbol in ids.named.into_iter().chain(ids.built) {
+            found.push(Reference {
+                symbol,
+                at: Place {
+                    path: file.path.to_string_lossy().into_owned(),
+                    line,
+                    column: utf16_column(text_of(line), reference.range.start_col),
+                    end_line,
+                    end_column: utf16_column(text_of(end_line), reference.range.end_col),
+                },
+            });
+        }
+    }
+    Ok(found)
 }
 
 /// What `clangd` says of edited files. Without it they have syntax rules until the next index.
@@ -137,12 +201,13 @@ pub fn answer(
     paths: &IndexFiles,
     files: &[ProjectFile],
     asked: &[&ProjectFile],
+    stopping: &Stopping,
 ) -> Result<Answered, String> {
     let project = project.canonicalize().map_err(|e| e.to_string())?;
     let places = kept_definitions(paths)?;
     let result = servers.with(
         &project,
-        || Clangd::start(&project, database),
+        || Clangd::start(&project, database, stopping),
         |clangd| ask_all(&mut clangd.server, &project, &places, files, asked),
     );
     match result {

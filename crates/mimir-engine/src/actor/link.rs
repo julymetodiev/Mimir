@@ -83,8 +83,11 @@ impl GraphActor {
         let files: Vec<ProjectFile> = self.sources.values().cloned().collect();
         let (root, cache_dir, scan) = (self.root.clone(), self.graph_dir(), files.clone());
         let semantics = self.semantics.clone();
-        let indexes =
-            tokio::task::spawn_blocking(move || semantics.load(&root, &cache_dir, &scan, refresh));
+        let running = self.working.begin();
+        let indexes = tokio::task::spawn_blocking(move || {
+            let _running = running;
+            semantics.load(&root, &cache_dir, &scan, refresh)
+        });
         self.pending = Some(PendingLink {
             indexes,
             files,

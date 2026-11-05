@@ -72,7 +72,7 @@ impl Ui {
         let counts = self.counts.text_content().unwrap_or_default();
         let counts = counts.trim_end_matches(", live");
         self.counts.set_text_content(Some(&format!(
-            "{counts}. A picture of Mimir's own code: `mimir view` shows yours, live."
+            "{counts}. A picture of this code at one moment: `mimir view` shows a project live."
         )));
     }
 

@@ -35,6 +35,39 @@ impl SemanticSource for HeldIndex {
     }
 
     fn stop_if_idle(&self, _: Duration) {}
+
+    fn stop(&self) {
+        self.release();
+    }
+}
+
+/// Stopping ends what is running and waits for it, so that nothing of it outlives the daemon.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stopping_ends_a_running_index_and_waits_for_it() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    std::fs::write(root.join("a.rs"), "fn a() {}\n").unwrap();
+
+    let source = Arc::new(HeldIndex::default());
+    let engine = start(
+        root.clone(),
+        vec![Arc::new(mimir_parse_rust::RustAdapter::new())],
+        source.clone(),
+    )
+    .await;
+    let handle = engine.handle().clone();
+    handle.stats().await.unwrap();
+    let syncing = tokio::spawn(async move { handle.sync_complete(true, false).await });
+    while !engine.is_working() {
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+
+    assert!(!engine.has_failed());
+    tokio::time::timeout(Duration::from_secs(10), engine.stop())
+        .await
+        .expect("stopping waited for the index to end by itself");
+    assert!(*source.released.lock().unwrap());
+    assert!(syncing.await.unwrap().is_err(), "nothing was finished");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -80,6 +113,7 @@ async fn test_queries_are_answered_during_a_sync_and_the_sync_still_ends() {
         "edges stay as syntax rules give them"
     );
     assert!(!syncing.is_finished());
+    assert!(engine.is_working());
 
     source.release();
     let result = tokio::time::timeout(wait, syncing)
@@ -89,6 +123,7 @@ async fn test_queries_are_answered_during_a_sync_and_the_sync_still_ends() {
         .unwrap();
     assert!(result.link.is_some());
     assert!(result.saved_to.is_some());
+    assert!(!engine.is_working());
     let found = handle.find_symbol("callee").await.unwrap();
     let trace = handle.trace(found.symbols[0].id).await.unwrap();
     assert!(!trace.provisional);
@@ -225,6 +260,8 @@ impl SemanticSource for CountedSource {
     }
 
     fn stop_if_idle(&self, _: Duration) {}
+
+    fn stop(&self) {}
 }
 
 async fn callers_of(handle: &mimir_engine::GraphHandle, name: &str) -> Vec<String> {

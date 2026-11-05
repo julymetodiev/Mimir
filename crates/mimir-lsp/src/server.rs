@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::mpsc::{Receiver, channel};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, channel};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use tracing::debug;
 
 use crate::wire::{Reader, path_of, uri_of, write_message};
-use crate::{Location, LspError, ServerSpec};
+use crate::{Location, LspError, ServerSpec, Stopping};
 
 const LOAD_TIMEOUT: Duration = Duration::from_secs(600);
 /// The first question about a package waits for that package's analysis.
@@ -23,6 +23,8 @@ const CANCELLED: i64 = -32802;
 const ATTEMPTS: usize = 6;
 /// How many questions are out at once.
 const BATCH: usize = 32;
+/// How long a stop may wait for someone waiting on an answer to see it.
+const LOOK_EVERY: Duration = Duration::from_millis(100);
 
 /// One language server. Dropping it ends the process.
 pub struct Server {
@@ -34,6 +36,7 @@ pub struct Server {
     capabilities: Value,
     /// What the server was told each open file holds, and its version.
     open: HashMap<PathBuf, (ContentHash, i64)>,
+    stopping: Stopping,
 }
 
 impl Server {
@@ -78,6 +81,7 @@ impl Server {
             next_id: 0,
             capabilities: Value::Null,
             open: HashMap::new(),
+            stopping: spec.stopping.clone(),
         };
         let uri = uri_of(&root);
         let init = server.request(
@@ -103,7 +107,7 @@ impl Server {
 
     /// The next state it reported, waiting up to `timeout`. `None` if none came.
     pub fn next_status(&self, timeout: Duration) -> Option<Value> {
-        self.status.recv_timeout(timeout).ok()
+        self.receive(&self.status, timeout, "its state").ok()
     }
 
     /// Tell the server what a file holds now.
@@ -255,7 +259,7 @@ impl Server {
                 let left = QUERY_TIMEOUT
                     .checked_sub(started.elapsed())
                     .ok_or_else(timed_out)?;
-                let answer = self.answers.recv_timeout(left).map_err(|_| timed_out())?;
+                let answer = self.receive(&self.answers, left, method)?;
                 let Some(index) = answer["id"]
                     .as_u64()
                     .and_then(|id| id.checked_sub(first))
@@ -308,7 +312,7 @@ impl Server {
                 let left = timeout
                     .checked_sub(started.elapsed())
                     .ok_or_else(timed_out)?;
-                let answer = self.answers.recv_timeout(left).map_err(|_| timed_out())?;
+                let answer = self.receive(&self.answers, left, method)?;
                 if answer["id"] != id {
                     continue;
                 }
@@ -331,6 +335,32 @@ impl Server {
         Err(LspError::Cancelled {
             method: method.to_string(),
         })
+    }
+
+    /// The next message, or why there is none.
+    fn receive(
+        &self,
+        from: &Receiver<Value>,
+        within: Duration,
+        method: &str,
+    ) -> Result<Value, LspError> {
+        let timed_out = || LspError::TimedOut {
+            method: method.to_string(),
+        };
+        let started = Instant::now();
+        loop {
+            if self.stopping.has_begun() {
+                return Err(LspError::Stopping);
+            }
+            let left = within
+                .checked_sub(started.elapsed())
+                .ok_or_else(timed_out)?;
+            match from.recv_timeout(left.min(LOOK_EVERY)) {
+                Ok(message) => return Ok(message),
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => return Err(timed_out()),
+            }
+        }
     }
 
     fn notify(&self, method: &str, params: Value) -> Result<(), LspError> {

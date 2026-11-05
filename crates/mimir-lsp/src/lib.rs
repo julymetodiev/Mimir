@@ -5,10 +5,26 @@ mod server;
 mod wire;
 
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde_json::Value;
 
 pub use server::{Server, stop};
+
+/// Says that what runs should end now, for whoever waits on a tool or a server.
+#[derive(Clone, Default)]
+pub struct Stopping(Arc<AtomicBool>);
+
+impl Stopping {
+    pub fn begin(&self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+
+    pub fn has_begun(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
+}
 
 /// How to run one language server.
 pub struct ServerSpec {
@@ -19,6 +35,8 @@ pub struct ServerSpec {
     pub capabilities: Value,
     /// A notification it reports its state with, given to [`Server::next_status`].
     pub status_method: Option<String>,
+    /// Ends whatever waits for its answers.
+    pub stopping: Stopping,
 }
 
 /// A definition's name: an absolute path, and a 0-based range on one line.
@@ -46,6 +64,8 @@ pub enum LspError {
     NoPipe { program: String },
     #[error("the language server stopped: {0}")]
     Stopped(#[source] std::io::Error),
+    #[error("the daemon is stopping")]
+    Stopping,
     #[error("the lock on the language server's input was poisoned")]
     Poisoned,
     #[error("{method} timed out")]

@@ -26,8 +26,8 @@ On macOS and Linux:
 | JavaScript | Supported | `tsrs` |
 | Python | Supported | `pyrefly` |
 | Go | Supported | `scip-go` and `gopls` |
-| C | Next | |
-| C++ | Next | |
+| C | Supported | `clangd-indexer` and `clangd` |
+| C++ | Supported | `clangd-indexer` and `clangd` |
 | Java | Next | |
 
 <p align="center">
@@ -61,7 +61,7 @@ Or build it, with Rust 1.95 or newer:
 cargo install --git https://github.com/julymetodiev/Mimir mimir-cli
 ```
 
-For exact answers, Mimir needs `rust-analyzer` for Rust, [`tsrs`](https://github.com/oxc-project/tsrs) for TypeScript and JavaScript, [`pyrefly`](https://github.com/facebook/pyrefly) for Python, and `go` with [`scip-go`](https://github.com/scip-code/scip-go) and `gopls` for Go. In a Python project, install its packages in a `.venv` at the top: without them less is answered.
+For exact answers, Mimir needs `rust-analyzer` for Rust, [`tsrs`](https://github.com/oxc-project/tsrs) for TypeScript and JavaScript, [`pyrefly`](https://github.com/facebook/pyrefly) for Python, `go` with [`scip-go`](https://github.com/scip-code/scip-go) and `gopls` for Go, and `clangd` with `clangd-indexer` for C and C++. In a Python project, install its packages in a `.venv` at the top: without them less is answered. A C or C++ project needs a `compile_commands.json`, at the top or in `build/`, and Mimir never runs what makes one, as that runs the project's code.
 
 ```bash
 rustup component add rust-analyzer rust-src
@@ -70,6 +70,8 @@ pipx install pyrefly
 go install github.com/scip-code/scip-go/cmd/scip-go@latest
 go install golang.org/x/tools/gopls@latest
 ```
+
+`clangd` comes with `xcode-select --install` on a Mac and with the system's package on Linux. `clangd-indexer` is in `clangd_indexing_tools` of a [release of clangd](https://github.com/clangd/clangd/releases).
 
 ## Use it
 

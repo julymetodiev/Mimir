@@ -421,13 +421,14 @@ fn check_edges(graph: fb::Graph<'_>, stored: fb::Edges<'_>) -> Result<(), FileEr
     let incoming = stored.incoming().ok_or(broken("no incoming"))?;
     let in_offsets = stored.in_offsets().ok_or(broken("no in_offsets"))?;
     for edge in edges.iter() {
-        if edge.from() as usize >= count
-            || edge.to() as usize >= count
-            || edge.start() > edge.end()
-            || edge_of(edge.kind()).is_none()
-            || confidence_of(edge.confidence()).is_none()
-        {
+        if edge.from() as usize >= count || edge.to() as usize >= count {
             return Err(broken("an edge out of range"));
+        }
+        if edge.start() > edge.end() {
+            return Err(broken("an edge whose place ends before it starts"));
+        }
+        if edge_of(edge.kind()).is_none() || confidence_of(edge.confidence()).is_none() {
+            return Err(broken("an edge of an unknown kind"));
         }
     }
     let offsets_right = |offsets: fb::Vector<'_, u32>| {

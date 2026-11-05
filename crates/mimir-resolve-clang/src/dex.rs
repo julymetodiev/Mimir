@@ -26,6 +26,8 @@ pub struct Place {
     pub path: String,
     pub line: u32,
     pub column: u32,
+    /// Another line than `line` for what a use spans, as a raw string that builds a `StringRef`.
+    pub end_line: u32,
     pub end_column: u32,
 }
 
@@ -183,10 +185,11 @@ fn place(lines: &[String], roots: &[String]) -> Option<Place> {
         .filter_map(|number| number.parse().ok())
         .collect();
     match numbers[..] {
-        [line, column, _, end_column] => Some(Place {
+        [line, column, end_line, end_column] => Some(Place {
             path,
             line,
             column,
+            end_line,
             end_column,
         }),
         _ => None,
@@ -407,10 +410,25 @@ Object:
                 path: "s.cc".to_string(),
                 line: 8,
                 column: 12,
+                end_line: 8,
                 end_column: 15
             }
         );
         assert_eq!(dex.symbols["1234"].at.path, "s.h");
+    }
+
+    /// The implicit `StringRef` of `StringRef s = R"(` ends on another line, at a smaller column.
+    #[test]
+    fn a_use_over_several_lines_keeps_the_line_it_ends_on() {
+        let text = "--- !Refs\nID: A\nReferences:\n  - Kind: 4\n    Location:\n      FileURI: 'file:///p/a.cc'\n      Start:\n        Line: 3\n        Column: 20\n      End:\n        Line: 7\n        Column: 2\n";
+        let mut references = Refs::default();
+        let record: Vec<String> = text.lines().map(str::to_string).collect();
+        read_references(&record, &["/p/".to_string()], &mut references);
+        let at = &references.uses[0].at;
+        assert_eq!(
+            (at.line, at.column, at.end_line, at.end_column),
+            (3, 20, 7, 2)
+        );
     }
 
     #[test]

@@ -113,13 +113,19 @@ impl Document {
         put_message(&mut out, 1, path.as_bytes());
         for (place, symbol, roles) in &self.occurrences {
             // A file that cannot be read keeps its columns: they are right for most lines.
-            let column = |column| {
+            let column = |line: u32, column| {
                 lines
-                    .get(place.line as usize)
-                    .map_or(column, |line| byte_column(line, column))
+                    .get(line as usize)
+                    .map_or(column, |text| byte_column(text, column))
             };
+            // Three numbers if it ends on the line it starts on, as `scip.proto` says, or else four.
+            let mut numbers = vec![place.line, column(place.line, place.column)];
+            if place.end_line != place.line {
+                numbers.push(place.end_line);
+            }
+            numbers.push(column(place.end_line, place.end_column));
             let mut range = Vec::new();
-            for number in [place.line, column(place.column), column(place.end_column)] {
+            for number in numbers {
                 put_varint(&mut range, u64::from(number));
             }
             let mut occurrence = Vec::new();
@@ -188,6 +194,7 @@ mod tests {
                 path: path.to_string(),
                 line,
                 column: 0,
+                end_line: line,
                 end_column: name.len() as u32,
             },
         }
@@ -237,6 +244,7 @@ mod tests {
                 path: path.to_string(),
                 line: 0,
                 column: 0,
+                end_line: 0,
                 end_column: 4,
             },
         };
@@ -262,7 +270,18 @@ mod tests {
                 path: "b.c".to_string(),
                 line: 5,
                 column: 4,
+                end_line: 5,
                 end_column: 5,
+            },
+        });
+        dex.references.push(Reference {
+            symbol: "G".to_string(),
+            at: Place {
+                path: "c.cc".to_string(),
+                line: 3,
+                column: 20,
+                end_line: 7,
+                end_column: 2,
             },
         });
         dex.overrides.push(("G".to_string(), "F".to_string()));
@@ -279,6 +298,16 @@ mod tests {
             (5, 4, 5)
         );
         assert_eq!(in_b[0].roles, 0);
+        let over_lines = &index.documents[Path::new("c.cc")][0];
+        assert_eq!(
+            (
+                over_lines.line,
+                over_lines.column,
+                over_lines.end_line,
+                over_lines.end_column
+            ),
+            (3, 20, 7, 2)
+        );
         assert_eq!(
             index.implementations,
             [("cxx G g().".to_string(), "cxx F f().".to_string())]
