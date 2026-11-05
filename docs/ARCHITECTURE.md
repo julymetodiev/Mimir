@@ -201,3 +201,5 @@ Built for JavaScript, TypeScript, Python and Go, and T1 to T8 are measured for R
 through tree-sitter, behind the same port as Rust. JavaScript, TypeScript and Python are resolved by a running language
 server: `tsrs`, in [TYPESCRIPT.md](TYPESCRIPT.md), and `pyrefly`, in [PYTHON.md](PYTHON.md). Go works as Rust does, with an
 index and a server for edited files, in [GO.md](GO.md). A language server is installed apart, and is never linked.
+
+C# has a [proposed contract and Roslyn probe](CSHARP.md). Runtime support is not implemented by that proposal.
