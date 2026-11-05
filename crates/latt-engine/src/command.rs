@@ -27,6 +27,13 @@ pub enum GraphCommand {
         reply: oneshot::Sender<Result<bool, GraphError>>,
     },
 
+    /// A file changed on disk. The actor reads it when it comes to this, not the sender before:
+    /// text read earlier would undo an edit the actor took in meanwhile.
+    Changed {
+        path: PathBuf,
+        reply: oneshot::Sender<Result<(), GraphError>>,
+    },
+
     /// Forget a file, or everything under a directory, that is gone from the disk.
     RemovePath { path: PathBuf },
 

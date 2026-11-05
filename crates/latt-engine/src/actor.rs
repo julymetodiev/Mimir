@@ -236,6 +236,11 @@ impl GraphActor {
                     answer(reply, result);
                 }
 
+                GraphCommand::Changed { path, reply } => {
+                    let result = self.handle_changed(&path);
+                    answer(reply, result);
+                }
+
                 GraphCommand::RemovePath { path } => {
                     self.handle_remove_path(&path);
                 }

@@ -2,7 +2,7 @@
 
 use crate::actor::{GraphActor, TrackedFile};
 use crate::error::GraphError;
-use crate::save;
+use crate::{save, scanner};
 use latt_graph::FileEntry;
 use latt_resolve::ProjectFile;
 use latt_types::{ContentHash, FileId, Language, QualifiedName, Symbol, SymbolId, SymbolKind};
@@ -198,6 +198,39 @@ impl GraphActor {
             self.graph.change_files(&ids, Vec::new(), Vec::new());
         }
         self.needs_link |= !gone.is_empty();
+    }
+
+    /// Take in a file as it is on disk now: added or replaced if the project takes it, forgotten if
+    /// not. A file in a language with no adapter changes nothing.
+    pub fn reload_path(&mut self, path: &Path) -> Result<(), GraphError> {
+        let language = Language::from_path(path);
+        if self.registry.get_by_language(language).is_none() {
+            return Ok(());
+        }
+        let content = std::fs::read_to_string(path).map_err(|source| GraphError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        if scanner::takes(&self.root, path) {
+            self.handle_add_file(path.to_path_buf(), content, language)?;
+        } else {
+            self.handle_remove_path(path);
+        }
+        Ok(())
+    }
+
+    /// A file a watcher saw change, read when the actor comes to it, so that an edit taken in
+    /// since the watcher heard of it stays. A file gone since is forgotten.
+    pub fn handle_changed(&mut self, path: &Path) -> Result<(), GraphError> {
+        match self.reload_path(path) {
+            Err(GraphError::Read { source, .. })
+                if source.kind() == std::io::ErrorKind::NotFound =>
+            {
+                self.handle_remove_path(path);
+                Ok(())
+            }
+            other => other,
+        }
     }
 
     /// Read what a link needs of the files a saved graph holds and this run has not read. A start

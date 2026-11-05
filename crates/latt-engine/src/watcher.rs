@@ -180,35 +180,27 @@ impl FileWatcher {
     async fn handle_event(commands: &CommandSender, event: WatchEvent) -> Result<(), GraphError> {
         match event {
             WatchEvent::Changed(path) => {
-                let language = Language::from_path(&path);
-                if !language.is_known() {
+                if !Language::from_path(&path).is_known() {
                     debug!("Ignoring file in no known language: {}", path.display());
                     return Ok(());
                 }
-
-                let content = match std::fs::read_to_string(&path) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        warn!("Failed to read {}: {}", path.display(), e);
-                        return Ok(());
-                    }
-                };
-
-                // Adding a file the graph has replaces it.
+                // Only the path goes: the actor reads the file when it comes to it, after any edit
+                // sent before, so text read here cannot undo one.
                 let (reply_tx, reply_rx) = oneshot::channel();
                 commands
-                    .send(GraphCommand::AddFile {
+                    .send(GraphCommand::Changed {
                         path: path.clone(),
-                        content,
-                        language,
                         reply: reply_tx,
                     })
                     .await
                     .map_err(|_| GraphError::EngineStopped)?;
                 match reply_rx.await {
-                    Ok(Ok(_)) => info!("File changed: {}", path.display()),
-                    Ok(Err(e)) => warn!("Failed to add {}: {}", path.display(), e),
-                    Err(_) => warn!("The graph actor stopped before adding {}", path.display()),
+                    Ok(Ok(())) => info!("File changed: {}", path.display()),
+                    Ok(Err(e)) => warn!("Failed to take in {}: {}", path.display(), e),
+                    Err(_) => warn!(
+                        "The graph actor stopped before taking in {}",
+                        path.display()
+                    ),
                 }
             }
 
@@ -405,7 +397,7 @@ mod tests {
         std::fs::write(&file, "fn b() {}\n").unwrap();
         let change = tokio::time::timeout(Duration::from_secs(5), received.recv()).await;
         assert!(
-            matches!(change, Ok(Some(GraphCommand::AddFile { .. }))),
+            matches!(change, Ok(Some(GraphCommand::Changed { .. }))),
             "a write was not seen"
         );
     }

@@ -6,10 +6,9 @@ use std::sync::Arc;
 
 use crate::actor::GraphActor;
 use crate::error::GraphError;
-use crate::{edit, project_files, scanner, source};
+use crate::{edit, project_files, source};
 use latt_edit::{EditError, EditOp, Editor};
 use latt_protocol::{ActivityKind, Edit, EditReport, EditTarget, FileEdit};
-use latt_types::Language;
 
 impl GraphActor {
     /// Apply edits together. A symbol's lines come from the graph, so if a file changed on disk and
@@ -160,20 +159,7 @@ impl GraphActor {
             return Ok(());
         }
         for file in &report.files {
-            let path = self.root.join(&file.path);
-            let content = std::fs::read_to_string(&path).map_err(|source| GraphError::Read {
-                path: path.clone(),
-                source,
-            })?;
-            let language = Language::from_path(&path);
-            if self.registry.get_by_language(language).is_none() {
-                continue;
-            }
-            if scanner::takes(&self.root, &path) {
-                self.handle_add_file(path, content, language)?;
-            } else {
-                self.handle_remove_path(&path);
-            }
+            self.reload_path(&self.root.join(&file.path))?;
             if let Some(tracked) = self.files.get(&self.root.join(&file.path)) {
                 let touched = self.graph.symbols_in_file(tracked.file_id);
                 let touched = touched.iter().map(|symbol| symbol.id).collect();

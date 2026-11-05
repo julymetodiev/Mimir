@@ -1,5 +1,5 @@
 use super::*;
-use crate::channel::command_channel;
+use crate::channel::{CommandSender, command_channel};
 use latt_parse_rust::RustAdapter;
 use latt_protocol::SearchOptions;
 use latt_types::Language;
@@ -54,6 +54,73 @@ async fn names_by_kind(kind: &str) -> Vec<String> {
     let mut names: Vec<String> = response.symbols.into_iter().map(|s| s.name).collect();
     names.sort();
     names
+}
+
+/// The names of the functions the graph holds, sorted.
+async fn function_names(cmd_tx: &CommandSender) -> Vec<String> {
+    let (reply, answer) = oneshot::channel();
+    cmd_tx
+        .send(GraphCommand::Search {
+            options: SearchOptions {
+                pattern: ".".to_string(),
+                kind_filter: Some("function".to_string()),
+                limit: Some(100),
+            },
+            reply,
+        })
+        .await
+        .unwrap();
+    let mut names: Vec<String> = answer
+        .await
+        .unwrap()
+        .unwrap()
+        .symbols
+        .into_iter()
+        .map(|s| s.name)
+        .collect();
+    names.sort();
+    names
+}
+
+async fn changed(cmd_tx: &CommandSender, path: &std::path::Path) {
+    let (reply, answer) = oneshot::channel();
+    cmd_tx
+        .send(GraphCommand::Changed {
+            path: path.to_path_buf(),
+            reply,
+        })
+        .await
+        .unwrap();
+    answer.await.unwrap().unwrap();
+}
+
+/// A watcher reports a write after the fact, and an edit may have come in between: the report
+/// is read when the actor comes to it, so what an edit wrote stays, and a file gone is forgotten.
+#[tokio::test]
+async fn a_change_is_read_when_the_actor_comes_to_it() {
+    let (cmd_tx, cmd_rx) = command_channel(16);
+    let dir = tempfile::TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    let actor = GraphActor::with_registry(
+        root.clone(),
+        create_test_registry(),
+        Arc::new(latt_resolve_ra::RustAnalyzer::default()),
+    );
+    let handle = tokio::spawn(async move { actor.run(cmd_rx).await });
+    let path = root.join("lib.rs");
+
+    std::fs::write(&path, "fn first() {}\n").unwrap();
+    // The write a watcher heard of is already followed by another before its report comes.
+    std::fs::write(&path, "fn second() {}\n").unwrap();
+    changed(&cmd_tx, &path).await;
+    assert_eq!(function_names(&cmd_tx).await, ["second"]);
+
+    std::fs::remove_file(&path).unwrap();
+    changed(&cmd_tx, &path).await;
+    assert!(function_names(&cmd_tx).await.is_empty());
+
+    cmd_tx.send(GraphCommand::Shutdown).await.unwrap();
+    handle.await.unwrap().unwrap();
 }
 
 #[test]
