@@ -31,7 +31,8 @@ The tag also starts `.github/workflows/pages.yml`, which publishes the view of L
 
 Once the release is published, put it in the Homebrew tap,
 [julymetodiev/homebrew-tap](https://github.com/julymetodiev/homebrew-tap). This takes the checksums from
-the release's `SHA256SUMS`:
+the release's `SHA256SUMS`, and writes through the GitHub API, so the account active in `gh` must be able
+to write to the tap:
 
 ```bash
 scripts/update-tap.sh X.Y.Z --push

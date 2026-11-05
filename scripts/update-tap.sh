@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Write the Homebrew formula of a published release into the tap. See RELEASING.md.
 #
-#   scripts/update-tap.sh X.Y.Z           write it to a clone of the tap and show the change
-#   scripts/update-tap.sh X.Y.Z --push    and commit and push it
+#   scripts/update-tap.sh X.Y.Z           show how it differs from the tap's
+#   scripts/update-tap.sh X.Y.Z --push    and commit it there
 #
-# The tap's address comes from TAP_REMOTE. With TAP_FORMULA set to a path, only write the formula there.
+# Through the GitHub API, with the account active in `gh`, which must be able to write to the tap: this
+# needs no clone, and no SSH key or setting of git. With TAP_FORMULA set to a path, only write the formula there.
 set -euo pipefail
 version=${1:?usage: scripts/update-tap.sh X.Y.Z [--push]}
 push=${2:-}
@@ -84,15 +85,23 @@ if [ -n "${TAP_FORMULA:-}" ]; then
   exit 0
 fi
 
+place=repos/julymetodiev/homebrew-tap/contents/Formula/lantern-lattice.rb
 work=$(mktemp -d)
-git clone --quiet "${TAP_REMOTE:-git@github.com:julymetodiev/homebrew-tap.git}" "$work"
-formula > "$work/Formula/lantern-lattice.rb"
-git -C "$work" add Formula/lantern-lattice.rb
-git -C "$work" diff --cached --stat
-if [ "$push" = --push ]; then
-  git -C "$work" commit --quiet -m "Update latt to v$version"
-  git -C "$work" push --quiet origin HEAD
-  echo "The tap now has latt $version"
+formula > "$work/new.rb"
+# A first release has no file there yet, and so nothing to name as what it replaces.
+sha=$(gh api "$place" --jq .sha 2>/dev/null || true)
+if [ -n "$sha" ]; then
+  gh api "$place" --jq .content | base64 --decode > "$work/old.rb"
 else
-  echo "Not pushed. The formula is in $work/Formula/lantern-lattice.rb"
+  : > "$work/old.rb"
+fi
+diff "$work/old.rb" "$work/new.rb" | head -40 || true
+if [ "$push" = --push ]; then
+  gh api --method PUT "$place" --silent \
+    -f message="Update lantern-lattice to v$version" \
+    -f content="$(base64 < "$work/new.rb" | tr -d '\n')" \
+    ${sha:+-f sha="$sha"}
+  echo "The tap now has lantern-lattice $version"
+else
+  echo "Not pushed. The formula is in $work/new.rb"
 fi
