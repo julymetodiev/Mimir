@@ -60,8 +60,15 @@ The probe also checks a site after an emoji, where UTF-16 columns differ from ch
 
 The declaration-movement mismatch is reproducible in the supplied probe.
 The probe uses minimal incremental edits, not fixed sleeps or repeated requests until a desired answer appears.
-The exact server-side cause remains unverified. This result does not establish a defect in current Roslyn main.
-It does establish that this package and protocol sequence cannot justify persistent incremental answers yet.
+A follow-up reproduced the same 12 failures on Roslyn main at `ff2e51158d0f18bf40381246097f2a5dbd83118e`.
+Frozen partial semantics retained a target from an old syntax tree. The LSP handler converted that offset with current document text.
+[Roslyn PR #86332](https://github.com/dotnet/roslyn/pull/86332) rejects stale target trees and retries full semantics.
+Unchanged target trees retain the frozen-semantic fast path.
+
+With that patch, the same probe passes **84/84**, and edited answers equal the clean restart.
+All 16 Roslyn regression cases fail without the fix and pass with it. The 72-test definition suite also passes.
+The regression explicitly enables partial semantics, which production enables but test workspaces disable by default.
+The fix remains a draft, not a released package. These results do not establish complete incremental graph correctness.
 
 These measurements concern LSP definition locations. They do not measure Lantern Lattice graph accuracy, latency, or memory.
 The server advertises call hierarchy support, but the probe does not measure it.
@@ -77,7 +84,8 @@ The user restores the project separately. Lantern Lattice does not install SDKs,
 The server comes from `PATH`, not a repository-controlled environment.
 Document the MSBuild execution boundary in `SECURITY.md` when the runtime adapter is added.
 
-Initially, use a fresh semantic pass after an edit and request all C# sites again.
+With the measured unpatched package, use a fresh semantic pass after an edit and request all C# sites again.
+A fixed server can remain alive across the edits in the probe. Broader graph equivalence still needs the acceptance checks below.
 Do not reuse persistent C# answers until edit/restart equivalence holds.
 C# namespaces, partial types, and overload sets cross file boundaries without Python-style file imports.
 The import-based invalidation strategy is insufficient for this language.
