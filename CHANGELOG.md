@@ -6,6 +6,8 @@ All notable changes to Mimir are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-05
+
 ### Changed
 
 - **The Claude Code plugin refuses the first edit with `Edit` or `Write` of a project's file in a session

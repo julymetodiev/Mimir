@@ -1,7 +1,7 @@
 {
   "name": "latt",
   "displayName": "Lantern Lattice",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "The call graph of your project for Claude Code: who calls a function and what it calls, from the language's own compiler, with edits by symbol.",
   "author": {
     "name": "Julius ML",
