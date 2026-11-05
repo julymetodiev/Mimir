@@ -35,9 +35,9 @@ impl CodeGraph {
         }
     }
 
-    /// The bytes for a file on disk.
-    pub fn bytes(&self) -> Vec<u8> {
-        self.current.load().bytes().to_vec()
+    /// The graph as it is now, to write to a file while it goes on changing.
+    pub fn snapshot(&self) -> Arc<GraphFile> {
+        self.current.load_full()
     }
 
     // ============ Symbol Operations ============

@@ -54,7 +54,9 @@ promised. The buffer stays in memory, which the system could not drop as it can 
   graph, and several files at once take one step. There is no second layer in memory.
 - **Link:** still all files. Before the first link of a run, the text of every file is read, and references are taken from `references.fb`
   where the hash of the text is the same; only the others are parsed. `graph.fb` and `references.fb` are written after a link that finished,
-  unless files changed meanwhile or indexing failed.
+  unless files changed meanwhile or indexing failed. A thread of its own writes them, so no query waits, and of several waiting only the last.
+  References are encoded there too, the larger part of the cost: 24 ms on yaml-cpp and 50 ms on curl, against 1 to 6 ms to write `graph.fb`.
+  What a crash loses, the next start sees by the hash of each file. Stopping waits for what is left to write.
 - A tool installed after the last link does not improve edges until `sync --full`, as a start with no change does not link.
 - `graph.json` is written only by `mimir sync --json`, for `scripts/bench`.
 
@@ -80,14 +82,15 @@ new one, which is its one run with nothing changed. Memory is the project's daem
 
 | | leveldb | yaml-cpp | fmt | curl |
 |---|---|---|---|---|
-| First query after a stop | 1.97 s, now 0.04 s | 1.38 s, now 0.03 s | 0.72 s, now 0.03 s | 2.98 s, now 0.07 s |
-| Memory after it | 140 MB, now 18 MB | 107 MB, now 17 MB | 59 MB, now 16 MB | 172 MB, now 20 MB |
-| First edit | 0.65 s, now 0.75 s | 0.77 s, now 0.74 s | 0.14 s, now 0.16 s | 0.88 s, now 0.86 s |
-| Memory after it | 197 MB, now 104 MB | 218 MB, now 125 MB | 90 MB, now 62 MB | 326 MB, now 237 MB |
-| A later edit | 0.68 s, now 0.67 s | 0.28 s, now 0.35 s | 0.14 s, now 0.16 s | 0.64 s, now 0.72 s |
+| First query after a stop | 1.97 s, now 0.04 s | 1.44 s, now 0.03 s | 0.73 s, now 0.04 s | 2.63 s, now 0.07 s |
+| Memory after it | 140 MB, now 18 MB | 107 MB, now 18 MB | 59 MB, now 16 MB | 197 MB, now 20 MB |
+| First edit | 0.68 s, now 0.74 s | 0.76 s, now 0.74 s | 0.13 s, now 0.14 s | 0.89 s, now 0.82 s |
+| Memory after it | 197 MB, now 101 MB | 222 MB, now 161 MB | 82 MB, now 55 MB | 378 MB, now 219 MB |
+| A later edit | 0.68 s, now 0.67 s | 0.29 s, now 0.30 s | 0.13 s, now 0.13 s | 0.60 s, now 0.57 s |
 
-A later edit is up to a quarter slower, as it builds the whole buffer. With a file changed while the daemon was stopped, the first query took
-0.40 s on yaml-cpp, 0.22 s on fmt and 0.74 s on curl. All edges were the same as the counter's on these four.
+A later edit costs what it did, within what the runs differ by, since references are encoded off the actor: before that it was up to a quarter
+slower. With a file changed while the daemon was stopped, the first query took 0.36 s on yaml-cpp, 0.20 s on fmt and 0.62 s on curl. All edges
+were the same as the counter's on these four, and references from the file gave the same edges as parsing.
 
 ## 7. Not built
 

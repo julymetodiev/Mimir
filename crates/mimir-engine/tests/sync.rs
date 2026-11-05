@@ -194,7 +194,7 @@ async fn test_ids_last_through_a_restart_and_an_edit() {
     );
     assert_eq!((a.len(), b.len()), (1, 2));
     assert_ne!(b[0], b[1], "the same name twice in a file");
-    first.handle().shutdown().await.unwrap();
+    first.stop().await;
 
     let second = start_engine().await;
     let handle = second.handle();
@@ -263,8 +263,9 @@ async fn test_a_start_answers_from_the_file() {
     let first = begin(Arc::default()).await;
     first.handle().sync_complete(false, false).await.unwrap();
     assert_eq!(callers_of(first.handle(), "callee").await, ["caller"]);
-    first.handle().shutdown().await.unwrap();
+    first.stop().await;
     assert!(root.join(".mimir/graph/graph.fb").exists());
+    assert!(root.join(".mimir/graph/references.fb").exists());
 
     let source = Arc::new(CountedSource::default());
     let second = begin(source.clone()).await;
@@ -279,7 +280,7 @@ async fn test_a_start_answers_from_the_file() {
         read.lines.join("\n").contains("fn callee"),
         "text from the disk"
     );
-    second.handle().shutdown().await.unwrap();
+    second.stop().await;
 
     // Another size, so this is seen by size alone. `a.rs`, which did not change, keeps its edge.
     std::fs::write(
@@ -293,7 +294,7 @@ async fn test_a_start_answers_from_the_file() {
     callers.sort();
     assert_eq!(callers, ["caller", "other"]);
     assert_eq!(*source.0.lock().unwrap(), 1, "one link");
-    third.handle().shutdown().await.unwrap();
+    third.stop().await;
 
     // Broken file: as if none, and it is written again.
     std::fs::write(root.join(".mimir/graph/graph.fb"), b"not a graph").unwrap();
@@ -302,7 +303,7 @@ async fn test_a_start_answers_from_the_file() {
     callers.sort();
     assert_eq!(callers, ["caller", "other"]);
     fourth.handle().sync_complete(false, false).await.unwrap();
-    fourth.handle().shutdown().await.unwrap();
+    fourth.stop().await;
     assert!(
         std::fs::metadata(root.join(".mimir/graph/graph.fb"))
             .unwrap()

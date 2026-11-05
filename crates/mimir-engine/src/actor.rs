@@ -70,6 +70,8 @@ pub struct GraphActor {
     needs_link: bool,
     /// `references.fb` no longer holds what `sources` do.
     references_changed: bool,
+    /// Keeps the graph on disk, without a query waiting for it.
+    writer: save::Writer,
     /// What knows more than syntax about the files.
     semantics: Arc<dyn SemanticSource>,
     pending: Option<PendingLink>,
@@ -129,6 +131,7 @@ impl GraphActor {
         semantics: Arc<dyn SemanticSource>,
     ) -> Self {
         let graph = save::load(&root.join(".mimir").join("graph")).unwrap_or_default();
+        let writer = save::Writer::new(root.join(".mimir").join("graph"));
         let (mut files, mut file_paths) = (HashMap::new(), HashMap::new());
         for entry in graph.files() {
             files.insert(
@@ -149,6 +152,7 @@ impl GraphActor {
             sources: HashMap::new(),
             needs_link: false,
             references_changed: false,
+            writer,
             semantics,
             pending: None,
             events: broadcast::channel(EVENTS_KEPT).0,

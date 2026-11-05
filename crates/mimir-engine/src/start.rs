@@ -5,6 +5,7 @@ use mimir_resolve::SemanticSource;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::task::JoinHandle;
 use tracing::{error, warn};
 
 use crate::actor::GraphActor;
@@ -21,6 +22,8 @@ pub struct Engine {
     handle: GraphHandle,
     /// Kept so the watcher runs as long as the engine.
     _watcher: Option<WatcherHandle>,
+    /// The actor's task, which ends once what it left to save is on disk.
+    actor: JoinHandle<()>,
 }
 
 impl Engine {
@@ -29,10 +32,13 @@ impl Engine {
         &self.handle
     }
 
-    /// Stop the actor.
+    /// Stop the actor, and wait for what it has left to save.
     pub async fn stop(self) {
         if let Err(e) = self.handle.shutdown().await {
             warn!("The engine was already stopped: {e}");
+        }
+        if let Err(e) = self.actor.await {
+            warn!("The graph actor failed: {e}");
         }
     }
 }
@@ -55,7 +61,7 @@ pub async fn start(
 
     let (commands, receiver) = command_channel(256);
     let actor = GraphActor::with_registry(root.clone(), Arc::new(registry), semantics);
-    tokio::spawn(async move {
+    let actor = tokio::spawn(async move {
         if let Err(e) = actor.run(receiver).await {
             error!("The graph actor failed: {e}");
         }
@@ -75,5 +81,6 @@ pub async fn start(
     Engine {
         handle,
         _watcher: watcher,
+        actor,
     }
 }

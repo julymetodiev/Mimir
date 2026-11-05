@@ -4,10 +4,10 @@ use crate::actor::{GraphActor, answer};
 use crate::error::GraphError;
 use crate::save;
 use crate::scanner::{Known, ScannedFile, Scanner};
-use mimir_graph::{FileEntry, encode_references};
+use mimir_graph::FileEntry;
 use mimir_protocol::{LinkSummary, SyncResult};
 use mimir_resolve::{LinkReport, ProjectFile, Refresh, SemanticIndex, link};
-use mimir_types::{ContentHash, ExtractedReference, FileId, Symbol};
+use mimir_types::Symbol;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tokio::sync::oneshot;
@@ -111,25 +111,25 @@ impl GraphActor {
         let report = link(&self.graph, &pending.files, &indexes);
         debug!("Linked: {:?}", report);
         // Edges of files as they were, or from no index, are not what the next start should find.
-        if !self.needs_link
-            && failure.is_none()
-            && let Err(e) = save::save_file(&self.graph, &self.graph_dir())
-        {
-            warn!("The graph could not be saved: {e}");
-        }
-        if self.references_changed && !self.needs_link {
-            let stored: Vec<(FileId, ContentHash, &[ExtractedReference])> = self
-                .files
-                .values()
-                .filter_map(|tracked| {
-                    let file = self.sources.get(&tracked.file_id)?;
-                    Some((tracked.file_id, tracked.content_hash, &*file.references))
-                })
-                .collect();
-            match save::save_references(&encode_references(&stored), &self.graph_dir()) {
-                Ok(()) => self.references_changed = false,
-                Err(e) => warn!("The references could not be saved: {e}"),
-            }
+        if !self.needs_link && failure.is_none() {
+            let references = self.references_changed.then(|| {
+                self.files
+                    .values()
+                    .filter_map(|tracked| {
+                        let file = self.sources.get(&tracked.file_id)?;
+                        Some((
+                            tracked.file_id,
+                            tracked.content_hash,
+                            file.references.clone(),
+                        ))
+                    })
+                    .collect()
+            });
+            self.references_changed = false;
+            self.writer.save(save::Stored {
+                graph: self.graph.snapshot(),
+                references,
+            });
         }
         self.announce_new_edges();
 
