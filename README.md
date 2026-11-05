@@ -31,13 +31,13 @@ On macOS and Linux:
 | Java | Next | |
 
 <p align="center">
-  <a href="https://lantern-lattice.369.is/"><img src="docs/images/graph.jpg" alt="Lantern Lattice's own code as a graph: symbols grouped by crate and file, joined by calls and uses"></a>
+  <a href="https://latt.369.is/"><img src="docs/images/graph.jpg" alt="Lantern Lattice's own code as a graph: symbols grouped by crate and file, joined by calls and uses"></a>
   <br>
-  <em>Lantern Lattice's own code: <a href="https://lantern-lattice.369.is/">Live</a></em>
+  <em>Lantern Lattice's own code: <a href="https://latt.369.is/">Live</a></em>
 </p>
 
 <p align="center">
-  <a href="https://lantern-lattice.369.is/"><img src="docs/images/symbol.jpg" alt="A chosen symbol, with what calls it, what it calls and what it uses, and its source"></a>
+  <a href="https://latt.369.is/"><img src="docs/images/symbol.jpg" alt="A chosen symbol, with what calls it, what it calls and what it uses, and its source"></a>
   <br>
   <em>A chosen symbol: what calls it, what it calls, what it uses, and its source.</em>
 </p>
@@ -166,7 +166,7 @@ instructions, such as `AGENTS.md`.
 
 ## See it
 
-[Look at Lantern Lattice's own code this way](https://lantern-lattice.369.is/), in a browser with WebGPU. On
+[Look at Lantern Lattice's own code this way](https://latt.369.is/), in a browser with WebGPU. On
 your project:
 
 ```bash

@@ -13,7 +13,7 @@ All notable changes to Mimir are recorded here. The format follows
 - **Mimir is now Lantern Lattice**, and its command `latt`: the old name is that of many other projects. The
   repository is `lantern-lattice`, the Homebrew formula too, the plugin and its tools are `latt`, and
   `MIMIR_NO_SCIP` is `LATT_NO_SCIP`. A project is indexed anew in `.latt`, and its `.mimir` can be removed.
-  `brew upgrade` follows the rename of the formula, and the site is at https://lantern-lattice.369.is/. The
+  `brew upgrade` follows the rename of the formula, and the site is at https://latt.369.is/. The
   plugin has a new name, so remove `mimir` and install `latt` from the marketplace at its new address.
 
 ## [0.5.0] - 2026-11-05
