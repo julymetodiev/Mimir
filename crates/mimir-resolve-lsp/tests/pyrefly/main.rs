@@ -45,7 +45,7 @@ fn build(root: &Path, names: &[&str]) -> (CodeGraph, Vec<ProjectFile>) {
         files.push(ProjectFile {
             file_id,
             path: PathBuf::from(path),
-            references: adapter.extract_references(&tree, file_id),
+            references: adapter.extract_references(&tree, file_id).into(),
             source: source.as_str().into(),
         });
     }

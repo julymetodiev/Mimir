@@ -2,8 +2,10 @@
 //!
 //! All IDs are simple wrappers around u64 for efficient storage and comparison.
 
+use crate::symbol::{QualifiedName, SymbolKind};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Macro to define ID types with consistent implementation.
@@ -70,7 +72,42 @@ define_id!(StepId, "Unique identifier for a step within a task.");
 define_id!(CheckpointId, "Unique identifier for a checkpoint.");
 define_id!(SnapshotId, "Unique identifier for a snapshot.");
 
-/// Thread-safe ID generator.
+/// The first eight bytes of a hash, as an id.
+fn id_of(hasher: &blake3::Hasher) -> u64 {
+    let mut bytes = [0; 8];
+    hasher.finalize_xof().fill(&mut bytes);
+    u64::from_le_bytes(bytes)
+}
+
+impl FileId {
+    /// The id of a file, from its path relative to the project, so that it is the same in every
+    /// run and after every edit.
+    pub fn of_path(path: &Path) -> Self {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(path.to_string_lossy().as_bytes());
+        Self(id_of(&hasher))
+    }
+}
+
+impl SymbolId {
+    /// The id of a symbol: its file, its qualified name and kind, and `order`, its place among the
+    /// symbols of that file with the same name and kind. It lasts while these do.
+    pub fn lasting(file: FileId, name: &QualifiedName, kind: SymbolKind, order: u32) -> Self {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(&file.0.to_le_bytes());
+        for segment in name.segments() {
+            hasher.update(&segment.len().to_le_bytes());
+            hasher.update(segment.as_bytes());
+        }
+        // The kind's name, so that a new kind anywhere in the enum changes no id.
+        hasher.update(kind.to_string().as_bytes());
+        hasher.update(&[0]);
+        hasher.update(&order.to_le_bytes());
+        Self(id_of(&hasher))
+    }
+}
+
+/// A counter of ids, for tests that make up symbols.
 pub struct IdGenerator {
     next: AtomicU64,
 }
@@ -120,6 +157,28 @@ mod tests {
         assert_eq!(json, "999");
         let restored: TaskId = serde_json::from_str(&json).unwrap();
         assert_eq!(id, restored);
+    }
+
+    #[test]
+    fn lasting_ids_depend_on_what_names_a_symbol() {
+        let file = FileId::of_path(Path::new("src/a.rs"));
+        let other = FileId::of_path(Path::new("src/b.rs"));
+        assert_eq!(file, FileId::of_path(Path::new("src/a.rs")));
+        assert_ne!(file, other);
+
+        let name = QualifiedName::new(vec!["a".to_string(), "f".to_string()]);
+        let id = SymbolId::lasting(file, &name, SymbolKind::Function, 0);
+        assert_eq!(id, SymbolId::lasting(file, &name, SymbolKind::Function, 0));
+        assert_ne!(id, SymbolId::lasting(other, &name, SymbolKind::Function, 0));
+        assert_ne!(id, SymbolId::lasting(file, &name, SymbolKind::Method, 0));
+        assert_ne!(id, SymbolId::lasting(file, &name, SymbolKind::Function, 1));
+
+        // The parts of a name are told apart, not only their letters.
+        let joined = QualifiedName::new(vec!["af".to_string()]);
+        assert_ne!(
+            id,
+            SymbolId::lasting(file, &joined, SymbolKind::Function, 0)
+        );
     }
 
     #[test]

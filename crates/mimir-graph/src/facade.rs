@@ -1,22 +1,19 @@
-//! Code graph facade combining symbols and relations.
+//! The code graph: one buffer in the format of the file on disk, and queries over it.
 
-use crate::relations::{EdgeData, EdgeKind, RelationsHandle};
-use crate::symbols::SymbolsHandle;
-use mimir_types::{FileId, Symbol, SymbolId};
+use crate::encode::encode;
+use crate::file::{FileEntry, GraphFile};
+use crate::relations::{EdgeData, EdgeKind};
+use arc_swap::ArcSwap;
+use mimir_types::{ContentHash, FileId, Symbol, SymbolId};
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::trace::{TraceNode, TraceOptions, TraceRelationship, TraceResult};
 
-/// The main code graph facade.
-///
-/// Combines the symbol table and relation graph into a unified API.
-#[derive(Debug, Clone)]
+/// The graph. A change makes a new buffer in one step, so a reader keeps a whole one.
 pub struct CodeGraph {
-    /// Symbol storage.
-    symbols: SymbolsHandle,
-    /// Relation storage.
-    relations: RelationsHandle,
+    current: ArcSwap<GraphFile>,
 }
 
 impl Default for CodeGraph {
@@ -28,66 +25,118 @@ impl Default for CodeGraph {
 impl CodeGraph {
     /// Create a new empty code graph.
     pub fn new() -> Self {
+        Self::from_file(built(encode(Vec::new(), &[], &[])))
+    }
+
+    /// The graph a file holds.
+    pub fn from_file(file: GraphFile) -> Self {
         Self {
-            symbols: SymbolsHandle::new(),
-            relations: RelationsHandle::new(),
+            current: ArcSwap::new(Arc::new(file)),
         }
     }
 
-    /// Get the symbols handle.
-    pub fn symbols(&self) -> &SymbolsHandle {
-        &self.symbols
-    }
-
-    /// Get the relations handle.
-    pub fn relations(&self) -> &RelationsHandle {
-        &self.relations
+    /// The bytes for a file on disk.
+    pub fn bytes(&self) -> Vec<u8> {
+        self.current.load().bytes().to_vec()
     }
 
     // ============ Symbol Operations ============
 
+    /// Remove the symbols of the `gone` files with their edges, record `files` and add `symbols`,
+    /// in one step: each step writes the whole graph, so many files must not take one each.
+    pub fn change_files(&self, gone: &[FileId], files: Vec<FileEntry>, new: Vec<Symbol>) {
+        let old = self.current.load();
+        let gone: HashSet<FileId> = gone.iter().copied().collect();
+        let mut symbols = old.all_symbols();
+        symbols.retain(|symbol| !gone.contains(&symbol.file_id));
+        let kept: HashSet<SymbolId> = symbols.iter().map(|symbol| symbol.id).collect();
+        let mut edges = old.all_edges();
+        edges.retain(|(from, to, _)| kept.contains(from) && kept.contains(to));
+
+        let mut taken = kept;
+        for mut symbol in new {
+            // Two symbols whose names hash the same are still two symbols.
+            while !taken.insert(symbol.id) {
+                symbol.id = SymbolId::new(symbol.id.value().wrapping_add(1));
+            }
+            symbols.push(symbol);
+        }
+
+        let mut entries: HashMap<FileId, FileEntry> = old
+            .files()
+            .into_iter()
+            .filter(|entry| !gone.contains(&entry.id))
+            .map(|entry| (entry.id, entry))
+            .collect();
+        entries.extend(files.into_iter().map(|entry| (entry.id, entry)));
+        for symbol in &symbols {
+            entries.entry(symbol.file_id).or_insert_with(|| FileEntry {
+                id: symbol.file_id,
+                path: PathBuf::new(),
+                hash: ContentHash::compute(&[]),
+                size: 0,
+                modified: 0,
+            });
+        }
+        let entries: Vec<FileEntry> = entries.into_values().collect();
+        self.current
+            .store(Arc::new(built(encode(symbols, &edges, &entries))));
+    }
+
     /// Add a symbol to the graph.
     pub fn add_symbol(&self, symbol: Symbol) -> SymbolId {
-        let id = symbol.id;
-        self.symbols.insert(symbol);
-        self.relations.add_symbol(id);
+        let mut id = symbol.id;
+        while self.current.load().get_symbol(id).is_some() {
+            id = SymbolId::new(id.value().wrapping_add(1));
+        }
+        self.add_symbols(vec![Symbol { id, ..symbol }]);
         id
     }
 
     /// Add symbols in one step, as when a whole project is read.
     pub fn add_symbols(&self, symbols: Vec<Symbol>) {
-        let ids: Vec<SymbolId> = symbols.iter().map(|s| s.id).collect();
-        for symbol in symbols {
-            self.symbols.insert(symbol);
-        }
-        self.relations.add_symbols(ids);
+        self.change_files(&[], Vec::new(), symbols);
+    }
+
+    /// Every file of the project, as last recorded.
+    pub fn files(&self) -> Vec<FileEntry> {
+        self.current.load().files()
+    }
+
+    /// Every symbol.
+    pub fn all_symbols(&self) -> Vec<Arc<Symbol>> {
+        arcs(self.current.load().all_symbols())
     }
 
     /// Get a symbol by ID.
     pub fn get_symbol(&self, id: SymbolId) -> Option<Arc<Symbol>> {
-        self.symbols.get(id)
+        self.current.load().get_symbol(id).map(Arc::new)
     }
 
     /// Find symbols by name.
     pub fn find_symbol(&self, name: &str) -> Vec<Arc<Symbol>> {
-        self.symbols.find_by_name(name)
+        arcs(self.current.load().find_symbol(name))
     }
 
-    /// Find symbol by qualified name.
-    pub fn find_by_qualified_name(&self, qualified: &str) -> Option<Arc<Symbol>> {
-        self.symbols.find_by_qualified_name(qualified)
+    /// Find the symbols with a qualified name: overloads share one.
+    pub fn find_by_qualified_name(&self, qualified: &str) -> Vec<Arc<Symbol>> {
+        arcs(self.current.load().find_by_qualified_name(qualified))
     }
 
     /// Get all symbols in a file.
     pub fn symbols_in_file(&self, file_id: FileId) -> Vec<Arc<Symbol>> {
-        self.symbols.symbols_in_file(file_id)
+        arcs(self.current.load().symbols_in_file(file_id))
+    }
+
+    /// How many symbols a file has.
+    pub fn count_in_file(&self, file_id: FileId) -> usize {
+        self.current.load().count_in_file(file_id)
     }
 
     /// Remove all symbols from a file.
     pub fn remove_file(&self, file_id: FileId) -> Vec<Arc<Symbol>> {
-        let symbols = self.symbols.remove_file(file_id);
-        let ids: Vec<SymbolId> = symbols.iter().map(|s| s.id).collect();
-        self.relations.remove_symbols(&ids);
+        let symbols = self.symbols_in_file(file_id);
+        self.change_files(&[file_id], Vec::new(), Vec::new());
         symbols
     }
 
@@ -95,25 +144,51 @@ impl CodeGraph {
 
     /// Replace every edge with the given ones in one step.
     pub fn replace_edges(&self, edges: Vec<(SymbolId, SymbolId, EdgeData)>) {
-        self.relations.replace_edges(edges);
+        let old = self.current.load();
+        let bytes = encode(old.all_symbols(), &edges, &old.files());
+        self.current.store(Arc::new(built(bytes)));
+    }
+
+    /// What a symbol's edges lead to.
+    pub fn outgoing(&self, symbol_id: SymbolId) -> Vec<(SymbolId, EdgeData)> {
+        self.current.load().outgoing(symbol_id)
+    }
+
+    /// What leads to a symbol by an edge.
+    pub fn incoming(&self, symbol_id: SymbolId) -> Vec<(SymbolId, EdgeData)> {
+        self.current.load().incoming(symbol_id)
+    }
+
+    /// What a symbol calls.
+    pub fn callees(&self, symbol_id: SymbolId) -> Vec<SymbolId> {
+        calls(self.outgoing(symbol_id))
+    }
+
+    /// What calls a symbol.
+    pub fn callers(&self, symbol_id: SymbolId) -> Vec<SymbolId> {
+        calls(self.incoming(symbol_id))
     }
 
     // ============ Query Operations ============
 
     /// Get all references from a symbol.
     pub fn get_outgoing(&self, symbol_id: SymbolId) -> Vec<(Arc<Symbol>, EdgeData)> {
-        self.relations
-            .outgoing(symbol_id)
+        self.outgoing(symbol_id)
             .into_iter()
-            .filter_map(|(id, edge)| self.symbols.get(id).map(|s| (s, edge)))
+            .filter_map(|(id, edge)| self.get_symbol(id).map(|s| (s, edge)))
             .collect()
     }
 
     // ============ Trace Operations ============
 
     /// Trace the call chain for a symbol.
-    pub fn trace(&self, symbol_id: SymbolId, options: TraceOptions) -> Option<TraceResult> {
-        let root = self.symbols.get(symbol_id)?;
+    pub fn trace(
+        &self,
+        symbol_id: SymbolId,
+        options: TraceOptions,
+        paths: &HashMap<FileId, PathBuf>,
+    ) -> Option<TraceResult> {
+        let root = self.get_symbol(symbol_id)?;
         let mut result = TraceResult::new(root);
 
         let max_depth = options.max_depth.unwrap_or(3);
@@ -121,7 +196,7 @@ impl CodeGraph {
         // Trace callers
         if options.include_callers {
             result.callers = self
-                .walk(&[symbol_id], max_depth, |id| {
+                .walk(&[symbol_id], max_depth, paths, |id| {
                     self.callers_of(id, id == symbol_id)
                 })
                 .concat();
@@ -130,7 +205,7 @@ impl CodeGraph {
         // Trace callees
         if options.include_callees {
             result.callees = self
-                .walk(&[symbol_id], max_depth, |id| self.callees_of(id))
+                .walk(&[symbol_id], max_depth, paths, |id| self.callees_of(id))
                 .concat();
         }
 
@@ -148,19 +223,25 @@ impl CodeGraph {
 
     /// What depends on each of these symbols, each dependent once, under the first that reaches it
     /// at its shortest depth. The symbols themselves are not among the dependents.
-    pub fn dependents(&self, roots: &[SymbolId], max_depth: usize) -> Vec<Vec<TraceNode>> {
-        self.walk(roots, max_depth, |id| {
+    pub fn dependents(
+        &self,
+        roots: &[SymbolId],
+        max_depth: usize,
+        paths: &HashMap<FileId, PathBuf>,
+    ) -> Vec<Vec<TraceNode>> {
+        self.walk(roots, max_depth, paths, |id| {
             self.callers_of(id, roots.contains(&id))
         })
     }
 
     /// What is reached from each symbol, at its shortest depth, so what is reached does not depend
     /// on the order of the edges, nor does the answer. A symbol comes right after the one it was
-    /// reached from, with what it leads to under it.
+    /// reached from, with what it leads to under it, in order of path and place.
     fn walk(
         &self,
         roots: &[SymbolId],
         max_depth: usize,
+        paths: &HashMap<FileId, PathBuf>,
         next: impl Fn(SymbolId) -> Vec<(SymbolId, TraceRelationship)>,
     ) -> Vec<Vec<TraceNode>> {
         let mut visited: HashSet<SymbolId> = roots.iter().copied().collect();
@@ -171,7 +252,7 @@ impl CodeGraph {
             for parent in level {
                 let mut found = Vec::new();
                 for (id, relationship) in next(parent) {
-                    if let Some(symbol) = self.symbols.get(id)
+                    if let Some(symbol) = self.get_symbol(id)
                         && visited.insert(id)
                     {
                         found.push((symbol, relationship));
@@ -179,7 +260,7 @@ impl CodeGraph {
                 }
                 found.sort_by_key(|(symbol, _)| {
                     (
-                        symbol.file_id.value(),
+                        paths.get(&symbol.file_id),
                         symbol.range.start_line,
                         symbol.range.start_col,
                         symbol.name.clone(),
@@ -209,38 +290,32 @@ impl CodeGraph {
         with_uses: bool,
     ) -> Vec<(SymbolId, TraceRelationship)> {
         let value_users = |id| {
-            self.relations
-                .incoming(id)
+            self.incoming(id)
                 .into_iter()
                 .filter(|(_, edge)| edge.kind == EdgeKind::UsesAsValue)
                 .map(|(user, _)| user)
         };
         let via_trait = self
-            .relations
             .outgoing(symbol_id)
             .into_iter()
             .filter(|(_, edge)| edge.kind == EdgeKind::Implements)
             .flat_map(|(declared, _)| {
-                self.relations
-                    .callers(declared)
+                self.callers(declared)
                     .into_iter()
                     .chain(value_users(declared))
             })
             .map(|caller| (caller, TraceRelationship::CallerViaTrait));
         let by_value = value_users(symbol_id).map(|user| (user, TraceRelationship::CallerByValue));
         let direct = self
-            .relations
             .callers(symbol_id)
             .into_iter()
             .map(|caller| (caller, TraceRelationship::Caller));
         let readers = self
-            .relations
             .incoming(symbol_id)
             .into_iter()
             .filter(|(_, edge)| edge.kind == EdgeKind::UsesConstant)
             .map(|(reader, _)| (reader, TraceRelationship::Reader));
         let users = self
-            .relations
             .incoming(symbol_id)
             .into_iter()
             .filter(|(_, edge)| matches!(edge.kind, EdgeKind::UsesType | EdgeKind::UsesField))
@@ -255,18 +330,15 @@ impl CodeGraph {
     /// What a symbol leads to, the surest first: the first is what a symbol found twice is called.
     fn callees_of(&self, symbol_id: SymbolId) -> Vec<(SymbolId, TraceRelationship)> {
         let implementations = self
-            .relations
             .incoming(symbol_id)
             .into_iter()
             .filter(|(_, edge)| edge.kind == EdgeKind::Implements)
             .map(|(method, _)| (method, TraceRelationship::Implementation));
         let direct = self
-            .relations
             .callees(symbol_id)
             .into_iter()
             .map(|callee| (callee, TraceRelationship::Callee));
         let by_value = self
-            .relations
             .outgoing(symbol_id)
             .into_iter()
             .filter(|(_, edge)| edge.kind == EdgeKind::UsesAsValue)
@@ -278,13 +350,33 @@ impl CodeGraph {
 
     /// Get the number of symbols in the graph.
     pub fn symbol_count(&self) -> usize {
-        self.symbols.count()
+        self.current.load().symbol_count()
     }
 
     /// Get the number of edges in the graph.
     pub fn edge_count(&self) -> usize {
-        self.relations.edge_count()
+        self.current.load().edge_count()
     }
+}
+
+/// The graph bytes `encode` made. A failure here is a bug in `encode`, not a state to go on from.
+fn built(bytes: Vec<u8>) -> GraphFile {
+    match GraphFile::open(bytes) {
+        Ok(file) => file,
+        Err(reason) => panic!("the graph as written cannot be read: {reason}"),
+    }
+}
+
+fn arcs(symbols: Vec<Symbol>) -> Vec<Arc<Symbol>> {
+    symbols.into_iter().map(Arc::new).collect()
+}
+
+fn calls(edges: Vec<(SymbolId, EdgeData)>) -> Vec<SymbolId> {
+    edges
+        .into_iter()
+        .filter(|(_, edge)| edge.kind == EdgeKind::Calls)
+        .map(|(id, _)| id)
+        .collect()
 }
 
 /// Add what was reached from a symbol, and under each what was reached from that.
@@ -305,191 +397,4 @@ fn push_under(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use mimir_types::{
-        Confidence, IdGenerator, Language, QualifiedName, Range, Span, SymbolKind, Visibility,
-    };
-
-    fn ids() -> IdGenerator {
-        IdGenerator::new()
-    }
-
-    fn make_symbol(name: &str, ids: &IdGenerator, file_id: FileId) -> Symbol {
-        Symbol {
-            id: ids.next(),
-            name: name.to_string(),
-            qualified_name: QualifiedName::simple(name),
-            kind: SymbolKind::Function,
-            language: Language::Rust,
-            file_id,
-            range: Range::new(1, 0, 10, 1),
-            span: Span::new(0, 100),
-            signature: None,
-            visibility: Visibility::Public,
-            doc: None,
-        }
-    }
-
-    #[test]
-    fn test_add_and_find_symbol() {
-        let ids = ids();
-        let graph = CodeGraph::new();
-        let file_id: FileId = ids.next();
-
-        let sym = make_symbol("foo", &ids, file_id);
-        let id = graph.add_symbol(sym);
-
-        assert!(graph.get_symbol(id).is_some());
-        assert_eq!(graph.get_symbol(id).unwrap().name, "foo");
-
-        let found = graph.find_symbol("foo");
-        assert_eq!(found.len(), 1);
-    }
-
-    #[test]
-    fn a_symbol_found_by_a_long_way_keeps_its_short_one_and_what_is_past_it() {
-        // x calls root and also, by way of q and p, comes to it the long way. y calls only x.
-        let chains = [
-            ("x", "root"),
-            ("p", "root"),
-            ("q", "p"),
-            ("x", "q"),
-            ("y", "x"),
-        ];
-        for reversed in [false, true] {
-            let ids = ids();
-            let graph = CodeGraph::new();
-            let file_id: FileId = ids.next();
-            let mut by_name = HashMap::new();
-            for name in ["root", "x", "p", "q", "y"] {
-                by_name.insert(name, graph.add_symbol(make_symbol(name, &ids, file_id)));
-            }
-            let mut edges = chains.to_vec();
-            if reversed {
-                edges.reverse();
-            }
-            for (from, to) in edges {
-                graph.relations().add_edge(
-                    by_name[from],
-                    by_name[to],
-                    EdgeData::new(EdgeKind::Calls, Span::new(0, 1), Confidence::High),
-                );
-            }
-            let options = TraceOptions {
-                max_depth: Some(3),
-                include_callers: true,
-                include_callees: false,
-            };
-            let callers = graph.trace(by_name["root"], options).unwrap().callers;
-            let got: Vec<_> = callers
-                .iter()
-                .map(|node| (node.symbol.name.as_str(), node.depth))
-                .collect();
-            assert_eq!(got, [("p", 1), ("q", 2), ("x", 1), ("y", 2)]);
-        }
-    }
-
-    #[test]
-    fn a_use_is_followed_from_what_is_traced_and_no_further() {
-        // `kind` is used by `user`, and `user` by `user_of_user`. `caller` calls `user`.
-        let ids = ids();
-        let graph = CodeGraph::new();
-        let file_id: FileId = ids.next();
-        let mut by_name = HashMap::new();
-        for name in ["kind", "user", "user_of_user", "caller"] {
-            by_name.insert(name, graph.add_symbol(make_symbol(name, &ids, file_id)));
-        }
-        for (from, to, edge_kind) in [
-            ("user", "kind", EdgeKind::UsesType),
-            ("user_of_user", "user", EdgeKind::UsesType),
-            ("caller", "user", EdgeKind::Calls),
-        ] {
-            graph.relations().add_edge(
-                by_name[from],
-                by_name[to],
-                EdgeData::new(edge_kind, Span::new(0, 1), Confidence::High),
-            );
-        }
-        let options = TraceOptions {
-            max_depth: Some(3),
-            include_callers: true,
-            include_callees: false,
-        };
-        let callers = graph.trace(by_name["kind"], options).unwrap().callers;
-        let got: Vec<_> = callers
-            .iter()
-            .map(|node| (node.symbol.name.as_str(), node.depth, node.relationship))
-            .collect();
-        assert_eq!(
-            got,
-            [
-                ("user", 1, TraceRelationship::User),
-                ("caller", 2, TraceRelationship::Caller),
-            ]
-        );
-    }
-
-    #[test]
-    fn test_trace() {
-        let ids = ids();
-        let graph = CodeGraph::new();
-        let file_id: FileId = ids.next();
-
-        // Create call chain: a -> b -> c
-        let a = make_symbol("a", &ids, file_id);
-        let b = make_symbol("b", &ids, file_id);
-        let c = make_symbol("c", &ids, file_id);
-
-        let a_id = graph.add_symbol(a);
-        let b_id = graph.add_symbol(b);
-        let c_id = graph.add_symbol(c);
-
-        graph.relations().add_edge(
-            a_id,
-            b_id,
-            EdgeData::new(EdgeKind::Calls, Span::new(10, 20), Confidence::High),
-        );
-        graph.relations().add_edge(
-            b_id,
-            c_id,
-            EdgeData::new(EdgeKind::Calls, Span::new(30, 40), Confidence::High),
-        );
-
-        // Trace from b
-        let result = graph
-            .trace(
-                b_id,
-                TraceOptions {
-                    max_depth: Some(3),
-                    include_callers: true,
-                    include_callees: true,
-                },
-            )
-            .unwrap();
-
-        assert_eq!(result.root.name, "b");
-        assert_eq!(result.callers.len(), 1);
-        assert_eq!(result.callers[0].symbol.name, "a");
-        assert_eq!(result.callees.len(), 1);
-        assert_eq!(result.callees[0].symbol.name, "c");
-    }
-
-    #[test]
-    fn test_remove_file() {
-        let ids = ids();
-        let graph = CodeGraph::new();
-        let file1: FileId = ids.next();
-        let file2: FileId = ids.next();
-
-        graph.add_symbol(make_symbol("foo", &ids, file1));
-        graph.add_symbol(make_symbol("bar", &ids, file1));
-        graph.add_symbol(make_symbol("baz", &ids, file2));
-
-        assert_eq!(graph.symbol_count(), 3);
-
-        let removed = graph.remove_file(file1);
-        assert_eq!(removed.len(), 2);
-        assert_eq!(graph.symbol_count(), 1);
-    }
-}
+mod tests;

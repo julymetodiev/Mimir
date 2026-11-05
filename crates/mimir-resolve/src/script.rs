@@ -47,7 +47,7 @@ pub fn resolve_calls(
         .map(|f| (f.path.as_path(), f.file_id))
         .collect();
     for file in files.iter().filter(|f| !covered.contains(&f.file_id)) {
-        for reference in &file.references {
+        for reference in file.references.iter() {
             let (from, kind) = match reference.kind {
                 ReferenceKind::Call => (
                     table
@@ -124,7 +124,7 @@ pub fn resolve_answers(
         edges,
         constant_uses,
     };
-    for reference in &file.references {
+    for reference in file.references.iter() {
         let site = (reference.range.start_line, reference.range.start_col);
         let Some(targets) = document.all_sites.get(&site) else {
             continue;

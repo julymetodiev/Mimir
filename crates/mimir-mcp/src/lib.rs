@@ -308,7 +308,7 @@ impl MimirServer {
         &self,
         Parameters(arguments): Parameters<SyncArguments>,
     ) -> Result<String, String> {
-        self.with_client(async |client| client.sync(arguments.full).await)
+        self.with_client(async |client| client.sync(arguments.full, false).await)
             .await
     }
 

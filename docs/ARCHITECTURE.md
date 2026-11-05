@@ -49,12 +49,12 @@ Dependencies point inwards. IO lives at the edge.
   client        mimir-client                           connect, start the daemon, one call per command
   wire          mimir-protocol                         requests and responses, typed
   application   mimir-engine                           the one writer: sync, watch, query, edit
-  adapters      mimir-resolve-scip, mimir-resolve-ra,  a SCIP index, rust-analyzer, scip-go, gopls, tsrs, pyrefly, a language server, files on disk
-                mimir-resolve-go, mimir-resolve-lsp, mimir-lsp,
+  adapters      mimir-resolve-scip, mimir-resolve-ra,  a SCIP index, rust-analyzer, scip-go, gopls, tsrs, pyrefly, clangd-indexer, a language server, files on disk
+                mimir-resolve-go, mimir-resolve-clang, mimir-resolve-lsp, mimir-lsp,
                 mimir-edit
   ports + rules mimir-resolve                          linking rules and the port for a semantic source
-  domain        mimir-graph, mimir-parse-core,         pure: no IO, no async, no clock, no environment
-                mimir-parse-rust, mimir-parse-ts, mimir-parse-python, mimir-parse-go,
+  domain        mimir-graph, mimir-graph-fb, mimir-parse-core,         pure: no IO, no async, no clock, no environment
+                mimir-parse-rust, mimir-parse-ts, mimir-parse-python, mimir-parse-go, mimir-parse-c,
                 mimir-types
 ```
 
@@ -66,11 +66,14 @@ Dependencies point inwards. IO lives at the edge.
 | `mimir-parse-ts` | domain | TypeScript and JavaScript through tree-sitter |
 | `mimir-parse-python` | domain | Python through tree-sitter |
 | `mimir-parse-go` | domain | Go through tree-sitter |
-| `mimir-graph` | domain | symbols, edges and queries over them |
+| `mimir-parse-c` | domain | C and C++ through tree-sitter |
+| `mimir-graph` | domain | symbols, edges and queries over them, and the graph as bytes for a file |
+| `mimir-graph-fb` | domain | the code `flatc` generates for the file, the only `unsafe` it takes to read it, behind a check of every offset |
 | `mimir-resolve` | rules + port | turning references into edges; syntax rules; the port `SemanticSource` |
 | `mimir-resolve-scip` | adapter | reading a SCIP index, keeping it by a hash of the sources, the choice between a kept index, a running server and a new index |
 | `mimir-resolve-ra` | adapter | what is Rust's own: Cargo roots, failed macros, the running `rust-analyzer` |
 | `mimir-resolve-go` | adapter | what is Go's own: `go.mod` roots, `scip-go`, `gopls`, the versions tested |
+| `mimir-resolve-clang` | adapter | what is C's own: the compilation database, `clangd-indexer`, its output as a SCIP file, the versions tested |
 | `mimir-resolve-lsp` | adapter | a language server as a semantic source: asking about each site, saving the answers; one module for each server, as `tsrs` and `pyrefly` |
 | `mimir-lsp` | adapter | a running language server: starting it, its messages, file URIs |
 | `mimir-edit` | adapter | applying edits to files, with conflict detection |
@@ -91,8 +94,9 @@ sources, so only `commands/daemon.rs` names them.
 The socket is in a private directory under the system's temporary directory, by a hash of the
 project's path, because a socket's path is limited to about 100 characters. A daemon holds
 `.mimir/daemon.lock`, so a project has one. A client that finds a daemon of another version replaces
-it. `.mimir/graph/graph.json` is written by `mimir sync` for measurements; nothing reads it back,
-since the daemon builds the graph from the sources when it starts.
+it. A daemon starts from `.mimir/graph/graph.fb` and `references.fb` and reads only the files that changed:
+[GRAPH-STORE.md](GRAPH-STORE.md). `.mimir/graph/graph.json` is written by `mimir sync --json`, for
+measurements, and nothing reads it back.
 
 ## 4. Rules
 

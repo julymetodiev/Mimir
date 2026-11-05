@@ -26,8 +26,10 @@ mimir-parse-ts = { workspace = true }
 mimir-parse-python = { workspace = true }
 mimir-resolve = { workspace = true }
 mimir-parse-go = { workspace = true }
+mimir-parse-c = { workspace = true }
 mimir-resolve-ra = { workspace = true }
 mimir-resolve-go = { workspace = true }
+mimir-resolve-clang = { workspace = true }
 mimir-resolve-lsp = { workspace = true }
 clap = { workspace = true }
 tokio = { workspace = true }

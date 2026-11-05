@@ -137,7 +137,7 @@ Where they stand, measured through `mimir` on an M1 Pro:
 | That restart takes, without starting `tsrs` | 1.0 s | 2.9 s | 4.2 s |
 | Saved answers | 1.0 MB | 2.3 MB | 4.9 MB |
 
-Those are with `tsrs` 0.21.0, and every edge of the three graphs is the same as with 0.20.1. Between runs the daemon moved by up to 45 MB, up to 426 MB on three.js. `tsrs` itself used 0.6 to 2.5 GB while it ran. An edit near the bottom of the imports re-asks most of a project: 30 s on nest for `packages/common/index.ts`.
+Those are with `tsrs` 0.21.0, and every edge of the three graphs is the same as with 0.20.1 and with 0.22.0. Between runs the daemon moved by up to 45 MB, up to 426 MB on three.js. `tsrs` itself used 0.6 to 2.5 GB while it ran. An edit near the bottom of the imports re-asks most of a project: 30 s on nest for `packages/common/index.ts`.
 
 ## 6. Machine checks
 

@@ -60,7 +60,7 @@ impl GraphActor {
             files.push(path.clone());
         }
 
-        let all = self.graph.symbols().all_symbols();
+        let all = self.graph.all_symbols();
         let mut places: HashMap<SymbolId, u32> = HashMap::with_capacity(all.len());
         let mut symbols = Vec::with_capacity(all.len());
         for symbol in &all {

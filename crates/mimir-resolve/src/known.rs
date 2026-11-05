@@ -40,7 +40,7 @@ impl<'a> Known<'a> {
     pub fn add(
         &mut self,
         table: &SymbolTable,
-        index: &SemanticIndex,
+        index: &'a SemanticIndex,
         documents: &[Document<'a>],
         covered: &mut HashSet<FileId>,
     ) {
@@ -49,6 +49,30 @@ impl<'a> Known<'a> {
                 covered.insert(file.file_id);
             }
             let id = file.file_id;
+            let told = index
+                .answers
+                .get(&file.path)
+                .filter(|answer| !answer.definitions.is_empty());
+            if let Some(answer) = told {
+                for (symbol, (line, name)) in &answer.definitions {
+                    if is_function(symbol)
+                        && let Some(found) = table.definition_at(id, *line, name)
+                    {
+                        self.definitions.add(symbol, found);
+                    }
+                    if is_term(symbol)
+                        && let Some(found) = table.constant_at(id, *line, name)
+                    {
+                        self.constants.add(symbol, found);
+                    }
+                    if is_data(symbol)
+                        && let Some(found) = table.data_at(id, *line, name)
+                    {
+                        self.data.add(symbol, found);
+                    }
+                }
+                continue;
+            }
             if index.is_edited(&file.path) {
                 self.definitions.add_by_order(
                     occurrences,

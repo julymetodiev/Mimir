@@ -43,11 +43,12 @@ impl GraphActor {
         // First try qualified name if it looks like one (contains "::")
         let results = if name.contains("::") {
             // Try exact qualified name match first
-            if let Some(sym) = self.graph.find_by_qualified_name(name) {
-                vec![sym]
-            } else {
+            let exact = self.graph.find_by_qualified_name(name);
+            if exact.is_empty() {
                 // Fall back to simple name search
                 self.graph.find_symbol(name)
+            } else {
+                exact
             }
         } else {
             self.graph.find_symbol(name)
@@ -112,7 +113,7 @@ impl GraphActor {
             include_callers: !options.callees_only,
             include_callees: !options.callers_only,
         };
-        let Some(trace) = self.graph.trace(symbol_id, trace_options) else {
+        let Some(trace) = self.graph.trace(symbol_id, trace_options, &self.file_paths) else {
             return TraceResponse::new(self.symbol_to_info(&root_sym));
         };
 
@@ -159,7 +160,10 @@ impl GraphActor {
         options: &mimir_protocol::TraceOptions,
     ) -> Result<TraceResponse, GraphError> {
         let found = self.named(name, options.file.as_deref())?;
-        let best = source::most_likely(&found, name).ok_or_else(|| GraphError::SymbolNotFound {
+        let best = source::most_likely(&found, name, &self.file_paths, |symbol| {
+            self.graph.callers(symbol.id).len()
+        })
+        .ok_or_else(|| GraphError::SymbolNotFound {
             name: name.to_string(),
         })?;
         let mut trace = self.handle_trace(best.id, options);
@@ -218,7 +222,10 @@ impl GraphActor {
         after: u32,
     ) -> Result<SymbolSource, GraphError> {
         let found = self.named(name, file)?;
-        let best = source::most_likely(&found, name).ok_or_else(|| GraphError::SymbolNotFound {
+        let best = source::most_likely(&found, name, &self.file_paths, |symbol| {
+            self.graph.callers(symbol.id).len()
+        })
+        .ok_or_else(|| GraphError::SymbolNotFound {
             name: name.to_string(),
         })?;
         let mut source = self.source_lines(best, before, after, None)?;
@@ -249,9 +256,8 @@ impl GraphActor {
         after: u32,
         limit: Option<u32>,
     ) -> Result<SymbolSource, GraphError> {
-        let file = self
-            .sources
-            .get(&symbol.file_id)
+        let text = self
+            .text_of(symbol.file_id)
             .ok_or_else(|| GraphError::FileNotFound {
                 path: self
                     .file_paths
@@ -260,7 +266,7 @@ impl GraphActor {
                     .unwrap_or_default(),
             })?;
         let (first_line, lines, truncated) = source::cut(
-            &file.source,
+            &text,
             symbol.range.start_line,
             symbol.range.end_line,
             before,
@@ -340,7 +346,6 @@ impl GraphActor {
         let limit = options.limit.unwrap_or(20) as usize;
         let mut matches: Vec<SymbolInfo> = self
             .graph
-            .symbols()
             .all_symbols()
             .iter()
             .filter(|symbol| {

@@ -50,7 +50,7 @@ pub fn index_at(directory: &Path, sources: &[&str]) -> (CodeGraph, Vec<ProjectFi
         files.push(ProjectFile {
             file_id,
             path: PathBuf::from(path),
-            references: GoAdapter.extract_references(&tree, file_id),
+            references: GoAdapter.extract_references(&tree, file_id).into(),
             source: source.as_str().into(),
         });
     }

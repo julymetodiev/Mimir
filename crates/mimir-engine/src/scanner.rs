@@ -4,9 +4,9 @@ use chrono::{DateTime, TimeZone, Utc};
 use ignore::WalkBuilder;
 use mimir_edit::is_temporary;
 use mimir_types::{ContentHash, Language};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tokio::fs;
 use tracing::warn;
 
 /// A file over this is generated, not written, and stays out of the graph.
@@ -99,6 +99,9 @@ pub fn remove_leftover_writes(root: &Path, age: Duration) {
     }
 }
 
+/// What is known of files without reading them: size, time in milliseconds and hash, by full path.
+pub type Known = HashMap<PathBuf, (u64, i64, ContentHash)>;
+
 /// Directory scanner with gitignore support.
 pub struct Scanner {
     root: PathBuf,
@@ -112,80 +115,68 @@ impl Scanner {
         }
     }
 
-    /// Scan the directory and return all matching files.
-    pub async fn scan(&self) -> std::io::Result<Vec<ScannedFile>> {
+    /// Scan the directory and return all matching files. A file `known` with the same size and time
+    /// is not read: its hash is taken from there. A tool that changes a file and keeps both is
+    /// missed until a scan with nothing known.
+    pub async fn scan(&self, known: Known) -> std::io::Result<Vec<ScannedFile>> {
         let root = self.root.clone();
-
-        let walker = walker(&root).build();
-
-        let mut files = Vec::new();
-
-        for entry in walker {
-            let entry = match entry {
-                Ok(e) => e,
-                Err(_) => continue,
-            };
-
-            let path = entry.path();
-
-            // Skip directories
-            if path.is_dir() {
-                continue;
-            }
-
-            // Get metadata
-            let metadata = match fs::metadata(path).await {
-                Ok(m) => m,
-                Err(_) => continue,
-            };
-
-            // Skip files that are too large
-            if metadata.len() > MAX_FILE_BYTES {
-                continue;
-            }
-
-            // Detect language
-            let language = Language::from_path(path);
-
-            // Skip unknown languages (non-code files)
-            if !language.is_known() {
-                continue;
-            }
-            if go_tool_skips(path.strip_prefix(&root).unwrap_or(path)) {
-                continue;
-            }
-
-            // Read and hash content
-            let content = match fs::read(path).await {
-                Ok(c) => c,
-                Err(_) => continue,
-            };
-
-            let content_hash = ContentHash::compute(&content);
-
-            // Get modification time
-            let modified_at = metadata
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .and_then(|d| Utc.timestamp_opt(d.as_secs() as i64, 0).single())
-                .unwrap_or_else(Utc::now);
-
-            // Compute relative path
-            let relative_path = path.strip_prefix(&root).unwrap_or(path).to_path_buf();
-
-            files.push(ScannedFile {
-                path: relative_path,
-                absolute_path: path.to_path_buf(),
-                language,
-                size: metadata.len(),
-                modified_at,
-                content_hash,
-            });
-        }
-
-        Ok(files)
+        tokio::task::spawn_blocking(move || scan(&root, &known))
+            .await
+            .map_err(std::io::Error::other)
     }
+}
+
+/// What a scan of this directory finds. What is in no language costs no call for its size or time.
+fn scan(root: &Path, known: &Known) -> Vec<ScannedFile> {
+    let mut files = Vec::new();
+    for entry in walker(root).build().flatten() {
+        if entry.file_type().is_some_and(|kind| kind.is_dir()) {
+            continue;
+        }
+        let path = entry.path();
+        let language = Language::from_path(path);
+        if !language.is_known() || go_tool_skips(path.strip_prefix(root).unwrap_or(path)) {
+            continue;
+        }
+        // Through a link, which may be to a directory or to nothing.
+        let Ok(metadata) = std::fs::metadata(path) else {
+            continue;
+        };
+        if !metadata.is_file() || metadata.len() > MAX_FILE_BYTES {
+            continue;
+        }
+        let modified_at = metadata
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .and_then(|d| {
+                Utc.timestamp_opt(d.as_secs() as i64, d.subsec_nanos())
+                    .single()
+            })
+            .unwrap_or_else(Utc::now);
+        let content_hash = match known.get(path) {
+            Some((size, modified, hash))
+                if *size == metadata.len() && *modified == modified_at.timestamp_millis() =>
+            {
+                *hash
+            }
+            _ => {
+                let Ok(content) = std::fs::read(path) else {
+                    continue;
+                };
+                ContentHash::compute(&content)
+            }
+        };
+        files.push(ScannedFile {
+            path: path.strip_prefix(root).unwrap_or(path).to_path_buf(),
+            absolute_path: path.to_path_buf(),
+            language,
+            size: metadata.len(),
+            modified_at,
+            content_hash,
+        });
+    }
+    files
 }
 
 #[cfg(test)]
@@ -258,7 +249,7 @@ mod tests {
     async fn test_scan_empty_dir() {
         let temp_dir = TempDir::new().unwrap();
         let scanner = Scanner::new(temp_dir.path());
-        let files = scanner.scan().await.unwrap();
+        let files = scanner.scan(Known::new()).await.unwrap();
         assert!(files.is_empty());
     }
 
@@ -281,7 +272,7 @@ mod tests {
         readme.write_all(b"# Readme").unwrap();
 
         let scanner = Scanner::new(temp_dir.path());
-        let files = scanner.scan().await.unwrap();
+        let files = scanner.scan(Known::new()).await.unwrap();
 
         assert_eq!(files.len(), 2);
         assert!(files.iter().all(|f| f.language == Language::Rust));
@@ -311,7 +302,7 @@ mod tests {
         ignored.write_all(b"ignored").unwrap();
 
         let scanner = Scanner::new(temp_dir.path());
-        let files = scanner.scan().await.unwrap();
+        let files = scanner.scan(Known::new()).await.unwrap();
 
         assert_eq!(files.len(), 1);
         assert!(files[0].path.to_string_lossy().contains("main.rs"));

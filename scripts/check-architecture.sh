@@ -11,8 +11,9 @@ for input in scripts/architecture-budget.txt scripts/approved-crate-items.txt; d
 done
 
 TEST_FILES='(^|/)tests?(/|\.rs$)|_tests?(/|\.rs$)|(^|/)test_[a-z_]+\.rs$|/benches/|/examples/|(^|/)build\.rs$'
+GENERATED='^crates/mimir-graph-fb/src/(generated|references_generated)\.rs$'
 src() { # $@ = path prefixes; prints non-test .rs files
-  git ls-files --cached --others --exclude-standard -- "$@" | sort -u | grep -E '\.rs$' | grep -v -E "$TEST_FILES" || true
+  git ls-files --cached --others --exclude-standard -- "$@" | sort -u | grep -E '\.rs$' | grep -v -E "$TEST_FILES" | grep -v -E "$GENERATED" || true
 }
 count() { # $1 = regex, files on stdin; drops inline test modules
   local re=$1 n=0 f c
@@ -39,12 +40,15 @@ allowed() {
     mimir-parse-ts) echo "mimir-types mimir-parse-core" ;;
     mimir-parse-python) echo "mimir-types mimir-parse-core" ;;
     mimir-parse-go) echo "mimir-types mimir-parse-core" ;;
-    mimir-graph) echo "mimir-types" ;;
+    mimir-parse-c) echo "mimir-types mimir-parse-core" ;;
+    mimir-graph-fb) echo "" ;;
+    mimir-graph) echo "mimir-types mimir-graph-fb" ;;
     mimir-resolve) echo "mimir-types mimir-graph mimir-parse-core" ;;
     mimir-lsp) echo "mimir-types" ;;
     mimir-resolve-scip) echo "mimir-types mimir-resolve mimir-lsp" ;;
     mimir-resolve-ra) echo "mimir-types mimir-parse-core mimir-resolve mimir-resolve-scip mimir-lsp" ;;
     mimir-resolve-go) echo "mimir-types mimir-resolve mimir-resolve-scip mimir-lsp" ;;
+    mimir-resolve-clang) echo "mimir-types mimir-parse-core mimir-resolve mimir-resolve-scip mimir-lsp" ;;
     mimir-resolve-lsp) echo "mimir-types mimir-parse-core mimir-resolve mimir-lsp" ;;
     mimir-edit) echo "mimir-types" ;;
     mimir-hook) echo "" ;;
@@ -56,7 +60,7 @@ allowed() {
     mimir-view-wire) echo "" ;;
     mimir-view) echo "mimir-types mimir-protocol mimir-client mimir-view-wire" ;;
     mimir-view-page) echo "mimir-view-wire" ;;
-    mimir-cli) echo "mimir-types mimir-protocol mimir-client mimir-hook mimir-daemon mimir-mcp mimir-view mimir-parse-core mimir-parse-rust mimir-parse-ts mimir-parse-python mimir-parse-go mimir-resolve mimir-resolve-ra mimir-resolve-go mimir-resolve-lsp" ;;
+    mimir-cli) echo "mimir-types mimir-protocol mimir-client mimir-hook mimir-daemon mimir-mcp mimir-view mimir-parse-core mimir-parse-rust mimir-parse-ts mimir-parse-python mimir-parse-go mimir-parse-c mimir-resolve mimir-resolve-ra mimir-resolve-go mimir-resolve-clang mimir-resolve-lsp" ;;
     *) echo "NOT-IN-SPEC" ;;
   esac
 }
@@ -79,7 +83,7 @@ unused_deps() { # dependencies declared but not named in the crate's source
   done
   echo "$n"
 }
-DOMAIN='crates/mimir-types crates/mimir-graph crates/mimir-parse-core crates/mimir-parse-rust crates/mimir-parse-ts crates/mimir-parse-python crates/mimir-parse-go'
+DOMAIN='crates/mimir-types crates/mimir-graph crates/mimir-graph-fb crates/mimir-parse-core crates/mimir-parse-rust crates/mimir-parse-ts crates/mimir-parse-python crates/mimir-parse-go crates/mimir-parse-c'
 TRANSPORT='crates/mimir-cli crates/mimir-mcp crates/mimir-daemon crates/mimir-client crates/mimir-view'
 
 now() {
@@ -129,7 +133,7 @@ if [ "${1:-}" = "--new" ]; then
       /^\+\+\+/ { next }
       /^\+/ { if (n < cut) print f ": " substr($0, 2); n++ }'
   }
-  hits=$( { for f in $( { git diff --name-only "$base" -- 'crates/*.rs'; git ls-files --others --exclude-standard -- 'crates/*.rs'; } | sort -u | grep -v -E "$TEST_FILES" || true); do
+  hits=$( { for f in $( { git diff --name-only "$base" -- 'crates/*.rs'; git ls-files --others --exclude-standard -- 'crates/*.rs'; } | sort -u | grep -v -E "$TEST_FILES" | grep -v -E "$GENERATED" || true); do
               if [ -f "$f" ]; then added "$f"; fi
             done
           } | { grep -E "$re|anyhow" || true; } | { grep -v -E '^crates/mimir-cli/.*anyhow' || true; } | { grep -v -E ': *use super::\*;' || true; } | { grep -v -E ': *//' || true; })

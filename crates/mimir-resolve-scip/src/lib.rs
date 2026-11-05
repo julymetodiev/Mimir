@@ -6,6 +6,7 @@ mod decode;
 mod load;
 mod running;
 mod snapshot;
+mod version;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -15,6 +16,7 @@ use mimir_resolve::{LiveDocument, ProjectFile, SemanticIndex};
 pub use decode::decode;
 pub use load::{IndexFiles, load_root, wait_for};
 pub use running::Running;
+pub use version::check_version;
 
 /// Why a root has no index.
 #[derive(Debug, thiserror::Error)]

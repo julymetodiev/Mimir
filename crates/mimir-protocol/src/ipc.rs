@@ -82,8 +82,8 @@ pub enum IpcCommand {
     Stats,
 
     /// Bring the graph up to date and wait until nothing about it is provisional. `full` writes
-    /// a new semantic index.
-    Sync { full: bool },
+    /// a new semantic index. `json` writes the graph as JSON, for measuring it from outside.
+    Sync { full: bool, json: bool },
 
     /// Search for symbols by pattern.
     Search { options: SearchOptions },

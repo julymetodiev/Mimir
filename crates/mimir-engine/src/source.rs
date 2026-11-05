@@ -1,15 +1,28 @@
 //! Choosing a symbol by name and cutting its lines out of a file's text.
 
-use mimir_types::{Symbol, SymbolKind};
+use mimir_types::{FileId, Symbol, SymbolKind};
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 /// The symbol a bare name most likely means: one with exactly that name, then an impl, a type, a
-/// function; a field and a variant last. The lowest id among equals, so the same question gets the
+/// function; a field and a variant last. Among equals the one most called, as what a name means is
+/// most often what is most used, then the first by path and place, so the same question gets the
 /// same symbol.
-pub fn most_likely<'a>(found: &'a [Arc<Symbol>], name: &str) -> Option<&'a Arc<Symbol>> {
-    likeliest(found, name)
-        .into_iter()
-        .min_by_key(|symbol| symbol.id.as_u64())
+pub fn most_likely<'a>(
+    found: &'a [Arc<Symbol>],
+    name: &str,
+    paths: &HashMap<FileId, PathBuf>,
+    callers: impl Fn(&Symbol) -> usize,
+) -> Option<&'a Arc<Symbol>> {
+    likeliest(found, name).into_iter().min_by_key(|symbol| {
+        (
+            std::cmp::Reverse(callers(symbol)),
+            paths.get(&symbol.file_id),
+            symbol.range.start_line,
+            symbol.range.start_col,
+        )
+    })
 }
 
 /// The symbols a bare name is equally likely to mean.

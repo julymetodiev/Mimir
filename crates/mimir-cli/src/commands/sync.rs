@@ -4,10 +4,10 @@ use anyhow::Result;
 use mimir_client::Client;
 
 /// Execute the sync command.
-pub async fn execute(full: bool) -> Result<()> {
+pub async fn execute(full: bool, json: bool) -> Result<()> {
     let mut client = Client::open(&std::env::current_dir()?).await?;
     println!("Syncing project: {}", client.root().display());
-    let result = client.sync(full).await?;
+    let result = client.sync(full, json).await?;
     let stats = client.stats().await?;
     println!(
         "Files: {} added, {} updated, {} removed",

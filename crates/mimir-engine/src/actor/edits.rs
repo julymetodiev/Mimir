@@ -29,7 +29,7 @@ impl GraphActor {
         };
         match self.apply_edits(&editor, edits, preview).await {
             Err(GraphError::Edit(EditError::HashMismatch { .. })) => {
-                self.scan_files().await?;
+                self.scan_files(false).await?;
                 let report = self.apply_edits(&editor, edits, preview).await?;
                 self.reload_edited(&report, preview)?;
                 Ok(report)
@@ -118,11 +118,8 @@ impl GraphActor {
                     .get(&path)
                     .map(|tracked| tracked.content_hash)
                     .ok_or_else(|| GraphError::FileNotFound { path: path.clone() })?;
-                let text = self
-                    .sources
-                    .get(&symbol.file_id)
-                    .map_or("", |file| &*file.source);
-                edit::on_symbol(&path, symbol, hash, text, &edit.change)
+                let text = self.text_of(symbol.file_id).unwrap_or_else(|| "".into());
+                edit::on_symbol(&path, symbol, hash, &text, &edit.change)
             }
         }
     }

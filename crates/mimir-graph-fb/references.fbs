@@ -1,0 +1,24 @@
+// The references of every file, so that a link needs no parse of a file that did not change, kept
+// apart from the graph so that a change to the graph does not write them. docs/GRAPH-STORE.md.
+// Generate with scripts/generate-graph-fb.sh.
+namespace refs;
+
+struct Place { start_line:uint32; start_col:uint32; end_line:uint32; end_col:uint32; start:uint32; end:uint32; }
+
+table Reference {
+  name:string;
+  kind:uint8;
+  place:Place;
+  confidence:uint8;
+  context:string;
+  container:string;
+  call_form:uint8;      // 0 for none
+  receiver_line:uint32; // from 1; 0 for none
+  receiver_col:uint32;
+}
+
+table FileReferences { id:uint64 (key); hash:[uint8]; references:[Reference]; }
+
+table References { version:uint32; built_by:string; files:[FileReferences]; }
+
+root_type References;

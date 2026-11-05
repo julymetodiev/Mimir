@@ -30,7 +30,7 @@ def sync(label, *args):
     peak = 0
     # To a file, not a pipe: a pipe is read to its end, which waits for every process holding it.
     with tempfile.TemporaryFile("w+") as log:
-        proc = subprocess.Popen([mimir, "sync", *args], cwd=project, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+        proc = subprocess.Popen([mimir, "sync", "--json", *args], cwd=project, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
         while True:
             peak = max(peak, rss_kb())
             try:

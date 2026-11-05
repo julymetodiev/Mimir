@@ -14,8 +14,9 @@ fn create_test_registry() -> Arc<AdapterRegistry> {
 async fn names_by_kind(kind: &str) -> Vec<String> {
     let source = "pub struct Point { x: i32 }\nenum Color { Red, Green }\nfn area(p: i32) -> i32 { p }\nstruct Wrap<T> { t: T }\n";
     let (cmd_tx, cmd_rx) = command_channel(16);
+    let dir = tempfile::TempDir::new().unwrap();
     let actor = GraphActor::with_registry(
-        PathBuf::from("/tmp/test"),
+        dir.path().to_path_buf(),
         create_test_registry(),
         Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
     );
@@ -98,8 +99,9 @@ async fn test_kind_filter_variant() {
 async fn test_actor_lifecycle() {
     let (cmd_tx, cmd_rx) = command_channel(16);
 
+    let dir = tempfile::TempDir::new().unwrap();
     let actor = GraphActor::with_registry(
-        PathBuf::from("/tmp/test"),
+        dir.path().to_path_buf(),
         create_test_registry(),
         Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
     );
@@ -115,8 +117,9 @@ async fn test_actor_lifecycle() {
 async fn test_add_file() {
     let (cmd_tx, cmd_rx) = command_channel(16);
 
+    let dir = tempfile::TempDir::new().unwrap();
     let actor = GraphActor::with_registry(
-        PathBuf::from("/tmp/test"),
+        dir.path().to_path_buf(),
         create_test_registry(),
         Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
     );
@@ -136,7 +139,7 @@ async fn test_add_file() {
         .unwrap();
 
     let file_id = reply_rx.await.unwrap().unwrap();
-    assert_eq!(file_id, FileId::new(1));
+    assert_eq!(file_id, FileId::of_path(std::path::Path::new("test.rs")));
 
     cmd_tx.send(GraphCommand::Shutdown).await.unwrap();
     handle.await.unwrap().unwrap();
@@ -146,8 +149,9 @@ async fn test_add_file() {
 async fn test_find_symbol() {
     let (cmd_tx, cmd_rx) = command_channel(16);
 
+    let dir = tempfile::TempDir::new().unwrap();
     let actor = GraphActor::with_registry(
-        PathBuf::from("/tmp/test"),
+        dir.path().to_path_buf(),
         create_test_registry(),
         Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
     );
@@ -190,8 +194,9 @@ async fn test_find_symbol() {
 async fn test_stats() {
     let (cmd_tx, cmd_rx) = command_channel(16);
 
+    let dir = tempfile::TempDir::new().unwrap();
     let actor = GraphActor::with_registry(
-        PathBuf::from("/tmp/test"),
+        dir.path().to_path_buf(),
         create_test_registry(),
         Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
     );
@@ -229,8 +234,9 @@ async fn test_stats() {
 async fn test_remove_file() {
     let (cmd_tx, cmd_rx) = command_channel(16);
 
+    let dir = tempfile::TempDir::new().unwrap();
     let actor = GraphActor::with_registry(
-        PathBuf::from("/tmp/test"),
+        dir.path().to_path_buf(),
         create_test_registry(),
         Arc::new(mimir_resolve_ra::RustAnalyzer::default()),
     );

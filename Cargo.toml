@@ -8,12 +8,15 @@ members = [
     "crates/mimir-parse-ts",
     "crates/mimir-parse-python",
     "crates/mimir-parse-go",
+    "crates/mimir-parse-c",
     "crates/mimir-graph",
+    "crates/mimir-graph-fb",
     "crates/mimir-resolve",
     "crates/mimir-lsp",
     "crates/mimir-resolve-scip",
     "crates/mimir-resolve-ra",
     "crates/mimir-resolve-go",
+    "crates/mimir-resolve-clang",
     "crates/mimir-resolve-lsp",
     # M3: Actor crates
     "crates/mimir-edit",
@@ -48,14 +51,17 @@ mimir-parse-rust = { path = "crates/mimir-parse-rust" }
 mimir-parse-ts = { path = "crates/mimir-parse-ts" }
 mimir-parse-python = { path = "crates/mimir-parse-python" }
 mimir-parse-go = { path = "crates/mimir-parse-go" }
+mimir-parse-c = { path = "crates/mimir-parse-c" }
 
 # Internal crates - Layer 3
 mimir-graph = { path = "crates/mimir-graph" }
+mimir-graph-fb = { path = "crates/mimir-graph-fb" }
 mimir-resolve = { path = "crates/mimir-resolve" }
 mimir-lsp = { path = "crates/mimir-lsp" }
 mimir-resolve-scip = { path = "crates/mimir-resolve-scip" }
 mimir-resolve-ra = { path = "crates/mimir-resolve-ra" }
 mimir-resolve-go = { path = "crates/mimir-resolve-go" }
+mimir-resolve-clang = { path = "crates/mimir-resolve-clang" }
 mimir-resolve-lsp = { path = "crates/mimir-resolve-lsp" }
 mimir-edit = { path = "crates/mimir-edit" }
 mimir-protocol = { path = "crates/mimir-protocol" }
@@ -84,11 +90,12 @@ blake3 = "1.8.7"
 
 # Concurrency
 dashmap = "6.2.1"
+flatbuffers = "25.12.19"
+self_cell = "1.3.0"
 tokio = { version = "1.54.1", features = ["full"] }
 arc-swap = "1.9.3"
 
 # Graph
-petgraph = "0.8.3"
 
 # Regex
 regex = "1.13.1"
@@ -100,6 +107,8 @@ tree-sitter-typescript = "0.23.2"
 tree-sitter-javascript = "0.25.0"
 tree-sitter-python = "0.25.0"
 tree-sitter-go = "0.25.0"
+tree-sitter-c = "0.24.2"
+tree-sitter-cpp = "0.23.4"
 
 # CLI
 clap = { version = "4.6.7", features = ["derive"] }
@@ -112,7 +121,6 @@ hex = "0.4.3"
 ignore = "0.4.34"
 tempfile = "3.27.0"
 notify = { version = "8.2.1", default-features = false, features = ["macos_fsevent"] }
-notify-debouncer-mini = "0.7.0"
 
 # Testing
 assert_cmd = "2.2.2"

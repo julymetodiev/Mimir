@@ -298,7 +298,10 @@ async fn answer(request: IpcRequest, handle: &GraphHandle, identity: &str) -> Ip
         // A connection that watches never gets here: `serve` hands it over first.
         IpcCommand::Watch => Ok(IpcData::Watching),
         IpcCommand::Stats => handle.stats().await.map(IpcData::Stats),
-        IpcCommand::Sync { full } => handle.sync_complete(full).await.map(IpcData::SyncResult),
+        IpcCommand::Sync { full, json } => handle
+            .sync_complete(full, json)
+            .await
+            .map(IpcData::SyncResult),
         IpcCommand::Search { options } => handle.search(options).await.map(IpcData::SearchResult),
         IpcCommand::Grep { options } => handle.grep(options).await.map(IpcData::GrepResult),
         IpcCommand::Files { glob, limit } => {

@@ -233,11 +233,11 @@ impl GraphHandle {
         answer.await.map_err(|_| GraphError::EngineStopped)?
     }
 
-    /// Scan for changes, wait until no edge is provisional, and save the graph.
-    pub async fn sync_complete(&self, full: bool) -> Result<SyncResult, GraphError> {
+    /// Scan for changes and wait until no edge is provisional. `json` writes the graph as JSON too.
+    pub async fn sync_complete(&self, full: bool, json: bool) -> Result<SyncResult, GraphError> {
         let (reply, answer) = oneshot::channel();
         self.commands
-            .send(GraphCommand::SyncComplete { full, reply })
+            .send(GraphCommand::SyncComplete { full, json, reply })
             .await
             .map_err(|_| GraphError::EngineStopped)?;
         answer.await.map_err(|_| GraphError::EngineStopped)?

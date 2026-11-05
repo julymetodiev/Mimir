@@ -86,6 +86,7 @@ impl GraphActor {
         base: Option<String>,
         depth: Option<u32>,
     ) -> Result<ImpactResponse, GraphError> {
+        self.ensure_sources();
         let root = self.root.clone();
         let changes = tokio::task::spawn_blocking(move || changes::read(&root, base.as_deref()))
             .await
@@ -108,7 +109,7 @@ impl GraphActor {
 
         let roots: Vec<SymbolId> = changed.iter().map(|(symbol, _)| symbol.id).collect();
         let depth = depth.unwrap_or(DEFAULT_DEPTH) as usize;
-        let dependents = self.graph.dependents(&roots, depth);
+        let dependents = self.graph.dependents(&roots, depth, &self.file_paths);
         let changed = changed
             .into_iter()
             .zip(dependents)

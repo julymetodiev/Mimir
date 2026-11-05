@@ -33,8 +33,9 @@ impl Language {
             "go" => Self::Go,
             "java" => Self::Java,
             "kt" | "kts" => Self::Kotlin,
-            "c" | "h" => Self::C,
-            "cpp" | "hpp" | "cc" | "cxx" | "hh" | "hxx" => Self::Cpp,
+            "c" => Self::C,
+            // A `.h` may hold either, and the C++ grammar reads what headers hold.
+            "cpp" | "h" | "hpp" | "cc" | "cxx" | "hh" | "hxx" => Self::Cpp,
             _ => Self::Unknown,
         }
     }
@@ -68,6 +69,7 @@ impl Language {
     pub const fn family(&self) -> Self {
         match self {
             Self::Tsx | Self::JavaScript => Self::TypeScript,
+            Self::Cpp => Self::C,
             other => *other,
         }
     }
@@ -96,6 +98,9 @@ mod tests {
         assert_eq!(Language::from_extension("tsx"), Language::Tsx);
         assert_eq!(Language::from_extension("py"), Language::Python);
         assert_eq!(Language::from_extension("xyz"), Language::Unknown);
+        assert_eq!(Language::from_extension("c"), Language::C);
+        assert_eq!(Language::from_extension("h"), Language::Cpp);
+        assert_eq!(Language::Cpp.family(), Language::C.family());
     }
 
     #[test]

@@ -256,7 +256,7 @@ pub fn resolve_calls(
         .filter_map(|index| Some((index.import_path.as_deref()?, index.root.as_path())))
         .collect();
     for file in files.iter().filter(|f| !covered.contains(&f.file_id)) {
-        for reference in &file.references {
+        for reference in file.references.iter() {
             let (from, kind) = match reference.kind {
                 ReferenceKind::Call => (
                     table

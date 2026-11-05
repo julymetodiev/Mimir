@@ -3,6 +3,7 @@
 //! A file a [`SemanticSource`] knows about gets its call edges from that source; any other file
 //! from syntax rules, which leave a call out rather than guess its target.
 
+mod cfamily;
 mod definitions;
 mod edges;
 mod golang;
@@ -42,7 +43,7 @@ pub struct ProjectFile {
     /// The file's text.
     pub source: Arc<str>,
     /// References found in the file.
-    pub references: Vec<ExtractedReference>,
+    pub references: Arc<[ExtractedReference]>,
 }
 
 /// What [`link`] did.
@@ -132,6 +133,7 @@ fn link_family(
             syntax::resolve_calls(&table, files, &covered, edges);
         }
         Language::Go => golang::resolve_calls(&table, files, indexes, &covered, edges),
+        Language::C => cfamily::resolve_calls(&table, files, &covered, edges),
         _ => script::resolve_calls(&table, files, &covered, edges),
     }
     let syntax_calls = count(edges, EdgeKind::Calls) - calls - semantic_calls;

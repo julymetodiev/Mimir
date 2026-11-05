@@ -2,12 +2,14 @@
 
 use anyhow::Result;
 use mimir_client::Client;
+use mimir_parse_c::CFamilyAdapter;
 use mimir_parse_core::LanguageAdapter;
 use mimir_parse_go::GoAdapter;
 use mimir_parse_python::PythonAdapter;
 use mimir_parse_rust::RustAdapter;
 use mimir_parse_ts::ScriptAdapter;
 use mimir_resolve::{NoSemanticSource, SemanticSource, SemanticSources};
+use mimir_resolve_clang::ClangSource;
 use mimir_resolve_go::GoSource;
 use mimir_resolve_lsp::{pyrefly, tsrs};
 use mimir_resolve_ra::RustAnalyzer;
@@ -28,6 +30,7 @@ pub async fn run() -> Result<()> {
             Arc::new(tsrs()),
             Arc::new(pyrefly()),
             Arc::new(GoSource::default()),
+            Arc::new(ClangSource::default()),
         ]))
     };
     let languages: Vec<Arc<dyn LanguageAdapter>> = vec![
@@ -37,6 +40,8 @@ pub async fn run() -> Result<()> {
         Arc::new(ScriptAdapter::javascript()),
         Arc::new(PythonAdapter),
         Arc::new(GoAdapter),
+        Arc::new(CFamilyAdapter::c()),
+        Arc::new(CFamilyAdapter::cpp()),
     ];
     mimir_daemon::run(std::env::current_dir()?, DAEMON_IDLE, languages, semantics).await?;
     Ok(())

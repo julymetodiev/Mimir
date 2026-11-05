@@ -17,8 +17,9 @@ fn create_test_registry() -> Arc<AdapterRegistry> {
 async fn test_handle_add_and_find() {
     let (cmd_tx, cmd_rx) = command_channel(16);
 
+    let dir = tempfile::TempDir::new().unwrap();
     let actor = GraphActor::with_registry(
-        PathBuf::from("/tmp/test"),
+        dir.path().to_path_buf(),
         create_test_registry(),
         Arc::new(mimir_resolve::NoSemanticSource),
     );
@@ -37,7 +38,7 @@ async fn test_handle_add_and_find() {
         .await
         .unwrap();
 
-    assert_eq!(file_id, FileId::new(1));
+    assert_eq!(file_id, FileId::of_path(std::path::Path::new("test.rs")));
 
     // Find symbol
     let response = handle.find_symbol("my_func").await.unwrap();
@@ -52,8 +53,9 @@ async fn test_handle_add_and_find() {
 async fn test_handle_stats() {
     let (cmd_tx, cmd_rx) = command_channel(16);
 
+    let dir = tempfile::TempDir::new().unwrap();
     let actor = GraphActor::with_registry(
-        PathBuf::from("/tmp/test"),
+        dir.path().to_path_buf(),
         create_test_registry(),
         Arc::new(mimir_resolve::NoSemanticSource),
     );
@@ -87,8 +89,9 @@ async fn test_handle_stats() {
 async fn test_handle_clone() {
     let (cmd_tx, cmd_rx) = command_channel(16);
 
+    let dir = tempfile::TempDir::new().unwrap();
     let actor = GraphActor::with_registry(
-        PathBuf::from("/tmp/test"),
+        dir.path().to_path_buf(),
         create_test_registry(),
         Arc::new(mimir_resolve::NoSemanticSource),
     );

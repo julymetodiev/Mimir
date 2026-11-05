@@ -1,0 +1,17 @@
+[package]
+name = "mimir-parse-c"
+description = "C and C++ through tree-sitter, for Mimir"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+mimir-types.workspace = true
+mimir-parse-core.workspace = true
+tree-sitter.workspace = true
+tree-sitter-c.workspace = true
+tree-sitter-cpp.workspace = true

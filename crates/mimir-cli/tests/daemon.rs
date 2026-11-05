@@ -51,7 +51,12 @@ fn test_sync_saves_the_graph_and_reports_the_link() {
         .arg("sync")
         .assert()
         .success()
-        .stdout(contains("from syntax only (1 files)"))
+        .stdout(contains("from syntax only (1 files)"));
+    assert!(!dir.join(".mimir/graph/graph.json").exists());
+    mimir(dir)
+        .args(["sync", "--json"])
+        .assert()
+        .success()
         .stdout(contains("Graph saved to"));
     assert!(dir.join(".mimir/graph/graph.json").exists());
     stop(dir);

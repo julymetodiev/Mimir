@@ -17,11 +17,12 @@ use crate::channel::CommandReceiver;
 use crate::command::GraphCommand;
 use crate::error::GraphError;
 use crate::project_files;
+use crate::save;
 use mimir_graph::CodeGraph;
 use mimir_parse_core::AdapterRegistry;
 use mimir_protocol::{ActivityKind, GraphEvent, SymbolInfo};
 use mimir_resolve::{ProjectFile, SemanticIndex, SemanticSource};
-use mimir_types::{ContentHash, FileId, IdGenerator, Symbol};
+use mimir_types::{ContentHash, FileId, Symbol};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -59,8 +60,6 @@ pub struct GraphActor {
     registry: Arc<AdapterRegistry>,
     /// Project root path.
     root: PathBuf,
-    /// ID generator for symbols and files.
-    ids: IdGenerator,
     /// Tracked files by path.
     files: HashMap<PathBuf, TrackedFile>,
     /// Reverse mapping: file ID to path.
@@ -69,6 +68,8 @@ pub struct GraphActor {
     sources: HashMap<FileId, ProjectFile>,
     /// A file changed since edges were last resolved.
     needs_link: bool,
+    /// `references.fb` no longer holds what `sources` do.
+    references_changed: bool,
     /// What knows more than syntax about the files.
     semantics: Arc<dyn SemanticSource>,
     pending: Option<PendingLink>,
@@ -127,15 +128,27 @@ impl GraphActor {
         registry: Arc<AdapterRegistry>,
         semantics: Arc<dyn SemanticSource>,
     ) -> Self {
+        let graph = save::load(&root.join(".mimir").join("graph")).unwrap_or_default();
+        let (mut files, mut file_paths) = (HashMap::new(), HashMap::new());
+        for entry in graph.files() {
+            files.insert(
+                root.join(&entry.path),
+                TrackedFile {
+                    file_id: entry.id,
+                    content_hash: entry.hash,
+                },
+            );
+            file_paths.insert(entry.id, entry.path);
+        }
         Self {
-            graph: CodeGraph::new(),
+            graph,
             registry,
             root,
-            ids: IdGenerator::new(),
-            files: HashMap::new(),
-            file_paths: HashMap::new(),
+            files,
+            file_paths,
             sources: HashMap::new(),
             needs_link: false,
+            references_changed: false,
             semantics,
             pending: None,
             events: broadcast::channel(EVENTS_KEPT).0,
@@ -270,8 +283,8 @@ impl GraphActor {
                     answer(reply, response);
                 }
 
-                GraphCommand::SyncComplete { full, reply } => {
-                    self.handle_sync_complete(full, reply).await;
+                GraphCommand::SyncComplete { full, json, reply } => {
+                    self.handle_sync_complete(full, json, reply).await;
                 }
 
                 GraphCommand::Edit {

@@ -92,7 +92,7 @@ mod tests {
             file_id: mimir_types::FileId::new(1),
             path: PathBuf::from(path),
             source: Arc::from(""),
-            references: Vec::new(),
+            references: Vec::new().into(),
         }
     }
 

@@ -15,6 +15,16 @@ impl ContentHash {
         Self(*blake3::hash(data).as_bytes())
     }
 
+    /// A hash from its bytes.
+    pub fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    /// The hash's bytes.
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
     /// Convert to a hex string.
     pub fn to_hex(&self) -> String {
         hex::encode(self.0)

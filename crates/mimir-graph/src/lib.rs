@@ -1,17 +1,17 @@
-//! Code graph facade combining symbols and relations.
-//!
-//! This crate provides the high-level graph API:
-//! - `CodeGraph`: The main facade combining symbols and relations
-//! - Query methods: find_symbol, get_outgoing, get_incoming
-//! - Trace functionality for call chain analysis
+//! The code graph, in the format of the file that keeps it on disk: docs/GRAPH-STORE.md.
 
 pub mod relations;
-pub mod symbols;
 
+mod encode;
 mod facade;
+mod file;
+mod format;
+mod references;
 mod trace;
 
+pub use encode::encode;
 pub use facade::CodeGraph;
-pub use relations::{EdgeData, EdgeKind, RelationGraph, RelationsHandle};
-pub use symbols::{SymbolTable, SymbolsHandle};
+pub use file::{FileEntry, FileError, GraphFile};
+pub use references::{ReferencesFile, encode_references};
+pub use relations::{EdgeData, EdgeKind};
 pub use trace::{TraceNode, TraceOptions, TraceRelationship, TraceResult};

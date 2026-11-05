@@ -10,12 +10,9 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+mimir-graph-fb.workspace = true
 mimir-types.workspace = true
 
 arc-swap.workspace = true
-dashmap.workspace = true
-petgraph.workspace = true
 serde = { workspace = true, features = ["rc"] }
 
-[dev-dependencies]
-tempfile.workspace = true

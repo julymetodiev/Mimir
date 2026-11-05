@@ -58,7 +58,7 @@ async fn main() -> anyhow::Result<()> {
         }
         commands::Commands::Init => commands::init::execute()?,
         commands::Commands::Status => commands::status::execute().await?,
-        commands::Commands::Sync { full } => commands::sync::execute(full).await?,
+        commands::Commands::Sync { full, json } => commands::sync::execute(full, json).await?,
         commands::Commands::Trace {
             file,
             symbol,

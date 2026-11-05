@@ -329,8 +329,8 @@ impl Client {
     }
 
     /// Bring the graph up to date and wait until nothing about it is provisional.
-    pub async fn sync(&mut self, full: bool) -> Result<SyncResult, ClientError> {
-        match self.call(IpcCommand::Sync { full }).await? {
+    pub async fn sync(&mut self, full: bool, json: bool) -> Result<SyncResult, ClientError> {
+        match self.call(IpcCommand::Sync { full, json }).await? {
             IpcData::SyncResult(result) => Ok(result),
             _ => Err(ClientError::UnexpectedResponse),
         }

@@ -33,7 +33,7 @@ pub fn with_importers(
         .collect();
     let mut users: HashMap<&Path, HashSet<&Path>> = HashMap::new();
     for file in scripts {
-        for reference in &file.references {
+        for reference in file.references.iter() {
             if reference.kind == ReferenceKind::Import
                 && let Some(path) = &reference.context
                 && let Some(id) = resolve_import(&file.path, path, &by_path)

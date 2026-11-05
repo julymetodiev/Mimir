@@ -63,6 +63,9 @@ pub enum Commands {
         /// Write a new semantic index instead of asking a running analyzer about edited files.
         #[arg(long)]
         full: bool,
+        /// Also write the graph to `.mimir/graph/graph.json`, for measuring it from outside.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Trace call chains for a symbol.

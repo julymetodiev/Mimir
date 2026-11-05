@@ -1,5 +1,5 @@
 {
-  "description": "Mimir: refuses the first search or read of a project in a session once, with what to use instead, and reminds of it once for a search through the shell. A mimir too old for this, or none, must not stop the agent: exit code 2 would refuse every call.",
+  "description": "Mimir: refuses the first search or read of a project in a session once, with what to use instead, reminds of it once for a read through the shell, and refuses such a read every time once the session has used Mimir. A mimir too old for this, or none, must not stop the agent: exit code 2 would refuse every call.",
   "hooks": {
     "PreToolUse": [
       {

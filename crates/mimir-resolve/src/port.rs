@@ -107,11 +107,16 @@ pub struct LiveDocument {
     /// Every answer for a site that may have several. In `Config { name }` the name is a field and a
     /// variable at once, and the server gives both.
     pub all_sites: HashMap<(u32, u32), Vec<Target>>,
+    /// The constructors run at a site, by a server that tells them from the class a name is.
+    pub built_at: HashMap<(u32, u32), Vec<Target>>,
     /// The trait of each `impl Tr for T`, by the line of the `impl`.
     pub traits: HashMap<u32, Target>,
     /// What each method in the file implements, or is implemented by, by the 1-based line and column
     /// of its name.
     pub implementations: HashMap<(u32, u32), Vec<Target>>,
+    /// Where the symbols of an index are defined in this file now, for a server that can say: a symbol, its
+    /// 1-based line and its name. Otherwise they are found by their order among those of a name.
+    pub definitions: HashMap<String, (u32, Arc<str>)>,
 }
 
 /// One occurrence of a symbol in a document. Lines and columns are 0-based.

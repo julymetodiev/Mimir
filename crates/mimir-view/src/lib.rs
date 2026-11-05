@@ -158,7 +158,7 @@ fn static_index() -> String {
 /// graph is complete, since nothing will update it. Says how many symbols it holds.
 pub async fn export(from: &Path, directory: &Path) -> Result<usize, ViewError> {
     let mut client = Client::open(from).await?;
-    client.sync(false).await?;
+    client.sync(false, false).await?;
     let snapshot = client.snapshot().await?;
     let mut sources = Vec::with_capacity(snapshot.symbols.len());
     for symbol in &snapshot.symbols {

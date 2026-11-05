@@ -3,10 +3,11 @@
 use crate::actor::{GraphActor, answer};
 use crate::error::GraphError;
 use crate::save;
-use crate::scanner::{ScannedFile, Scanner};
+use crate::scanner::{Known, ScannedFile, Scanner};
+use mimir_graph::{FileEntry, encode_references};
 use mimir_protocol::{LinkSummary, SyncResult};
 use mimir_resolve::{LinkReport, ProjectFile, Refresh, SemanticIndex, link};
-use mimir_types::Symbol;
+use mimir_types::{ContentHash, ExtractedReference, FileId, Symbol};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tokio::sync::oneshot;
@@ -25,6 +26,8 @@ pub struct WaitingSync {
     reply: oneshot::Sender<Result<SyncResult, GraphError>>,
     result: SyncResult,
     started: Instant,
+    /// Write the graph as JSON, for measuring it from outside.
+    json: bool,
 }
 
 impl GraphActor {
@@ -76,6 +79,7 @@ impl GraphActor {
     fn start_link(&mut self, refresh: Refresh) {
         self.needs_link = false;
         self.announced_change = false;
+        self.ensure_sources();
         let files: Vec<ProjectFile> = self.sources.values().cloned().collect();
         let (root, cache_dir, scan) = (self.root.clone(), self.graph_dir(), files.clone());
         let semantics = self.semantics.clone();
@@ -106,12 +110,33 @@ impl GraphActor {
         });
         let report = link(&self.graph, &pending.files, &indexes);
         debug!("Linked: {:?}", report);
+        // Edges of files as they were, or from no index, are not what the next start should find.
+        if !self.needs_link
+            && failure.is_none()
+            && let Err(e) = save::save_file(&self.graph, &self.graph_dir())
+        {
+            warn!("The graph could not be saved: {e}");
+        }
+        if self.references_changed && !self.needs_link {
+            let stored: Vec<(FileId, ContentHash, &[ExtractedReference])> = self
+                .files
+                .values()
+                .filter_map(|tracked| {
+                    let file = self.sources.get(&tracked.file_id)?;
+                    Some((tracked.file_id, tracked.content_hash, &*file.references))
+                })
+                .collect();
+            match save::save_references(&encode_references(&stored), &self.graph_dir()) {
+                Ok(()) => self.references_changed = false,
+                Err(e) => warn!("The references could not be saved: {e}"),
+            }
+        }
         self.announce_new_edges();
 
         for waiting in std::mem::take(&mut self.waiting_syncs) {
             let answered = match &failure {
                 Some(reason) => Err(GraphError::Index(reason.clone())),
-                None => self.finished_sync(waiting.result, waiting.started, &report),
+                None => self.finished_sync(waiting.result, waiting.started, waiting.json, &report),
             };
             answer(waiting.reply, answered);
         }
@@ -121,10 +146,14 @@ impl GraphActor {
         &self,
         mut result: SyncResult,
         started: Instant,
+        json: bool,
         report: &LinkReport,
     ) -> Result<SyncResult, GraphError> {
-        let graph_file = save::save(&self.graph, &self.file_paths, &self.graph_dir())
-            .map_err(GraphError::Save)?;
+        if json {
+            let saved = save::save(&self.graph, &self.file_paths, &self.graph_dir())
+                .map_err(GraphError::Save)?;
+            result.saved_to = Some(saved);
+        }
         result.link = Some(LinkSummary {
             semantic_calls: report.semantic_calls,
             syntax_calls: report.syntax_calls,
@@ -138,7 +167,6 @@ impl GraphActor {
             live_files: report.live_files,
             syntax_files: report.syntax_files,
         });
-        result.saved_to = Some(graph_file);
         result.notes = self.semantics.notes(&self.root);
         result.duration_ms += started.elapsed().as_millis() as u64;
         Ok(result)
@@ -149,9 +177,10 @@ impl GraphActor {
     pub async fn handle_sync_complete(
         &mut self,
         full: bool,
+        json: bool,
         reply: oneshot::Sender<Result<SyncResult, GraphError>>,
     ) {
-        let result = match self.scan_files().await {
+        let result = match self.scan_files(full).await {
             Ok(result) => result,
             Err(e) => return answer(reply, Err(e)),
         };
@@ -162,23 +191,38 @@ impl GraphActor {
             reply,
             result,
             started: Instant::now(),
+            json,
         });
     }
 
     /// Scan for changes and resolve edges, settling for a provisional answer if that takes long.
     pub async fn handle_sync(&mut self) -> Result<SyncResult, GraphError> {
-        let result = self.scan_files().await?;
+        let result = self.scan_files(false).await?;
         self.ensure_linked().await;
         Ok(result)
     }
 
     /// Bring the tracked files and their symbols up to date with the disk.
-    pub async fn scan_files(&mut self) -> Result<SyncResult, GraphError> {
+    pub async fn scan_files(&mut self, full: bool) -> Result<SyncResult, GraphError> {
         let start = Instant::now();
+        let known: Known = if full {
+            Known::new()
+        } else {
+            self.graph
+                .files()
+                .into_iter()
+                .map(|file| {
+                    (
+                        self.root.join(&file.path),
+                        (file.size, file.modified, file.hash),
+                    )
+                })
+                .collect()
+        };
 
         // Scan the directory
         let scanner = Scanner::new(&self.root);
-        let scanned_files = scanner.scan().await.map_err(GraphError::Scan)?;
+        let scanned_files = scanner.scan(known).await.map_err(GraphError::Scan)?;
 
         info!(
             "Scanned {} files in {:?}",
@@ -195,6 +239,8 @@ impl GraphActor {
         // Build a set of paths we've seen
         let mut seen_paths: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
         let mut symbols = Vec::new();
+        let mut entries = Vec::new();
+        let mut gone = Vec::new();
 
         // Process each scanned file
         for scanned in scanned_files {
@@ -209,14 +255,15 @@ impl GraphActor {
                 // Check if content changed
                 if tracked.content_hash != scanned.content_hash {
                     // File was updated - remove old, add new
-                    if let Some(removed_count) =
-                        self.remove_file_by_path(&scanned.absolute_path.clone())
+                    if let Some((file_id, removed_count)) =
+                        self.forget_path(&scanned.absolute_path.clone())
                     {
+                        gone.push(file_id);
                         symbols_removed += removed_count;
                     }
 
                     // Add updated file
-                    match self.sync_add_file(&scanned, &mut symbols) {
+                    match self.sync_add_file(&scanned, &mut symbols, &mut entries) {
                         Ok(added_count) => {
                             symbols_added += added_count;
                             files_updated += 1;
@@ -233,7 +280,7 @@ impl GraphActor {
                 // File unchanged - skip
             } else {
                 // New file - add it
-                match self.sync_add_file(&scanned, &mut symbols) {
+                match self.sync_add_file(&scanned, &mut symbols, &mut entries) {
                     Ok(added_count) => {
                         symbols_added += added_count;
                         files_added += 1;
@@ -245,17 +292,20 @@ impl GraphActor {
             }
         }
 
-        self.graph.add_symbols(symbols);
-
         // Find files that were removed
         let tracked_paths: Vec<PathBuf> = self.files.keys().cloned().collect();
         for path in tracked_paths {
             if !seen_paths.contains(&path)
-                && let Some(removed_count) = self.remove_file_by_path(&path)
+                && let Some((file_id, removed_count)) = self.forget_path(&path)
             {
+                gone.push(file_id);
                 symbols_removed += removed_count;
                 files_removed += 1;
             }
+        }
+
+        if !gone.is_empty() || !entries.is_empty() {
+            self.graph.change_files(&gone, entries, symbols);
         }
 
         // Calls can point at any file, so edges are resolved once all files are in
@@ -288,6 +338,7 @@ impl GraphActor {
         &mut self,
         scanned: &ScannedFile,
         symbols: &mut Vec<Symbol>,
+        entries: &mut Vec<FileEntry>,
     ) -> Result<usize, GraphError> {
         // Read file content
         let content =
@@ -296,13 +347,20 @@ impl GraphActor {
                 source,
             })?;
 
-        let (_, new) = self.insert_file(
+        let (id, new) = self.insert_file(
             scanned.absolute_path.clone(),
             scanned.path.clone(),
             content,
             scanned.content_hash,
             scanned.language,
         )?;
+        entries.push(FileEntry {
+            id,
+            path: scanned.path.clone(),
+            hash: scanned.content_hash,
+            size: scanned.size,
+            modified: scanned.modified_at.timestamp_millis(),
+        });
         let count = new.len();
         symbols.extend(new);
 

@@ -8,7 +8,7 @@ use crate::{AskedLanguage, AskedSource};
 
 /// The version this was measured with, which `scripts/check-deps.py` compares with the newest.
 /// Another one still runs, and the daemon's log says so.
-const TESTED_VERSION: &str = "0.21.0";
+const TESTED_VERSION: &str = "0.22.0";
 
 /// `tsrs` as a semantic source.
 pub fn tsrs() -> AskedSource {

@@ -9,7 +9,7 @@ use crate::{AskedLanguage, AskedSource};
 
 /// The version this was measured with, which `scripts/check-deps.py` compares with the newest.
 /// Another one still runs, and the daemon's log says so.
-const TESTED_VERSION: &str = "1.4.0";
+const TESTED_VERSION: &str = "1.4.1";
 
 /// `pyrefly` as a semantic source.
 pub fn pyrefly() -> AskedSource {

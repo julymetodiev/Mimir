@@ -16,7 +16,7 @@ use crate::lines::Lines;
 use crate::live::resolve_live;
 use crate::lookup::SymbolTable;
 use crate::port::{Occurrence, SemanticIndex};
-use crate::{ProjectFile, golang, script};
+use crate::{ProjectFile, cfamily, golang, script};
 
 /// Add an edge for each call and each function named as a value in the indexes.
 /// Returns the files they cover.
@@ -56,6 +56,9 @@ pub fn resolve(
             let mut known = Known::default();
             known.add(table, index, documents, &mut covered);
             link_documents(table, index, documents, &known, false, edges, constant_uses);
+            if family == Language::C {
+                cfamily::add_index_implementations(index, &known.definitions, edges);
+            }
             for (file, lines, occurrences) in documents
                 .iter()
                 .filter(|(file, ..)| !index.is_edited(&file.path))
@@ -97,6 +100,9 @@ pub fn resolve(
                 Language::Rust => {
                     resolve_live(table, file, document, &by_path, edges, constant_uses)
                 }
+                Language::C => {
+                    cfamily::resolve_answers(table, file, document, &by_path, edges, constant_uses)
+                }
                 _ => script::resolve_answers(table, file, document, &by_path, edges, constant_uses),
             }
             if family == Language::Go {
@@ -122,7 +128,6 @@ fn link_documents(
     } else {
         is_function
     };
-    let is_call = if go { golang::is_call } else { is_call };
     for (file, lines, occurrences) in documents
         .iter()
         .filter(|(file, ..)| !index.is_edited(&file.path))
@@ -176,7 +181,14 @@ fn link_documents(
                 .get(o.line as usize)
                 .and_then(|l| l.get(o.column as usize..))
                 .is_some_and(|t| t.starts_with(|c: char| c.is_alphabetic() || c == '_'));
-            let (from, kind) = if is_call(after) {
+            let called = if go {
+                golang::is_call(after)
+            } else if file.path.extension().is_some_and(is_c_family) {
+                cfamily::is_call(after)
+            } else {
+                is_call(after)
+            };
+            let (from, kind) = if called {
                 let caller = table.callable_at(file.file_id, o.line + 1, o.column);
                 (
                     // In Go, code at package level belongs to the variable it initialises.
@@ -242,6 +254,12 @@ fn link_documents(
             edges,
         );
     }
+}
+
+fn is_c_family(extension: &std::ffi::OsStr) -> bool {
+    extension
+        .to_str()
+        .is_some_and(|e| Language::from_extension(e).family() == Language::C)
 }
 
 /// Add an edge for each use in a file of a type or field of the project.

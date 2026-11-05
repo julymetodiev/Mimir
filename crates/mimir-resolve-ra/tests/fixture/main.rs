@@ -10,7 +10,7 @@ use expected::{
     CALLS, CONSTANT_READS, DATA_USES_BY_SYNTAX, FIELD_USES, IMPLEMENTS, IMPLEMENTS_BY_SYNTAX,
     NEEDS_TYPES, SOURCES, TYPE_USES, VALUES, VALUES_NEED_TYPES,
 };
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use mimir_graph::{EdgeKind, TraceRelationship};
 use mimir_resolve::{Refresh, SemanticIndex, link};
@@ -133,7 +133,9 @@ fn semantic_index_finds_every_call() {
     );
 
     let plain = find(&graph, &files, "beta::PLAIN");
-    let trace = graph.trace(plain, trace_options(true, false, 1)).unwrap();
+    let trace = graph
+        .trace(plain, trace_options(true, false, 1), &HashMap::new())
+        .unwrap();
     assert_eq!(
         trace
             .callers
@@ -143,13 +145,17 @@ fn semantic_index_finds_every_call() {
         [("beta::uses_plain".to_string(), TraceRelationship::Reader)]
     );
     let reader = find(&graph, &files, "beta::uses_plain");
-    let trace = graph.trace(reader, trace_options(false, true, 1)).unwrap();
+    let trace = graph
+        .trace(reader, trace_options(false, true, 1), &HashMap::new())
+        .unwrap();
     assert!(trace.callees.is_empty(), "a read is not a callee");
 
     // Two fields share a name, and each has its own users.
     let users = |wanted: &str| {
         let id = find(&graph, &files, wanted);
-        let trace = graph.trace(id, trace_options(true, false, 1)).unwrap();
+        let trace = graph
+            .trace(id, trace_options(true, false, 1), &HashMap::new())
+            .unwrap();
         let mut users: Vec<_> = trace
             .callers
             .iter()
@@ -171,7 +177,9 @@ fn semantic_index_finds_every_call() {
     );
     assert_eq!(users("alpha::Alias"), ["beta::through_alias"]);
     let holder = find(&graph, &files, "beta::reads_field");
-    let trace = graph.trace(holder, trace_options(false, true, 1)).unwrap();
+    let trace = graph
+        .trace(holder, trace_options(false, true, 1), &HashMap::new())
+        .unwrap();
     assert!(
         trace.callees.is_empty(),
         "a type or a field is not a callee"
@@ -190,7 +198,7 @@ fn semantic_index_finds_every_call() {
     // The implementation is reached by whoever calls the trait's method.
     let memory_load = find(&graph, &files, "alpha::Memory::load");
     let trace = graph
-        .trace(memory_load, trace_options(true, false, 1))
+        .trace(memory_load, trace_options(true, false, 1), &HashMap::new())
         .unwrap();
     assert_eq!(
         names(&trace.callers, TraceRelationship::CallerViaTrait),
@@ -201,7 +209,11 @@ fn semantic_index_finds_every_call() {
     // Under a call through the trait, each implementation shows, and what it calls.
     let through_trait = find(&graph, &files, "beta::through_trait");
     let trace = graph
-        .trace(through_trait, trace_options(false, true, 4))
+        .trace(
+            through_trait,
+            trace_options(false, true, 4),
+            &HashMap::new(),
+        )
         .unwrap();
     assert_eq!(
         names(&trace.callees, TraceRelationship::Implementation),
@@ -213,13 +225,17 @@ fn semantic_index_finds_every_call() {
 
     // A function held as a value shows on both sides, marked as such.
     let get = find(&graph, &files, "alpha::Disk::get");
-    let trace = graph.trace(get, trace_options(true, false, 1)).unwrap();
+    let trace = graph
+        .trace(get, trace_options(true, false, 1), &HashMap::new())
+        .unwrap();
     assert_eq!(
         names(&trace.callers, TraceRelationship::CallerByValue),
         ["beta::method_as_value"]
     );
     let holder = find(&graph, &files, "beta::method_as_value");
-    let trace = graph.trace(holder, trace_options(false, true, 1)).unwrap();
+    let trace = graph
+        .trace(holder, trace_options(false, true, 1), &HashMap::new())
+        .unwrap();
     assert_eq!(
         names(&trace.callees, TraceRelationship::CalleeByValue),
         ["alpha::Disk::get"]
@@ -227,7 +243,9 @@ fn semantic_index_finds_every_call() {
 
     // A function in a table is reached through whoever uses the table.
     let helper = find(&graph, &files, "beta::helper");
-    let trace = graph.trace(helper, trace_options(true, false, 3)).unwrap();
+    let trace = graph
+        .trace(helper, trace_options(true, false, 3), &HashMap::new())
+        .unwrap();
     let reached = names(&trace.callers, TraceRelationship::CallerByValue);
     for holder in [
         "beta::HANDLERS",

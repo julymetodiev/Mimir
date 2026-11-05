@@ -54,7 +54,7 @@ pub fn index_at(workspace: &Path) -> (CodeGraph, Vec<ProjectFile>) {
         files.push(ProjectFile {
             file_id,
             path: PathBuf::from(path),
-            references: adapter.extract_references(&tree, file_id),
+            references: adapter.extract_references(&tree, file_id).into(),
             source: source.as_str().into(),
         });
     }
@@ -100,7 +100,6 @@ pub fn callees_of(
     id: mimir_types::SymbolId,
 ) -> Vec<std::sync::Arc<mimir_types::Symbol>> {
     graph
-        .relations()
         .callees(id)
         .into_iter()
         .filter_map(|callee| graph.get_symbol(callee))

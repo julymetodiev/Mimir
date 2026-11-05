@@ -177,6 +177,8 @@ file, and a new `pyrefly` gives the right one. Which it does depends on the text
 that file, editing as an editor does and `--indexing-mode` did not help. So a change with importers gets a new
 `pyrefly`. It starts in 16 ms and asks only the stale files. `sync --full` gets one too.
 
+With `pyrefly` 1.4.1 every edge on flask, requests and django is the same as with 1.4.0. A comment on top of `base.py` and `tests/basic/tests.py` together differs from a new index in 2 edges, the one above and `test_refresh_unsaved` using `db`, in `UsesField`. Whether 1.4.0 gave that second one was not run. Whether 1.4.1 still keeps the old line was not tried on its own, and a change with importers still gets a new `pyrefly`.
+
 The first `trace` after an edit on django, depth 1, as against one `pyrefly` for all edits:
 
 | Edit | One `pyrefly` | Now |

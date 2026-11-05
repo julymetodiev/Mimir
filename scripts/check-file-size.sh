@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Architecture rule 6: no Rust file over 500 lines, tests included.
+# Architecture rule 6: no Rust file over 500 lines, tests included. What flatc generates is not ours to split.
 # Fails on a file over the limit that is not in scripts/file-size-allowlist.txt, and on an entry
 # there that is missing or back within it, so the list only shrinks.
 #   --list   print every file over the limit
@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 LIMIT=500
 over() {
-  git ls-files --cached --others --exclude-standard -- '*.rs' | sort -u | while IFS= read -r f; do
+  git ls-files --cached --others --exclude-standard -- '*.rs' | sort -u | grep -v -E '^crates/mimir-graph-fb/src/(generated|references_generated)\.rs$' | while IFS= read -r f; do
     [ -f "$f" ] || continue
     n=$(wc -l <"$f" | tr -d ' ')
     if [ "$n" -gt "$LIMIT" ]; then printf '%s\n' "$f"; fi

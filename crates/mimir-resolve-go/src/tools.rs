@@ -2,9 +2,7 @@
 //! version, which `scripts/check-deps.py` compares with the newest. Another one still runs, and the
 //! daemon's log says so.
 
-use std::process::{Command, Stdio};
-
-use tracing::warn;
+use mimir_resolve_scip::check_version;
 
 const SCIP_GO_TESTED: &str = "0.2.9";
 const GOPLS_TESTED: &str = "0.24.0";
@@ -15,45 +13,10 @@ pub const GOPLS: &str = "gopls";
 
 /// Say so in the log if `scip-go` is not the tested version.
 pub fn check_scip_go() {
-    check(SCIP_GO, &["--version"], SCIP_GO_TESTED);
+    check_version(SCIP_GO, &["--version"], SCIP_GO_TESTED);
 }
 
 /// Say so in the log if `gopls` is not the tested version.
 pub fn check_gopls() {
-    check(GOPLS, &["version"], GOPLS_TESTED);
-}
-
-fn check(program: &str, args: &[&str], tested: &str) {
-    let output = Command::new(program)
-        .args(args)
-        .stdin(Stdio::null())
-        .output();
-    if let Ok(output) = output
-        && !says_version(&String::from_utf8_lossy(&output.stdout), tested)
-        && !says_version(&String::from_utf8_lossy(&output.stderr), tested)
-    {
-        warn!("{program} is not the tested version, {tested}");
-    }
-}
-
-/// Whether the text has this version, and not one that starts with it or ends with it.
-fn says_version(output: &str, version: &str) -> bool {
-    output.match_indices(version).any(|(at, _)| {
-        let is_part = |c: char| c.is_ascii_digit() || c == '.';
-        !output[at + version.len()..].starts_with(is_part) && !output[..at].ends_with(is_part)
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_version_is_told_from_one_that_holds_it() {
-        assert!(says_version("golang.org/x/tools/gopls v0.24.0\n", "0.24.0"));
-        assert!(says_version("scip-go version 0.2.9", "0.2.9"));
-        assert!(!says_version("gopls v0.24.01", "0.24.0"));
-        assert!(!says_version("gopls v10.24.0", "0.24.0"));
-        assert!(!says_version("gopls v0.24.0.1", "0.24.0"));
-    }
+    check_version(GOPLS, &["version"], GOPLS_TESTED);
 }

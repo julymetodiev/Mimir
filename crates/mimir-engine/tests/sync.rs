@@ -59,7 +59,7 @@ async fn test_queries_are_answered_during_a_sync_and_the_sync_still_ends() {
 
     let syncing = tokio::spawn({
         let handle = handle.clone();
-        async move { handle.sync_complete(true).await }
+        async move { handle.sync_complete(true, true).await }
     });
     tokio::time::sleep(Duration::from_millis(100)).await;
 
@@ -115,7 +115,7 @@ async fn test_a_file_changed_during_a_sync_keeps_its_edges() {
 
     let syncing = tokio::spawn({
         let handle = handle.clone();
-        async move { handle.sync_complete(true).await }
+        async move { handle.sync_complete(true, true).await }
     });
     tokio::time::sleep(Duration::from_millis(100)).await;
     handle
@@ -162,6 +162,182 @@ async fn test_a_file_with_the_same_text_keeps_its_symbols() {
     assert_eq!(handle.find_symbol("a").await.unwrap().symbols[0].id, before);
 }
 
+/// An id means the same symbol after a restart and after an edit, and an edit moves only what it
+/// names: a second function of the same name keeps its own id.
+#[tokio::test]
+async fn test_ids_last_through_a_restart_and_an_edit() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    let text = "mod m { fn a() {} }\nfn b() {}\nfn b() {}\n";
+    std::fs::write(root.join("x.rs"), text).unwrap();
+
+    let ids = async |handle: &mimir_engine::GraphHandle, name: &str| {
+        let found = handle.find_symbol(name).await.unwrap().symbols;
+        let mut ids: Vec<_> = found.iter().map(|symbol| symbol.id.as_u64()).collect();
+        ids.sort_unstable();
+        ids
+    };
+    let start_engine = async || {
+        start(
+            root.clone(),
+            vec![Arc::new(mimir_parse_rust::RustAdapter::new())],
+            Arc::new(NoSemanticSource),
+        )
+        .await
+    };
+
+    let first = start_engine().await;
+    first.handle().stats().await.unwrap();
+    let (a, b) = (
+        ids(first.handle(), "a").await,
+        ids(first.handle(), "b").await,
+    );
+    assert_eq!((a.len(), b.len()), (1, 2));
+    assert_ne!(b[0], b[1], "the same name twice in a file");
+    first.handle().shutdown().await.unwrap();
+
+    let second = start_engine().await;
+    let handle = second.handle();
+    handle.stats().await.unwrap();
+    assert_eq!(ids(handle, "a").await, a, "after a restart");
+    assert_eq!(ids(handle, "b").await, b, "after a restart");
+
+    handle
+        .write_file(
+            root.join("x.rs"),
+            format!("// new\n{text}\nfn c() {{}}\n"),
+            true,
+        )
+        .await
+        .unwrap();
+    assert_eq!(ids(handle, "a").await, a, "after an edit");
+    assert_eq!(ids(handle, "b").await, b, "after an edit");
+}
+
+/// A semantic source that counts how many links asked it.
+#[derive(Default)]
+struct CountedSource(Mutex<usize>);
+
+impl SemanticSource for CountedSource {
+    fn load(&self, _: &Path, _: &Path, _: &[ProjectFile], _: Refresh) -> Vec<SemanticIndex> {
+        *self.0.lock().unwrap() += 1;
+        Vec::new()
+    }
+
+    fn stop_if_idle(&self, _: Duration) {}
+}
+
+async fn callers_of(handle: &mimir_engine::GraphHandle, name: &str) -> Vec<String> {
+    let options = TraceOptions {
+        callers_only: true,
+        ..Default::default()
+    };
+    let trace = handle
+        .trace_by_name(name.to_string(), options)
+        .await
+        .unwrap();
+    trace
+        .callers
+        .iter()
+        .map(|node| node.symbol.name.clone())
+        .collect()
+}
+
+/// A start with nothing changed answers from the file, edges too, with no link and nothing parsed.
+/// A file changed while stopped is seen, and the first link then has every file.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_a_start_answers_from_the_file() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    std::fs::write(root.join("a.rs"), "fn caller() { b::callee(); }\n").unwrap();
+    std::fs::write(root.join("b.rs"), "pub fn callee() {}\npub fn other() {}\n").unwrap();
+    let begin = async |source: Arc<CountedSource>| {
+        start(
+            root.clone(),
+            vec![Arc::new(mimir_parse_rust::RustAdapter::new())],
+            source,
+        )
+        .await
+    };
+
+    let first = begin(Arc::default()).await;
+    first.handle().sync_complete(false, false).await.unwrap();
+    assert_eq!(callers_of(first.handle(), "callee").await, ["caller"]);
+    first.handle().shutdown().await.unwrap();
+    assert!(root.join(".mimir/graph/graph.fb").exists());
+
+    let source = Arc::new(CountedSource::default());
+    let second = begin(source.clone()).await;
+    assert_eq!(callers_of(second.handle(), "callee").await, ["caller"]);
+    assert_eq!(*source.0.lock().unwrap(), 0, "nothing changed: no link");
+    let read = second
+        .handle()
+        .read("callee".to_string(), None, 0, 0)
+        .await
+        .unwrap();
+    assert!(
+        read.lines.join("\n").contains("fn callee"),
+        "text from the disk"
+    );
+    second.handle().shutdown().await.unwrap();
+
+    // Another size, so this is seen by size alone. `a.rs`, which did not change, keeps its edge.
+    std::fs::write(
+        root.join("b.rs"),
+        "pub fn callee() {}\npub fn other() { callee(); }\n",
+    )
+    .unwrap();
+    let source = Arc::new(CountedSource::default());
+    let third = begin(source.clone()).await;
+    let mut callers = callers_of(third.handle(), "callee").await;
+    callers.sort();
+    assert_eq!(callers, ["caller", "other"]);
+    assert_eq!(*source.0.lock().unwrap(), 1, "one link");
+    third.handle().shutdown().await.unwrap();
+
+    // Broken file: as if none, and it is written again.
+    std::fs::write(root.join(".mimir/graph/graph.fb"), b"not a graph").unwrap();
+    let fourth = begin(Arc::default()).await;
+    let mut callers = callers_of(fourth.handle(), "callee").await;
+    callers.sort();
+    assert_eq!(callers, ["caller", "other"]);
+    fourth.handle().sync_complete(false, false).await.unwrap();
+    fourth.handle().shutdown().await.unwrap();
+    assert!(
+        std::fs::metadata(root.join(".mimir/graph/graph.fb"))
+            .unwrap()
+            .len()
+            > 100
+    );
+}
+
+/// A bare name with several symbols means the one most called, wherever its file comes in the order.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_a_name_means_the_symbol_most_called() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    std::fs::write(root.join("a.rs"), "fn same() {}\n").unwrap();
+    std::fs::write(
+        root.join("z.rs"),
+        "fn same() {}\nfn one() { same(); }\nfn two() { same(); }\n",
+    )
+    .unwrap();
+    let engine = start(
+        root.clone(),
+        vec![Arc::new(mimir_parse_rust::RustAdapter::new())],
+        Arc::new(NoSemanticSource),
+    )
+    .await;
+    let handle = engine.handle();
+    handle.sync_complete(false, false).await.unwrap();
+    let trace = handle
+        .trace_by_name("same".to_string(), TraceOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(trace.root.file_path, Path::new("z.rs"));
+    assert_eq!(trace.matches, 2);
+}
+
 /// A sync with nothing slow in it answers as before.
 #[tokio::test]
 async fn test_a_sync_without_a_semantic_source_is_answered() {
@@ -175,7 +351,7 @@ async fn test_a_sync_without_a_semantic_source_is_answered() {
     )
     .await;
 
-    let result = engine.handle().sync_complete(false).await.unwrap();
+    let result = engine.handle().sync_complete(false, true).await.unwrap();
 
     assert!(result.saved_to.is_some());
 }

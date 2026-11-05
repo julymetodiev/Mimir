@@ -32,10 +32,11 @@ pub fn is_data(symbol: &Symbol) -> bool {
     )
 }
 
-/// Whether a symbol is a constant or static, or in Go a variable at package level.
+/// Whether a symbol is a constant or static, or a variable at package or file level.
 pub fn is_constant(symbol: &Symbol) -> bool {
     symbol.kind == SymbolKind::Constant
-        || (symbol.kind == SymbolKind::Variable && symbol.language == Language::Go)
+        || (symbol.kind == SymbolKind::Variable
+            && matches!(symbol.language, Language::Go | Language::C | Language::Cpp))
 }
 
 /// The type or trait a method belongs to: `Foo` for a method of `impl<T> Tr for a::Foo<T>`.

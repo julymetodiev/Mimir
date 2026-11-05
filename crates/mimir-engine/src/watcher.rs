@@ -2,11 +2,13 @@
 
 use crate::error::GraphError;
 use mimir_types::Language;
-use notify::RecursiveMode;
-use notify_debouncer_mini::{DebouncedEventKind, new_debouncer};
+use notify::event::{AccessKind, AccessMode};
+use notify::{Event, EventKind, RecursiveMode, Watcher};
 use std::{
+    collections::BTreeSet,
     path::{Path, PathBuf},
-    time::Duration,
+    sync::mpsc as std_mpsc,
+    time::{Duration, Instant},
 };
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error, info, warn};
@@ -99,16 +101,16 @@ impl FileWatcher {
             } else {
                 RecursiveMode::NonRecursive
             };
-            let started = new_debouncer(debounce, tx).and_then(|mut debouncer| {
-                debouncer.watcher().watch(&root, mode)?;
-                Ok(debouncer)
+            let started = notify::recommended_watcher(tx).and_then(|mut watcher| {
+                watcher.watch(&root, mode)?;
+                Ok(watcher)
             });
-            let _debouncer = match started {
-                Ok(debouncer) => {
+            let _watcher = match started {
+                Ok(watcher) => {
                     if ready_tx.send(Ok(())).is_err() {
                         debug!("Nobody waits for the watcher any more");
                     }
-                    debouncer
+                    watcher
                 }
                 Err(e) => {
                     if ready_tx.send(Err(e.to_string())).is_err() {
@@ -119,17 +121,12 @@ impl FileWatcher {
             };
             info!("Watching {} for changes", root.display());
 
-            while let Ok(reported) = rx.recv() {
-                match reported {
-                    Ok(events) => {
-                        for event in meanings(&root, events) {
-                            if event_tx.blocking_send(event).is_err() {
-                                debug!("The watcher's event handler has stopped");
-                                return;
-                            }
-                        }
+            while let Some(reports) = next_reports(&rx, debounce) {
+                for event in reports.meanings(&root) {
+                    if event_tx.blocking_send(event).is_err() {
+                        debug!("The watcher's event handler has stopped");
+                        return;
                     }
-                    Err(e) => error!("Watch error: {:?}", e),
                 }
             }
         });
@@ -157,6 +154,10 @@ impl FileWatcher {
             loop {
                 tokio::select! {
                     Some(event) = event_rx.recv() => {
+                        // A scan starts after all that waits was reported, and covers it.
+                        if event == WatchEvent::Rescan {
+                            while event_rx.try_recv().is_ok() {}
+                        }
                         if let Err(e) = Self::handle_event(&commands, event).await {
                             warn!("The file watcher stops: {e}");
                             break;
@@ -235,25 +236,78 @@ impl FileWatcher {
     }
 }
 
-/// What a batch of reports means, with at most one rescan: it covers the whole project.
-fn meanings(root: &Path, events: Vec<notify_debouncer_mini::DebouncedEvent>) -> Vec<WatchEvent> {
-    let mut meant = Vec::new();
-    for event in events {
-        if event.kind != DebouncedEventKind::Any {
-            continue;
-        }
-        if let Some(event) = event_for(root, event.path)
-            && !(event == WatchEvent::Rescan && meant.contains(&WatchEvent::Rescan))
-        {
-            meant.push(event);
+/// Whether a report can mean that something changed. Linux also reports each file and directory that
+/// is opened, read and closed, by anyone: a language server reading a project is no change to it.
+fn is_change(kind: &EventKind) -> bool {
+    match kind {
+        EventKind::Access(AccessKind::Close(AccessMode::Write)) => true,
+        EventKind::Access(_) => false,
+        _ => true,
+    }
+}
+
+/// What the file system reported in one short while.
+#[derive(Debug, Default, PartialEq)]
+struct Reports {
+    paths: BTreeSet<PathBuf>,
+    /// Reports were lost, as a queue overflowed, so only a scan can tell what changed.
+    lost: bool,
+}
+
+impl Reports {
+    fn add(&mut self, event: Event) {
+        self.lost |= event.need_rescan();
+        if is_change(&event.kind) {
+            self.paths.extend(event.paths);
         }
     }
-    meant
+
+    /// What they mean, with at most one rescan: it covers the whole project.
+    fn meanings(self, root: &Path) -> Vec<WatchEvent> {
+        let mut meant = Vec::new();
+        if self.lost {
+            meant.push(WatchEvent::Rescan);
+        }
+        for path in self.paths {
+            if let Some(event) = event_for(root, path)
+                && !(event == WatchEvent::Rescan && meant.contains(&WatchEvent::Rescan))
+            {
+                meant.push(event);
+            }
+        }
+        meant
+    }
+}
+
+/// Wait for a report that can mean a change, and gather what follows it for this long. None when the
+/// watcher has stopped.
+fn next_reports(
+    reported: &std_mpsc::Receiver<notify::Result<Event>>,
+    gather: Duration,
+) -> Option<Reports> {
+    let mut reports = Reports::default();
+    let add = |reports: &mut Reports, report: notify::Result<Event>| match report {
+        Ok(event) => reports.add(event),
+        Err(e) => error!("Watch error: {e:?}"),
+    };
+    while reports == Reports::default() {
+        add(&mut reports, reported.recv().ok()?);
+    }
+    let until = Instant::now() + gather;
+    while let Some(left) = until.checked_duration_since(Instant::now()) {
+        match reported.recv_timeout(left) {
+            Ok(report) => add(&mut reports, report),
+            Err(_) => break,
+        }
+    }
+    Some(reports)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::channel::command_channel;
+    use notify::event::{DataChange, Flag, ModifyKind};
     use tempfile::TempDir;
 
     #[test]
@@ -291,5 +345,68 @@ mod tests {
         );
         assert_eq!(meaning("build"), Some(WatchEvent::Rescan));
         assert_eq!(meaning("skipped"), None);
+    }
+
+    #[test]
+    fn opening_and_reading_is_no_change() {
+        for kind in [
+            AccessKind::Open(AccessMode::Any),
+            AccessKind::Read,
+            AccessKind::Close(AccessMode::Read),
+            AccessKind::Any,
+        ] {
+            assert!(!is_change(&EventKind::Access(kind)), "{kind:?}");
+        }
+        assert!(is_change(&EventKind::Access(AccessKind::Close(
+            AccessMode::Write
+        ))));
+        assert!(is_change(&EventKind::Modify(ModifyKind::Data(
+            DataChange::Any
+        ))));
+        assert!(is_change(&EventKind::Any));
+    }
+
+    #[test]
+    fn reports_lost_mean_a_rescan_once() {
+        let dir = TempDir::new().unwrap();
+        let mut reports = Reports::default();
+        reports.add(Event::new(EventKind::Other).set_flag(Flag::Rescan));
+        reports.add(Event::new(EventKind::Any).add_path(dir.path().to_path_buf()));
+        reports.add(
+            Event::new(EventKind::Access(AccessKind::Read)).add_path(dir.path().join("read.rs")),
+        );
+        assert_eq!(reports.paths.len(), 1);
+        std::fs::create_dir(dir.path().join(".git")).unwrap();
+        assert_eq!(reports.meanings(dir.path()), [WatchEvent::Rescan]);
+    }
+
+    /// On Linux the system reports each read: this holds only if they are left out.
+    #[tokio::test]
+    async fn a_file_read_changes_nothing_and_a_file_written_does() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        std::fs::create_dir(root.join(".git")).unwrap();
+        let file = root.join("a.rs");
+        std::fs::write(&file, "fn a() {}\n").unwrap();
+        let (commands, mut received) = command_channel(16);
+        let _watcher = FileWatcher::new(root.clone(), WatcherConfig::default(), commands)
+            .start()
+            .await
+            .unwrap();
+        // What the writing above reported has gone by.
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        while received.try_recv().is_ok() {}
+
+        std::fs::read_to_string(&file).unwrap();
+        std::fs::read_dir(&root).unwrap().for_each(drop);
+        let quiet = tokio::time::timeout(Duration::from_millis(500), received.recv()).await;
+        assert!(quiet.is_err(), "reading was taken for a change");
+
+        std::fs::write(&file, "fn b() {}\n").unwrap();
+        let change = tokio::time::timeout(Duration::from_secs(5), received.recv()).await;
+        assert!(
+            matches!(change, Ok(Some(GraphCommand::AddFile { .. }))),
+            "a write was not seen"
+        );
     }
 }

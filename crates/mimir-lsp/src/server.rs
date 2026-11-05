@@ -209,6 +209,26 @@ impl Server {
         path: &Path,
         positions: &[(u32, u32)],
     ) -> Result<Vec<Result<Vec<Location>, String>>, LspError> {
+        Ok(self
+            .answers(method, path, positions)?
+            .into_iter()
+            .map(|answer| answer.map(|found| locations_in(&found)))
+            .collect())
+    }
+
+    /// What a method about a whole file answers, as a server gave it.
+    pub fn about_file(&mut self, method: &str, path: &Path) -> Result<Value, LspError> {
+        let params = json!({"textDocument": {"uri": uri_of(path)}});
+        self.request(method, params, QUERY_TIMEOUT)
+    }
+
+    /// One method at many 0-based positions of a file, as the server answered, for what is no place.
+    pub fn answers(
+        &mut self,
+        method: &str,
+        path: &Path,
+        positions: &[(u32, u32)],
+    ) -> Result<Vec<Result<Value, String>>, LspError> {
         let mut out = Vec::with_capacity(positions.len());
         for chunk in positions.chunks(BATCH) {
             let first = self.next_id + 1;
@@ -224,7 +244,7 @@ impl Server {
                     }),
                 )?;
             }
-            let mut answers: Vec<Option<Result<Vec<Location>, String>>> =
+            let mut answers: Vec<Option<Result<Value, String>>> =
                 chunk.iter().map(|_| None).collect();
             let mut waiting = chunk.len();
             let started = Instant::now();
@@ -249,13 +269,14 @@ impl Server {
                     // Asked again alone below, with the waiting that takes.
                     Some(CONTENT_MODIFIED | CANCELLED) => None,
                     Some(_) => Some(Err(answer["error"]["message"].to_string())),
-                    None => Some(Ok(locations_in(&answer["result"]))),
+                    None => Some(Ok(answer["result"].clone())),
                 };
             }
             for (answer, &(line, column)) in answers.into_iter().zip(chunk) {
                 out.push(match answer {
                     Some(found) => found,
-                    None => match self.locations(method, path, line, column) {
+                    None => match self.request(method, position(path, line, column), QUERY_TIMEOUT)
+                    {
                         Ok(found) => Ok(found),
                         Err(LspError::Failed { message, .. }) => Err(message),
                         Err(e) => return Err(e),

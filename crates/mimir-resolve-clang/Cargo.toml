@@ -1,0 +1,24 @@
+[package]
+name = "mimir-resolve-clang"
+description = "C and C++ as Mimir's semantic source: a compilation database, clangd-indexer and clangd"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+mimir-types.workspace = true
+mimir-resolve.workspace = true
+mimir-resolve-scip.workspace = true
+mimir-lsp.workspace = true
+mimir-parse-core.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+mimir-graph.workspace = true
+mimir-parse-c.workspace = true
+tempfile.workspace = true

@@ -25,7 +25,6 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 notify.workspace = true
-notify-debouncer-mini.workspace = true
 regex.workspace = true
 
 [dev-dependencies]

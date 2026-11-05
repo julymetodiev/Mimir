@@ -58,6 +58,13 @@ for name, module in (("scip-go", "github.com/scip-code/scip-go"), ("gopls", "gol
         newest = json.load(response)["Version"].lstrip("v")
     if tested != newest:
         stale.append((name, tested, newest))
+# So does `clangd-indexer`, whose newest version is what clangd's releases say.
+tools = pathlib.Path("crates/mimir-resolve-clang/src/tools.rs").read_text()
+tested = re.search(r'CLANGD_INDEXER_TESTED: &str = "(.+?)"', tools).group(1)
+with urllib.request.urlopen("https://api.github.com/repos/clangd/clangd/releases/latest", timeout=20) as response:
+    newest = json.load(response)["tag_name"]
+if tested != newest:
+    stale.append(("clangd-indexer", tested, newest))
 for name, version, newest in stale:
     print(f"error: {name} is at {version}, the latest is {newest}")
 if not stale:

@@ -23,7 +23,7 @@ pub fn resolve_calls(
     edges: &mut EdgeSet,
 ) {
     for file in files.iter().filter(|f| !covered.contains(&f.file_id)) {
-        for reference in &file.references {
+        for reference in file.references.iter() {
             // A value can sit outside any function, as in `const HANDLERS: &[fn()] = &[run];`.
             let (from, kind) = match reference.kind {
                 ReferenceKind::Call => {
@@ -227,7 +227,7 @@ pub fn resolve_data_uses(
     edges: &mut EdgeSet,
 ) {
     for file in files.iter().filter(|f| !covered.contains(&f.file_id)) {
-        for reference in &file.references {
+        for reference in file.references.iter() {
             let Some(from) = table.any_at(file.file_id, reference.span.start) else {
                 continue;
             };

@@ -102,9 +102,10 @@ pub enum GraphCommand {
         reply: oneshot::Sender<Result<SyncResult, GraphError>>,
     },
 
-    /// Scan for changes, wait until no edge is provisional, and save the graph.
+    /// Scan for changes and wait until no edge is provisional. `json` writes the graph as JSON too.
     SyncComplete {
         full: bool,
+        json: bool,
         reply: oneshot::Sender<Result<SyncResult, GraphError>>,
     },
 

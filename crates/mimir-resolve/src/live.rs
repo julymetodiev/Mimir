@@ -21,7 +21,7 @@ pub fn resolve_live(
     edges: &mut EdgeSet,
     constant_uses: &mut Vec<ConstantUse>,
 ) {
-    for reference in &file.references {
+    for reference in file.references.iter() {
         let (line, column) = (reference.range.start_line, reference.range.start_col);
         if reference.kind == ReferenceKind::FieldUse {
             let field = document
