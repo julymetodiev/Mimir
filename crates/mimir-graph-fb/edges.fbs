@@ -1,0 +1,18 @@
+// The edges of the graph, apart from its symbols, so that a link does not write every symbol again.
+// docs/GRAPH-STORE.md. Generate with scripts/generate-graph-fb.sh.
+namespace edges;
+
+// `from` and `to` are positions in Graph.symbols. Sorted by `from`, so a symbol's edges are one slice.
+struct Edge { from:uint32; to:uint32; start:uint32; end:uint32; kind:uint8; confidence:uint8; pad:uint16; }
+
+table Edges {
+  version:uint32;
+  built_by:string;
+  stamp:uint64;       // of the symbols these positions are in
+  edges:[Edge];
+  out_offsets:[uint32];
+  incoming:[uint32];  // positions in edges, sorted by `to`
+  in_offsets:[uint32];
+}
+
+root_type Edges;

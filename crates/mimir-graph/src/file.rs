@@ -1,6 +1,7 @@
 //! Reading the graph from a file's bytes with no copy into other structures: docs/GRAPH-STORE.md.
 //! Nothing here touches the disk.
 
+use crate::encode::{encode_edges, encode_symbols};
 use crate::format::{
     BUILT_BY, VERSION, confidence_of, edge_of, kind_of, language_of, visibility_of,
 };
@@ -11,6 +12,7 @@ use mimir_types::{
 };
 use std::fmt;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 /// A file of the project, as the graph file records it.
 #[derive(Debug, Clone)]
@@ -55,36 +57,80 @@ impl fmt::Display for FileError {
 
 impl std::error::Error for FileError {}
 
-/// A graph in one buffer, as read from a file. Every position in it has been checked, so a query
-/// cannot fail.
-pub struct GraphFile(fb::GraphBuffer);
+/// A graph in two buffers, as read from two files: symbols and edges, apart, so that a link does not
+/// write every symbol again. Every position in them has been checked, so a query cannot fail.
+pub struct GraphFile {
+    symbols: Arc<fb::GraphBuffer>,
+    edges: fb::EdgesBuffer,
+}
 
 impl GraphFile {
-    /// Check `bytes` as a whole, and take them. Nothing is copied.
-    pub fn open(bytes: Vec<u8>) -> Result<Self, FileError> {
-        let buffer = fb::GraphBuffer::verified(bytes).map_err(FileError::Invalid)?;
-        check(buffer.graph())?;
-        Ok(Self(buffer))
+    /// Check both files as a whole, and take them. Nothing is copied. Edges that are not of these
+    /// symbols are refused.
+    pub fn open(symbols: Vec<u8>, edges: Vec<u8>) -> Result<Self, FileError> {
+        let symbols = Arc::new(open_symbols(symbols)?);
+        let edges = open_edges(&symbols, edges)?;
+        Ok(Self { symbols, edges })
     }
 
-    /// The bytes, as a file holds them.
-    pub fn bytes(&self) -> &[u8] {
-        self.0.bytes()
+    /// A graph with these symbols and no edges: what is left when edges cannot be read.
+    pub fn open_without_edges(symbols: Vec<u8>) -> Result<Self, FileError> {
+        let symbols = Arc::new(open_symbols(symbols)?);
+        let edges = open_edges(&symbols, encode_edges(symbols.graph(), &[]))?;
+        Ok(Self { symbols, edges })
+    }
+
+    /// A graph of these symbols, edges and files.
+    pub fn build(
+        symbols: Vec<Symbol>,
+        edges: &[(SymbolId, SymbolId, EdgeData)],
+        files: &[FileEntry],
+    ) -> Result<Self, FileError> {
+        let symbols = Arc::new(open_symbols(encode_symbols(symbols, files))?);
+        let edges = open_edges(&symbols, encode_edges(symbols.graph(), edges))?;
+        Ok(Self { symbols, edges })
+    }
+
+    /// The same symbols with other edges, which writes no symbol.
+    pub fn with_edges(&self, edges: &[(SymbolId, SymbolId, EdgeData)]) -> Result<Self, FileError> {
+        let bytes = encode_edges(self.symbols.graph(), edges);
+        Ok(Self {
+            symbols: self.symbols.clone(),
+            edges: open_edges(&self.symbols, bytes)?,
+        })
+    }
+
+    /// The bytes of the symbols, as a file holds them.
+    pub fn symbol_bytes(&self) -> &[u8] {
+        self.symbols.bytes()
+    }
+
+    /// The bytes of the edges, as a file holds them.
+    pub fn edge_bytes(&self) -> &[u8] {
+        self.edges.bytes()
+    }
+
+    /// Whether another graph holds the very same symbols, so that they need no writing.
+    pub fn has_symbols_of(&self, other: &GraphFile) -> bool {
+        Arc::ptr_eq(&self.symbols, &other.symbols)
     }
 
     /// How many symbols it holds.
     pub fn symbol_count(&self) -> usize {
-        self.0.graph().symbols().map_or(0, |symbols| symbols.len())
+        self.symbols
+            .graph()
+            .symbols()
+            .map_or(0, |symbols| symbols.len())
     }
 
     /// How many edges it holds.
     pub fn edge_count(&self) -> usize {
-        self.0.graph().edges().map_or(0, |edges| edges.len())
+        self.edges.edges().edges().map_or(0, |edges| edges.len())
     }
 
     /// Every symbol of every file, in the order each file has them.
     pub fn all_symbols(&self) -> Vec<Symbol> {
-        let files = self.0.graph().files();
+        let files = self.symbols.graph().files();
         files
             .iter()
             .flat_map(|files| files.iter())
@@ -95,8 +141,9 @@ impl GraphFile {
 
     /// Every edge.
     pub fn all_edges(&self) -> Vec<(SymbolId, SymbolId, EdgeData)> {
-        let graph = self.0.graph();
-        let (Some(symbols), Some(edges)) = (graph.symbols(), graph.edges()) else {
+        let (Some(symbols), Some(edges)) =
+            (self.symbols.graph().symbols(), self.edges.edges().edges())
+        else {
             return Vec::new();
         };
         let id_at = |at: u32| SymbolId::new(symbols.get(at as usize).id());
@@ -108,7 +155,7 @@ impl GraphFile {
 
     /// Every file of the project.
     pub fn files(&self) -> Vec<FileEntry> {
-        let files = self.0.graph().files();
+        let files = self.symbols.graph().files();
         files
             .iter()
             .flat_map(|files| files.iter())
@@ -126,18 +173,18 @@ impl GraphFile {
 
     /// The symbol with this id.
     pub fn get_symbol(&self, id: SymbolId) -> Option<Symbol> {
-        let symbols = self.0.graph().symbols()?;
+        let symbols = self.symbols.graph().symbols()?;
         read_symbol(symbols.get(position_of(symbols, id)?))
     }
 
     /// The symbols with this name.
     pub fn find_symbol(&self, name: &str) -> Vec<Symbol> {
-        self.named(self.0.graph().names(), name)
+        self.named(self.symbols.graph().names(), name)
     }
 
     /// The symbols with this qualified name.
     pub fn find_by_qualified_name(&self, name: &str) -> Vec<Symbol> {
-        self.named(self.0.graph().qualified(), name)
+        self.named(self.symbols.graph().qualified(), name)
     }
 
     fn named(&self, names: Option<fb::Tables<'_, fb::Name<'_>>>, name: &str) -> Vec<Symbol> {
@@ -163,7 +210,7 @@ impl GraphFile {
     }
 
     fn positions_in_file(&self, file: FileId) -> Option<fb::Vector<'_, u32>> {
-        self.0
+        self.symbols
             .graph()
             .files()?
             .lookup_by_key(file.value(), |entry, id| entry.key_compare_with_value(*id))?
@@ -171,7 +218,7 @@ impl GraphFile {
     }
 
     fn symbols_at(&self, at: fb::Vector<'_, u32>) -> Vec<Symbol> {
-        let symbols = self.0.graph().symbols();
+        let symbols = self.symbols.graph().symbols();
         at.iter()
             .filter_map(|position| read_symbol(symbols?.get(position as usize)))
             .collect()
@@ -179,10 +226,12 @@ impl GraphFile {
 
     /// What a symbol's edges lead to.
     pub fn outgoing(&self, id: SymbolId) -> Vec<(SymbolId, EdgeData)> {
-        let graph = self.0.graph();
-        let (Some(symbols), Some(edges), Some(offsets)) =
-            (graph.symbols(), graph.edges(), graph.out_offsets())
-        else {
+        let stored = self.edges.edges();
+        let (Some(symbols), Some(edges), Some(offsets)) = (
+            self.symbols.graph().symbols(),
+            stored.edges(),
+            stored.out_offsets(),
+        ) else {
             return Vec::new();
         };
         let Some(position) = position_of(symbols, id) else {
@@ -199,12 +248,12 @@ impl GraphFile {
 
     /// What leads to a symbol by an edge.
     pub fn incoming(&self, id: SymbolId) -> Vec<(SymbolId, EdgeData)> {
-        let graph = self.0.graph();
+        let stored = self.edges.edges();
         let (Some(symbols), Some(edges), Some(incoming), Some(offsets)) = (
-            graph.symbols(),
-            graph.edges(),
-            graph.incoming(),
-            graph.in_offsets(),
+            self.symbols.graph().symbols(),
+            stored.edges(),
+            stored.incoming(),
+            stored.in_offsets(),
         ) else {
             return Vec::new();
         };
@@ -221,7 +270,8 @@ impl GraphFile {
     }
 }
 
-fn position_of(symbols: fb::Tables<'_, fb::Symbol<'_>>, id: SymbolId) -> Option<usize> {
+/// Where a symbol is, by a binary search of ids.
+pub fn position_of(symbols: fb::Tables<'_, fb::Symbol<'_>>, id: SymbolId) -> Option<usize> {
     let (mut low, mut high) = (0, symbols.len());
     while low < high {
         let middle = low + (high - low) / 2;
@@ -314,19 +364,12 @@ fn symbol_is_whole(symbol: fb::Symbol<'_>) -> bool {
 
 /// Check what the offsets lead to: a position out of range would otherwise stop a query. Nothing is
 /// copied, so this costs a look at each symbol and edge, once.
-fn check(graph: fb::Graph<'_>) -> Result<(), FileError> {
-    if graph.version() != VERSION {
-        return Err(FileError::Version(graph.version()));
-    }
-    if graph.built_by() != Some(BUILT_BY) {
+fn check_symbols(graph: fb::Graph<'_>) -> Result<(), FileError> {
+    if graph.version() != VERSION || graph.built_by() != Some(BUILT_BY) {
         return Err(FileError::Version(graph.version()));
     }
     let broken = FileError::Broken;
     let symbols = graph.symbols().ok_or(broken("no symbols"))?;
-    let edges = graph.edges().ok_or(broken("no edges"))?;
-    let out_offsets = graph.out_offsets().ok_or(broken("no out_offsets"))?;
-    let incoming = graph.incoming().ok_or(broken("no incoming"))?;
-    let in_offsets = graph.in_offsets().ok_or(broken("no in_offsets"))?;
     let names = graph.names().ok_or(broken("no names"))?;
     let qualified = graph.qualified().ok_or(broken("no qualified"))?;
     let files = graph.files().ok_or(broken("no files"))?;
@@ -342,6 +385,41 @@ fn check(graph: fb::Graph<'_>) -> Result<(), FileError> {
             return Err(broken("a symbol lacks a part"));
         }
     }
+    let in_range = |at: Option<fb::Vector<'_, u32>>| {
+        at.is_some_and(|at| at.iter().all(|position| (position as usize) < count))
+    };
+    let names_right = names
+        .iter()
+        .chain(qualified.iter())
+        .all(|name| in_range(name.symbols()));
+    if !names_right {
+        return Err(broken("a name out of range"));
+    }
+    let files_right = files.iter().all(|file| {
+        in_range(file.symbols())
+            && file.path().is_some()
+            && file.hash().is_some_and(|hash| hash.len() == 32)
+    });
+    if !files_right {
+        return Err(broken("a file out of range"));
+    }
+    Ok(())
+}
+
+/// Check that edges are of these symbols, and what their offsets lead to.
+fn check_edges(graph: fb::Graph<'_>, stored: fb::Edges<'_>) -> Result<(), FileError> {
+    if stored.version() != VERSION || stored.built_by() != Some(BUILT_BY) {
+        return Err(FileError::Version(stored.version()));
+    }
+    let broken = FileError::Broken;
+    if stored.stamp() != graph.stamp() {
+        return Err(broken("edges of other symbols"));
+    }
+    let count = graph.symbols().map_or(0, |symbols| symbols.len());
+    let edges = stored.edges().ok_or(broken("no edges"))?;
+    let out_offsets = stored.out_offsets().ok_or(broken("no out_offsets"))?;
+    let incoming = stored.incoming().ok_or(broken("no incoming"))?;
+    let in_offsets = stored.in_offsets().ok_or(broken("no in_offsets"))?;
     for edge in edges.iter() {
         if edge.from() as usize >= count
             || edge.to() as usize >= count
@@ -364,25 +442,19 @@ fn check(graph: fb::Graph<'_>) -> Result<(), FileError> {
     if incoming.iter().any(|at| at as usize >= edges.len()) {
         return Err(broken("incoming out of range"));
     }
-    let in_range = |at: Option<fb::Vector<'_, u32>>| {
-        at.is_some_and(|at| at.iter().all(|position| (position as usize) < count))
-    };
-    let names_right = names
-        .iter()
-        .chain(qualified.iter())
-        .all(|name| in_range(name.symbols()));
-    if !names_right {
-        return Err(broken("a name out of range"));
-    }
-    let files_right = files.iter().all(|file| {
-        in_range(file.symbols())
-            && file.path().is_some()
-            && file.hash().is_some_and(|hash| hash.len() == 32)
-    });
-    if !files_right {
-        return Err(broken("a file out of range"));
-    }
     Ok(())
+}
+
+fn open_symbols(bytes: Vec<u8>) -> Result<fb::GraphBuffer, FileError> {
+    let buffer = fb::GraphBuffer::verified(bytes).map_err(FileError::Invalid)?;
+    check_symbols(buffer.graph())?;
+    Ok(buffer)
+}
+
+fn open_edges(symbols: &fb::GraphBuffer, bytes: Vec<u8>) -> Result<fb::EdgesBuffer, FileError> {
+    let buffer = fb::EdgesBuffer::verified(bytes).map_err(FileError::Invalid)?;
+    check_edges(symbols.graph(), buffer.edges())?;
+    Ok(buffer)
 }
 
 #[cfg(test)]

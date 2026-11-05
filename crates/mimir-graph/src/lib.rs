@@ -9,7 +9,6 @@ mod format;
 mod references;
 mod trace;
 
-pub use encode::encode;
 pub use facade::CodeGraph;
 pub use file::{FileEntry, FileError, GraphFile};
 pub use references::{ReferencesFile, encode_references};

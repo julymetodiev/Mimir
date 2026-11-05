@@ -20,12 +20,29 @@ struct SavedGraph {
     file_ids: HashMap<String, u64>,
 }
 
-/// The graph `graph.fb` in `dir` holds. No file is no graph; a file of another version or a broken
-/// one is the same, and the next link writes it again.
-pub fn load(dir: &Path) -> Option<CodeGraph> {
-    let bytes = fs::read(dir.join("graph.fb")).ok()?;
-    match GraphFile::open(bytes) {
-        Ok(file) => Some(CodeGraph::from_file(file)),
+/// A graph from disk, and whether its edges came with it.
+pub struct Loaded {
+    /// The graph.
+    pub graph: CodeGraph,
+    /// Whether `edges.fb` was of these symbols. Without it there are no edges until a link.
+    pub has_edges: bool,
+}
+
+/// The graph `graph.fb` and `edges.fb` in `dir` hold. No file is no graph; a file of another version
+/// or a broken one is the same, and the next link writes it again.
+pub fn load(dir: &Path) -> Option<Loaded> {
+    let symbols = fs::read(dir.join("graph.fb")).ok()?;
+    let edges = fs::read(dir.join("edges.fb")).unwrap_or_default();
+    let opened = GraphFile::open(symbols.clone(), edges);
+    let has_edges = opened.is_ok();
+    match opened.or_else(|reason| {
+        warn!("Linking again: {reason}");
+        GraphFile::open_without_edges(symbols)
+    }) {
+        Ok(file) => Some(Loaded {
+            graph: CodeGraph::from_file(file),
+            has_edges,
+        }),
         Err(reason) => {
             warn!("Building the graph again: {reason}");
             None
@@ -66,9 +83,16 @@ pub struct Stored {
 }
 
 impl Stored {
-    fn write(self, dir: &Path) {
-        if let Err(e) = write_whole(dir, "graph.fb", self.graph.bytes()) {
+    /// Write what changed since `written`. Symbols go first: edges that outlive them are refused
+    /// by their stamp, and a link brings new ones.
+    fn write(self, dir: &Path, written: Option<&GraphFile>) {
+        if !written.is_some_and(|written| written.has_symbols_of(&self.graph))
+            && let Err(e) = write_whole(dir, "graph.fb", self.graph.symbol_bytes())
+        {
             warn!("The graph could not be saved: {e}");
+        }
+        if let Err(e) = write_whole(dir, "edges.fb", self.graph.edge_bytes()) {
+            warn!("The edges could not be saved: {e}");
         }
         if let Some(references) = self.references {
             let files: Vec<(FileId, ContentHash, &[ExtractedReference])> = references
@@ -95,6 +119,7 @@ impl Writer {
     pub fn new(dir: PathBuf) -> Self {
         let (sender, waiting) = mpsc::channel::<Stored>();
         let thread = std::thread::spawn(move || {
+            let mut written: Option<Arc<GraphFile>> = None;
             while let Ok(mut stored) = waiting.recv() {
                 while let Ok(newer) = waiting.try_recv() {
                     let references = newer.references.or(stored.references);
@@ -103,7 +128,9 @@ impl Writer {
                         references,
                     };
                 }
-                stored.write(&dir);
+                let graph = stored.graph.clone();
+                stored.write(&dir, written.as_deref());
+                written = Some(graph);
             }
         });
         Self {
@@ -227,8 +254,14 @@ mod tests {
         }
         drop(writer);
 
-        let graph = load(dir.path()).unwrap();
-        assert_eq!(graph.symbol_count(), 3);
+        let loaded = load(dir.path()).unwrap();
+        assert!(loaded.has_edges);
+        assert_eq!(loaded.graph.symbol_count(), 3);
+        // Edges that outlive their symbols are refused, and the symbols still come.
+        fs::write(dir.path().join("edges.fb"), b"broken").unwrap();
+        let loaded = load(dir.path()).unwrap();
+        assert!(!loaded.has_edges);
+        assert_eq!(loaded.graph.symbol_count(), 3);
         let references = load_references(dir.path()).unwrap();
         let stored = references.references_of(FileId::new(1), hash).unwrap();
         assert_eq!(stored[0].name, "used");

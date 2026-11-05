@@ -11,7 +11,7 @@ for input in scripts/architecture-budget.txt scripts/approved-crate-items.txt; d
 done
 
 TEST_FILES='(^|/)tests?(/|\.rs$)|_tests?(/|\.rs$)|(^|/)test_[a-z_]+\.rs$|/benches/|/examples/|(^|/)build\.rs$'
-GENERATED='^crates/mimir-graph-fb/src/(generated|references_generated)\.rs$'
+GENERATED='^crates/mimir-graph-fb/src/(generated|edges_generated|references_generated)\.rs$'
 src() { # $@ = path prefixes; prints non-test .rs files
   git ls-files --cached --others --exclude-standard -- "$@" | sort -u | grep -E '\.rs$' | grep -v -E "$TEST_FILES" | grep -v -E "$GENERATED" || true
 }

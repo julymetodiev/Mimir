@@ -1,7 +1,6 @@
-//! The code graph: one buffer in the format of the file on disk, and queries over it.
+//! The code graph: buffers in the format of the files on disk, and queries over them.
 
-use crate::encode::encode;
-use crate::file::{FileEntry, GraphFile};
+use crate::file::{FileEntry, FileError, GraphFile};
 use crate::relations::{EdgeData, EdgeKind};
 use arc_swap::ArcSwap;
 use mimir_types::{ContentHash, FileId, Symbol, SymbolId};
@@ -25,7 +24,7 @@ impl Default for CodeGraph {
 impl CodeGraph {
     /// Create a new empty code graph.
     pub fn new() -> Self {
-        Self::from_file(built(encode(Vec::new(), &[], &[])))
+        Self::from_file(built(GraphFile::build(Vec::new(), &[], &[])))
     }
 
     /// The graph a file holds.
@@ -80,7 +79,7 @@ impl CodeGraph {
         }
         let entries: Vec<FileEntry> = entries.into_values().collect();
         self.current
-            .store(Arc::new(built(encode(symbols, &edges, &entries))));
+            .store(Arc::new(built(GraphFile::build(symbols, &edges, &entries))));
     }
 
     /// Add a symbol to the graph.
@@ -144,9 +143,8 @@ impl CodeGraph {
 
     /// Replace every edge with the given ones in one step.
     pub fn replace_edges(&self, edges: Vec<(SymbolId, SymbolId, EdgeData)>) {
-        let old = self.current.load();
-        let bytes = encode(old.all_symbols(), &edges, &old.files());
-        self.current.store(Arc::new(built(bytes)));
+        let file = built(self.current.load().with_edges(&edges));
+        self.current.store(Arc::new(file));
     }
 
     /// What a symbol's edges lead to.
@@ -359,9 +357,9 @@ impl CodeGraph {
     }
 }
 
-/// The graph bytes `encode` made. A failure here is a bug in `encode`, not a state to go on from.
-fn built(bytes: Vec<u8>) -> GraphFile {
-    match GraphFile::open(bytes) {
+/// A graph just encoded. A failure here is a bug in encoding, not a state to go on from.
+fn built(file: Result<GraphFile, FileError>) -> GraphFile {
+    match file {
         Ok(file) => file,
         Err(reason) => panic!("the graph as written cannot be read: {reason}"),
     }

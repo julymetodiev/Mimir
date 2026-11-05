@@ -296,6 +296,16 @@ async fn test_a_start_answers_from_the_file() {
     assert_eq!(*source.0.lock().unwrap(), 1, "one link");
     third.stop().await;
 
+    // Edges alone broken: the symbols stay, and a link brings the edges.
+    std::fs::write(root.join(".mimir/graph/edges.fb"), b"not edges").unwrap();
+    let source = Arc::new(CountedSource::default());
+    let without_edges = begin(source.clone()).await;
+    let mut callers = callers_of(without_edges.handle(), "callee").await;
+    callers.sort();
+    assert_eq!(callers, ["caller", "other"]);
+    assert_eq!(*source.0.lock().unwrap(), 1, "one link");
+    without_edges.stop().await;
+
     // Broken file: as if none, and it is written again.
     std::fs::write(root.join(".mimir/graph/graph.fb"), b"not a graph").unwrap();
     let fourth = begin(Arc::default()).await;

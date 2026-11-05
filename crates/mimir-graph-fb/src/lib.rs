@@ -4,12 +4,15 @@
 #[rustfmt::skip]
 mod generated;
 #[rustfmt::skip]
+mod edges_generated;
+#[rustfmt::skip]
 mod references_generated;
 
+pub use edges_generated::edges::{Edge, Edges, EdgesArgs};
 pub use flatbuffers::{FlatBufferBuilder, ForwardsUOffset, InvalidFlatbuffer, Vector, WIPOffset};
 pub use generated::store::{
-    Edge, File, FileArgs, Graph, GraphArgs, Name, NameArgs, Parameter, ParameterArgs, Range,
-    Signature, SignatureArgs, Span, Symbol, SymbolArgs,
+    File, FileArgs, Graph, GraphArgs, Name, NameArgs, Parameter, ParameterArgs, Range, Signature,
+    SignatureArgs, Span, Symbol, SymbolArgs,
 };
 pub use references_generated::refs::{
     FileReferences, FileReferencesArgs, Place, Reference, ReferenceArgs, References, ReferencesArgs,
@@ -27,6 +30,43 @@ self_cell!(
         dependent: Graph,
     }
 );
+
+self_cell!(
+    struct VerifiedEdges {
+        owner: Vec<u8>,
+
+        #[covariant]
+        dependent: Edges,
+    }
+);
+
+/// The bytes of a file of edges, every offset in them checked, with the root that reads them.
+pub struct EdgesBuffer(VerifiedEdges);
+
+impl EdgesBuffer {
+    /// Check `bytes`. A project's edges are many, so only offsets limit the check.
+    pub fn verified(bytes: Vec<u8>) -> Result<Self, InvalidFlatbuffer> {
+        let options = flatbuffers::VerifierOptions {
+            max_tables: usize::MAX,
+            max_apparent_size: usize::MAX,
+            ..Default::default()
+        };
+        VerifiedEdges::try_new(bytes, |bytes| {
+            edges_generated::edges::root_as_edges_with_opts(&options, bytes)
+        })
+        .map(Self)
+    }
+
+    /// The bytes it holds.
+    pub fn bytes(&self) -> &[u8] {
+        self.0.borrow_owner()
+    }
+
+    /// The root of the edges.
+    pub fn edges(&self) -> Edges<'_> {
+        *self.0.borrow_dependent()
+    }
+}
 
 self_cell!(
     struct VerifiedReferences {

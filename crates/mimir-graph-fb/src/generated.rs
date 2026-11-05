@@ -325,293 +325,6 @@ impl<'a> Span {
 
 }
 
-// struct Edge, aligned to 4
-#[repr(transparent)]
-#[derive(Clone, Copy, PartialEq)]
-pub struct Edge(pub [u8; 20]);
-impl Default for Edge { 
-  fn default() -> Self { 
-    Self([0; 20])
-  }
-}
-impl ::core::fmt::Debug for Edge {
-  fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-    f.debug_struct("Edge")
-      .field("from", &self.from())
-      .field("to", &self.to())
-      .field("start", &self.start())
-      .field("end", &self.end())
-      .field("kind", &self.kind())
-      .field("confidence", &self.confidence())
-      .field("pad", &self.pad())
-      .finish()
-  }
-}
-
-impl ::flatbuffers::SimpleToVerifyInSlice for Edge {}
-impl<'a> ::flatbuffers::Follow<'a> for Edge {
-  type Inner = &'a Edge;
-  #[inline]
-  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-    unsafe { <&'a Edge>::follow(buf, loc) }
-  }
-}
-impl<'a> ::flatbuffers::Follow<'a> for &'a Edge {
-  type Inner = &'a Edge;
-  #[inline]
-  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-    unsafe { ::flatbuffers::follow_cast_ref::<Edge>(buf, loc) }
-  }
-}
-impl<'b> ::flatbuffers::Push for Edge {
-    type Output = Edge;
-    #[inline]
-    unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
-        let src = unsafe { ::core::slice::from_raw_parts(self as *const Edge as *const u8, <Self as ::flatbuffers::Push>::size()) };
-        dst.copy_from_slice(src);
-    }
-    #[inline]
-    fn alignment() -> ::flatbuffers::PushAlignment {
-        ::flatbuffers::PushAlignment::new(4)
-    }
-}
-
-impl<'a> ::flatbuffers::Verifiable for Edge {
-  #[inline]
-  fn run_verifier(
-    v: &mut ::flatbuffers::Verifier, pos: usize
-  ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
-    v.in_buffer::<Self>(pos)
-  }
-}
-
-impl<'a> Edge {
-  #[allow(clippy::too_many_arguments)]
-  pub fn new(
-    from: u32,
-    to: u32,
-    start: u32,
-    end: u32,
-    kind: u8,
-    confidence: u8,
-    pad: u16,
-  ) -> Self {
-    let mut s = Self([0; 20]);
-    s.set_from(from);
-    s.set_to(to);
-    s.set_start(start);
-    s.set_end(end);
-    s.set_kind(kind);
-    s.set_confidence(confidence);
-    s.set_pad(pad);
-    s
-  }
-
-  pub fn from(&self) -> u32 {
-    let mut mem = ::core::mem::MaybeUninit::<<u32 as ::flatbuffers::EndianScalar>::Scalar>::uninit();
-    // Safety:
-    // Created from a valid Table for this object
-    // Which contains a valid value in this slot
-    ::flatbuffers::EndianScalar::from_little_endian(unsafe {
-      ::core::ptr::copy_nonoverlapping(
-        self.0[0..].as_ptr(),
-        mem.as_mut_ptr() as *mut u8,
-        ::core::mem::size_of::<<u32 as ::flatbuffers::EndianScalar>::Scalar>(),
-      );
-      mem.assume_init()
-    })
-  }
-
-  pub fn set_from(&mut self, x: u32) {
-    let x_le = ::flatbuffers::EndianScalar::to_little_endian(x);
-    // Safety:
-    // Created from a valid Table for this object
-    // Which contains a valid value in this slot
-    unsafe {
-      ::core::ptr::copy_nonoverlapping(
-        &x_le as *const _ as *const u8,
-        self.0[0..].as_mut_ptr(),
-        ::core::mem::size_of::<<u32 as ::flatbuffers::EndianScalar>::Scalar>(),
-      );
-    }
-  }
-
-  pub fn to(&self) -> u32 {
-    let mut mem = ::core::mem::MaybeUninit::<<u32 as ::flatbuffers::EndianScalar>::Scalar>::uninit();
-    // Safety:
-    // Created from a valid Table for this object
-    // Which contains a valid value in this slot
-    ::flatbuffers::EndianScalar::from_little_endian(unsafe {
-      ::core::ptr::copy_nonoverlapping(
-        self.0[4..].as_ptr(),
-        mem.as_mut_ptr() as *mut u8,
-        ::core::mem::size_of::<<u32 as ::flatbuffers::EndianScalar>::Scalar>(),
-      );
-      mem.assume_init()
-    })
-  }
-
-  pub fn set_to(&mut self, x: u32) {
-    let x_le = ::flatbuffers::EndianScalar::to_little_endian(x);
-    // Safety:
-    // Created from a valid Table for this object
-    // Which contains a valid value in this slot
-    unsafe {
-      ::core::ptr::copy_nonoverlapping(
-        &x_le as *const _ as *const u8,
-        self.0[4..].as_mut_ptr(),
-        ::core::mem::size_of::<<u32 as ::flatbuffers::EndianScalar>::Scalar>(),
-      );
-    }
-  }
-
-  pub fn start(&self) -> u32 {
-    let mut mem = ::core::mem::MaybeUninit::<<u32 as ::flatbuffers::EndianScalar>::Scalar>::uninit();
-    // Safety:
-    // Created from a valid Table for this object
-    // Which contains a valid value in this slot
-    ::flatbuffers::EndianScalar::from_little_endian(unsafe {
-      ::core::ptr::copy_nonoverlapping(
-        self.0[8..].as_ptr(),
-        mem.as_mut_ptr() as *mut u8,
-        ::core::mem::size_of::<<u32 as ::flatbuffers::EndianScalar>::Scalar>(),
-      );
-      mem.assume_init()
-    })
-  }
-
-  pub fn set_start(&mut self, x: u32) {
-    let x_le = ::flatbuffers::EndianScalar::to_little_endian(x);
-    // Safety:
-    // Created from a valid Table for this object
-    // Which contains a valid value in this slot
-    unsafe {
-      ::core::ptr::copy_nonoverlapping(
-        &x_le as *const _ as *const u8,
-        self.0[8..].as_mut_ptr(),
-        ::core::mem::size_of::<<u32 as ::flatbuffers::EndianScalar>::Scalar>(),
-      );
-    }
-  }
-
-  pub fn end(&self) -> u32 {
-    let mut mem = ::core::mem::MaybeUninit::<<u32 as ::flatbuffers::EndianScalar>::Scalar>::uninit();
-    // Safety:
-    // Created from a valid Table for this object
-    // Which contains a valid value in this slot
-    ::flatbuffers::EndianScalar::from_little_endian(unsafe {
-      ::core::ptr::copy_nonoverlapping(
-        self.0[12..].as_ptr(),
-        mem.as_mut_ptr() as *mut u8,
-        ::core::mem::size_of::<<u32 as ::flatbuffers::EndianScalar>::Scalar>(),
-      );
-      mem.assume_init()
-    })
-  }
-
-  pub fn set_end(&mut self, x: u32) {
-    let x_le = ::flatbuffers::EndianScalar::to_little_endian(x);
-    // Safety:
-    // Created from a valid Table for this object
-    // Which contains a valid value in this slot
-    unsafe {
-      ::core::ptr::copy_nonoverlapping(
-        &x_le as *const _ as *const u8,
-        self.0[12..].as_mut_ptr(),
-        ::core::mem::size_of::<<u32 as ::flatbuffers::EndianScalar>::Scalar>(),
-      );
-    }
-  }
-
-  pub fn kind(&self) -> u8 {
-    let mut mem = ::core::mem::MaybeUninit::<<u8 as ::flatbuffers::EndianScalar>::Scalar>::uninit();
-    // Safety:
-    // Created from a valid Table for this object
-    // Which contains a valid value in this slot
-    ::flatbuffers::EndianScalar::from_little_endian(unsafe {
-      ::core::ptr::copy_nonoverlapping(
-        self.0[16..].as_ptr(),
-        mem.as_mut_ptr() as *mut u8,
-        ::core::mem::size_of::<<u8 as ::flatbuffers::EndianScalar>::Scalar>(),
-      );
-      mem.assume_init()
-    })
-  }
-
-  pub fn set_kind(&mut self, x: u8) {
-    let x_le = ::flatbuffers::EndianScalar::to_little_endian(x);
-    // Safety:
-    // Created from a valid Table for this object
-    // Which contains a valid value in this slot
-    unsafe {
-      ::core::ptr::copy_nonoverlapping(
-        &x_le as *const _ as *const u8,
-        self.0[16..].as_mut_ptr(),
-        ::core::mem::size_of::<<u8 as ::flatbuffers::EndianScalar>::Scalar>(),
-      );
-    }
-  }
-
-  pub fn confidence(&self) -> u8 {
-    let mut mem = ::core::mem::MaybeUninit::<<u8 as ::flatbuffers::EndianScalar>::Scalar>::uninit();
-    // Safety:
-    // Created from a valid Table for this object
-    // Which contains a valid value in this slot
-    ::flatbuffers::EndianScalar::from_little_endian(unsafe {
-      ::core::ptr::copy_nonoverlapping(
-        self.0[17..].as_ptr(),
-        mem.as_mut_ptr() as *mut u8,
-        ::core::mem::size_of::<<u8 as ::flatbuffers::EndianScalar>::Scalar>(),
-      );
-      mem.assume_init()
-    })
-  }
-
-  pub fn set_confidence(&mut self, x: u8) {
-    let x_le = ::flatbuffers::EndianScalar::to_little_endian(x);
-    // Safety:
-    // Created from a valid Table for this object
-    // Which contains a valid value in this slot
-    unsafe {
-      ::core::ptr::copy_nonoverlapping(
-        &x_le as *const _ as *const u8,
-        self.0[17..].as_mut_ptr(),
-        ::core::mem::size_of::<<u8 as ::flatbuffers::EndianScalar>::Scalar>(),
-      );
-    }
-  }
-
-  pub fn pad(&self) -> u16 {
-    let mut mem = ::core::mem::MaybeUninit::<<u16 as ::flatbuffers::EndianScalar>::Scalar>::uninit();
-    // Safety:
-    // Created from a valid Table for this object
-    // Which contains a valid value in this slot
-    ::flatbuffers::EndianScalar::from_little_endian(unsafe {
-      ::core::ptr::copy_nonoverlapping(
-        self.0[18..].as_ptr(),
-        mem.as_mut_ptr() as *mut u8,
-        ::core::mem::size_of::<<u16 as ::flatbuffers::EndianScalar>::Scalar>(),
-      );
-      mem.assume_init()
-    })
-  }
-
-  pub fn set_pad(&mut self, x: u16) {
-    let x_le = ::flatbuffers::EndianScalar::to_little_endian(x);
-    // Safety:
-    // Created from a valid Table for this object
-    // Which contains a valid value in this slot
-    unsafe {
-      ::core::ptr::copy_nonoverlapping(
-        &x_le as *const _ as *const u8,
-        self.0[18..].as_mut_ptr(),
-        ::core::mem::size_of::<<u16 as ::flatbuffers::EndianScalar>::Scalar>(),
-      );
-    }
-  }
-
-}
-
 pub enum ParameterOffset {}
 #[derive(Copy, Clone, PartialEq)]
 
@@ -1502,10 +1215,7 @@ impl<'a> Graph<'a> {
   pub const VT_NAMES: ::flatbuffers::VOffsetT = 10;
   pub const VT_QUALIFIED: ::flatbuffers::VOffsetT = 12;
   pub const VT_FILES: ::flatbuffers::VOffsetT = 14;
-  pub const VT_EDGES: ::flatbuffers::VOffsetT = 16;
-  pub const VT_OUT_OFFSETS: ::flatbuffers::VOffsetT = 18;
-  pub const VT_INCOMING: ::flatbuffers::VOffsetT = 20;
-  pub const VT_IN_OFFSETS: ::flatbuffers::VOffsetT = 22;
+  pub const VT_STAMP: ::flatbuffers::VOffsetT = 16;
 
   #[inline]
   pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
@@ -1517,10 +1227,7 @@ impl<'a> Graph<'a> {
     args: &'args GraphArgs<'args>
   ) -> ::flatbuffers::WIPOffset<Graph<'bldr>> {
     let mut builder = GraphBuilder::new(_fbb);
-    if let Some(x) = args.in_offsets { builder.add_in_offsets(x); }
-    if let Some(x) = args.incoming { builder.add_incoming(x); }
-    if let Some(x) = args.out_offsets { builder.add_out_offsets(x); }
-    if let Some(x) = args.edges { builder.add_edges(x); }
+    builder.add_stamp(args.stamp);
     if let Some(x) = args.files { builder.add_files(x); }
     if let Some(x) = args.qualified { builder.add_qualified(x); }
     if let Some(x) = args.names { builder.add_names(x); }
@@ -1574,32 +1281,11 @@ impl<'a> Graph<'a> {
     unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<File>>>>(Graph::VT_FILES, None)}
   }
   #[inline]
-  pub fn edges(&self) -> Option<::flatbuffers::Vector<'a, Edge>> {
+  pub fn stamp(&self) -> u64 {
     // Safety:
     // Created from valid Table for this object
     // which contains a valid value in this slot
-    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, Edge>>>(Graph::VT_EDGES, None)}
-  }
-  #[inline]
-  pub fn out_offsets(&self) -> Option<::flatbuffers::Vector<'a, u32>> {
-    // Safety:
-    // Created from valid Table for this object
-    // which contains a valid value in this slot
-    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u32>>>(Graph::VT_OUT_OFFSETS, None)}
-  }
-  #[inline]
-  pub fn incoming(&self) -> Option<::flatbuffers::Vector<'a, u32>> {
-    // Safety:
-    // Created from valid Table for this object
-    // which contains a valid value in this slot
-    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u32>>>(Graph::VT_INCOMING, None)}
-  }
-  #[inline]
-  pub fn in_offsets(&self) -> Option<::flatbuffers::Vector<'a, u32>> {
-    // Safety:
-    // Created from valid Table for this object
-    // which contains a valid value in this slot
-    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u32>>>(Graph::VT_IN_OFFSETS, None)}
+    unsafe { self._tab.get::<u64>(Graph::VT_STAMP, Some(0)).unwrap()}
   }
 }
 
@@ -1615,10 +1301,7 @@ impl ::flatbuffers::Verifiable for Graph<'_> {
      .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, ::flatbuffers::ForwardsUOffset<Name>>>>("names", Self::VT_NAMES, false)?
      .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, ::flatbuffers::ForwardsUOffset<Name>>>>("qualified", Self::VT_QUALIFIED, false)?
      .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, ::flatbuffers::ForwardsUOffset<File>>>>("files", Self::VT_FILES, false)?
-     .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, Edge>>>("edges", Self::VT_EDGES, false)?
-     .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u32>>>("out_offsets", Self::VT_OUT_OFFSETS, false)?
-     .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u32>>>("incoming", Self::VT_INCOMING, false)?
-     .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u32>>>("in_offsets", Self::VT_IN_OFFSETS, false)?
+     .visit_field::<u64>("stamp", Self::VT_STAMP, false)?
      .finish();
     Ok(())
   }
@@ -1630,10 +1313,7 @@ pub struct GraphArgs<'a> {
     pub names: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<Name<'a>>>>>,
     pub qualified: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<Name<'a>>>>>,
     pub files: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<File<'a>>>>>,
-    pub edges: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, Edge>>>,
-    pub out_offsets: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u32>>>,
-    pub incoming: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u32>>>,
-    pub in_offsets: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u32>>>,
+    pub stamp: u64,
 }
 impl<'a> Default for GraphArgs<'a> {
   #[inline]
@@ -1645,10 +1325,7 @@ impl<'a> Default for GraphArgs<'a> {
       names: None,
       qualified: None,
       files: None,
-      edges: None,
-      out_offsets: None,
-      incoming: None,
-      in_offsets: None,
+      stamp: 0,
     }
   }
 }
@@ -1683,20 +1360,8 @@ impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> GraphBuilder<'a, 'b, A> {
     self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(Graph::VT_FILES, files);
   }
   #[inline]
-  pub fn add_edges(&mut self, edges: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , Edge>>) {
-    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(Graph::VT_EDGES, edges);
-  }
-  #[inline]
-  pub fn add_out_offsets(&mut self, out_offsets: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , u32>>) {
-    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(Graph::VT_OUT_OFFSETS, out_offsets);
-  }
-  #[inline]
-  pub fn add_incoming(&mut self, incoming: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , u32>>) {
-    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(Graph::VT_INCOMING, incoming);
-  }
-  #[inline]
-  pub fn add_in_offsets(&mut self, in_offsets: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , u32>>) {
-    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(Graph::VT_IN_OFFSETS, in_offsets);
+  pub fn add_stamp(&mut self, stamp: u64) {
+    self.fbb_.push_slot::<u64>(Graph::VT_STAMP, stamp, 0);
   }
   #[inline]
   pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> GraphBuilder<'a, 'b, A> {
@@ -1722,10 +1387,7 @@ impl ::core::fmt::Debug for Graph<'_> {
       ds.field("names", &self.names());
       ds.field("qualified", &self.qualified());
       ds.field("files", &self.files());
-      ds.field("edges", &self.edges());
-      ds.field("out_offsets", &self.out_offsets());
-      ds.field("incoming", &self.incoming());
-      ds.field("in_offsets", &self.in_offsets());
+      ds.field("stamp", &self.stamp());
       ds.finish()
   }
 }

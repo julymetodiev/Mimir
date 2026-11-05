@@ -2,7 +2,7 @@
 //! a link parses only what changed. Nothing here touches the disk.
 
 use crate::file::FileError;
-use crate::format::{confidence_number, confidence_of};
+use crate::format::{SharedStrings, confidence_number, confidence_of};
 use mimir_graph_fb as fb;
 use mimir_types::{CallForm, ContentHash, ExtractedReference, FileId, Range, ReferenceKind, Span};
 
@@ -72,21 +72,22 @@ pub fn encode_references(files: &[(FileId, ContentHash, &[ExtractedReference])])
     let mut sorted: Vec<&(FileId, ContentHash, &[ExtractedReference])> = files.iter().collect();
     sorted.sort_by_key(|(id, _, _)| id.value());
     let mut builder = fb::FlatBufferBuilder::with_capacity(1 << 20);
+    let mut strings = SharedStrings::new();
     let tables: Vec<_> = sorted
         .iter()
         .map(|(id, hash, references)| {
             let references: Vec<_> = references
                 .iter()
                 .map(|reference| {
-                    let name = builder.create_shared_string(&reference.name);
+                    let name = strings.get(&mut builder, &reference.name);
                     let context = reference
                         .context
                         .as_ref()
-                        .map(|text| builder.create_shared_string(text));
+                        .map(|text| strings.get(&mut builder, text));
                     let container = reference
                         .container
                         .as_ref()
-                        .map(|text| builder.create_shared_string(text));
+                        .map(|text| strings.get(&mut builder, text));
                     let (receiver_line, receiver_col) = reference.receiver_at.unwrap_or((0, 0));
                     fb::Reference::create(
                         &mut builder,

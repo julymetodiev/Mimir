@@ -1,5 +1,4 @@
 use super::*;
-use crate::encode::encode;
 use crate::format::{
     confidence_number, edge_number, kind_number, language_number, visibility_number,
 };
@@ -27,7 +26,7 @@ fn symbol(id: u64, name: &str, file: u64) -> Symbol {
     }
 }
 
-fn sample() -> Vec<u8> {
+fn sample() -> GraphFile {
     let mut with_all = symbol(30, "with_all", 1);
     with_all.signature = Some(Signature {
         parameters: vec![
@@ -69,12 +68,12 @@ fn sample() -> Vec<u8> {
         size: 7,
         modified: 8,
     });
-    encode(symbols, &edges, &files)
+    GraphFile::build(symbols, &edges, &files).unwrap()
 }
 
 #[test]
 fn what_goes_in_comes_out() {
-    let file = GraphFile::open(sample()).unwrap();
+    let file = sample();
     assert_eq!((file.symbol_count(), file.edge_count()), (4, 4));
     assert_eq!(file.find_symbol("same").len(), 2);
     assert!(file.find_symbol("none").is_empty());
@@ -101,12 +100,30 @@ fn what_goes_in_comes_out() {
     assert!(paths.contains(&PathBuf::from("empty.cpp")));
     assert_eq!(file.files()[0].size, 7);
     assert_eq!(file.files()[0].modified, 8);
-    assert_eq!(
-        GraphFile::open(file.bytes().to_vec())
-            .unwrap()
-            .symbol_count(),
-        4
-    );
+    let again = GraphFile::open(file.symbol_bytes().to_vec(), file.edge_bytes().to_vec()).unwrap();
+    assert_eq!((again.symbol_count(), again.edge_count()), (4, 4));
+}
+
+#[test]
+fn new_edges_write_no_symbol() {
+    let file = sample();
+    let edge = EdgeData::new(EdgeKind::Calls, Span::new(1, 2), Confidence::High);
+    let linked = file
+        .with_edges(&[(SymbolId::new(10), SymbolId::new(20), edge)])
+        .unwrap();
+    assert!(linked.has_symbols_of(&file));
+    assert_eq!((linked.symbol_count(), linked.edge_count()), (4, 1));
+    assert_eq!(linked.outgoing(SymbolId::new(10)).len(), 1);
+    assert!(linked.outgoing(SymbolId::new(30)).is_empty());
+}
+
+#[test]
+fn edges_of_other_symbols_are_refused() {
+    let file = sample();
+    let other = GraphFile::build(vec![symbol(5, "other", 1)], &[], &[]).unwrap();
+    assert!(GraphFile::open(file.symbol_bytes().to_vec(), other.edge_bytes().to_vec()).is_err());
+    let alone = GraphFile::open_without_edges(file.symbol_bytes().to_vec()).unwrap();
+    assert_eq!((alone.symbol_count(), alone.edge_count()), (4, 0));
 }
 
 #[test]
@@ -123,7 +140,7 @@ fn a_file_keeps_the_order_its_symbols_came_in_whatever_their_ids() {
         size: 0,
         modified: 0,
     }];
-    let file = GraphFile::open(encode(symbols, &[], &files)).unwrap();
+    let file = GraphFile::build(symbols, &[], &files).unwrap();
     let names = |symbols: Vec<Symbol>| -> Vec<String> {
         symbols.into_iter().map(|symbol| symbol.name).collect()
     };
@@ -132,7 +149,7 @@ fn a_file_keeps_the_order_its_symbols_came_in_whatever_their_ids() {
         ["first", "second", "third"]
     );
     // A graph built again from what it holds keeps it too.
-    let again = GraphFile::open(encode(file.all_symbols(), &[], &file.files())).unwrap();
+    let again = GraphFile::build(file.all_symbols(), &[], &file.files()).unwrap();
     assert_eq!(
         names(again.symbols_in_file(FileId::new(1))),
         ["first", "second", "third"]
@@ -141,30 +158,43 @@ fn a_file_keeps_the_order_its_symbols_came_in_whatever_their_ids() {
 
 #[test]
 fn an_empty_graph_opens() {
-    let file = GraphFile::open(encode(Vec::new(), &[], &[])).unwrap();
+    let file = GraphFile::build(Vec::new(), &[], &[]).unwrap();
     assert_eq!((file.symbol_count(), file.edge_count()), (0, 0));
 }
 
 #[test]
 fn broken_bytes_are_refused_and_never_stop_it() {
-    let bytes = sample();
-    assert!(GraphFile::open(Vec::new()).is_err());
-    assert!(GraphFile::open(bytes[..bytes.len() / 2].to_vec()).is_err());
+    let good = sample();
+    let (symbols, edges) = (good.symbol_bytes().to_vec(), good.edge_bytes().to_vec());
+    assert!(GraphFile::open(Vec::new(), edges.clone()).is_err());
+    assert!(GraphFile::open(symbols.clone(), Vec::new()).is_err());
+    assert!(GraphFile::open(symbols[..symbols.len() / 2].to_vec(), edges.clone()).is_err());
+    assert!(GraphFile::open(symbols.clone(), edges[..edges.len() / 2].to_vec()).is_err());
+    let ask = |file: GraphFile| {
+        file.all_symbols();
+        file.all_edges();
+        file.files();
+        for id in [10, 20, 30, 40] {
+            file.get_symbol(SymbolId::new(id));
+            file.outgoing(SymbolId::new(id));
+            file.incoming(SymbolId::new(id));
+        }
+        file.find_symbol("same");
+        file.symbols_in_file(FileId::new(1));
+    };
     // Any byte changed: refused, or still a graph that answers without a panic.
-    for at in 0..bytes.len() {
-        let mut changed = bytes.clone();
+    for at in 0..symbols.len() {
+        let mut changed = symbols.clone();
         changed[at] ^= 0xff;
-        if let Ok(file) = GraphFile::open(changed) {
-            file.all_symbols();
-            file.all_edges();
-            file.files();
-            for id in [10, 20, 30, 40] {
-                file.get_symbol(SymbolId::new(id));
-                file.outgoing(SymbolId::new(id));
-                file.incoming(SymbolId::new(id));
-            }
-            file.find_symbol("same");
-            file.symbols_in_file(FileId::new(1));
+        if let Ok(file) = GraphFile::open(changed, edges.clone()) {
+            ask(file);
+        }
+    }
+    for at in 0..edges.len() {
+        let mut changed = edges.clone();
+        changed[at] ^= 0xff;
+        if let Ok(file) = GraphFile::open(symbols.clone(), changed) {
+            ask(file);
         }
     }
 }

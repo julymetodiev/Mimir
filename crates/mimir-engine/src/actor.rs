@@ -130,7 +130,9 @@ impl GraphActor {
         registry: Arc<AdapterRegistry>,
         semantics: Arc<dyn SemanticSource>,
     ) -> Self {
-        let graph = save::load(&root.join(".mimir").join("graph")).unwrap_or_default();
+        let loaded = save::load(&root.join(".mimir").join("graph"));
+        let needs_link = loaded.as_ref().is_some_and(|loaded| !loaded.has_edges);
+        let graph = loaded.map(|loaded| loaded.graph).unwrap_or_default();
         let writer = save::Writer::new(root.join(".mimir").join("graph"));
         let (mut files, mut file_paths) = (HashMap::new(), HashMap::new());
         for entry in graph.files() {
@@ -150,7 +152,7 @@ impl GraphActor {
             files,
             file_paths,
             sources: HashMap::new(),
-            needs_link: false,
+            needs_link,
             references_changed: false,
             writer,
             semantics,

@@ -4,9 +4,6 @@ namespace store;
 struct Range { start_line:uint32; start_col:uint32; end_line:uint32; end_col:uint32; }
 struct Span { start:uint32; end:uint32; }
 
-// `from` and `to` are positions in Graph.symbols. Sorted by `from`, so a symbol's edges are one slice.
-struct Edge { from:uint32; to:uint32; start:uint32; end:uint32; kind:uint8; confidence:uint8; pad:uint16; }
-
 table Parameter { name:string; type_annotation:string; default_value:string; }
 table Signature { parameters:[Parameter]; return_type:string; type_parameters:[string]; raw:string; }
 
@@ -36,10 +33,7 @@ table Graph {
   names:[Name];
   qualified:[Name];
   files:[File];       // sorted by id
-  edges:[Edge];
-  out_offsets:[uint32];
-  incoming:[uint32];  // positions in edges, sorted by `to`
-  in_offsets:[uint32];
+  stamp:uint64;       // a hash of the ids, which edges.fb names: its positions are in these symbols
 }
 
 root_type Graph;
