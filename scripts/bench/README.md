@@ -19,6 +19,7 @@ The daemon starts by itself with the first command; after rebuilding `latt`, run
 | `value_sites.py` | Which non-call occurrences of project functions does an index hold, in what syntax? |
 | `value_eval.py` | How do function values from syntax rules compare with those from an index? |
 | `uses_eval.py` | Do the users `trace` shows for a type, field or constant match the server's find-references? |
+| `roslyn_probe.py` | Do C# definition locations match hand-marked declarations before edits, after edits, and after a restart? |
 | `lsp_probe.py` | How fast and how exact is a running analyzer on given files? |
 | `edit_matrix.py` | Every language and kind of edit, in under a minute: the graph after the edit against a clean start |
 | `edit_compare.py` | After edits, does a running analyzer give what a new index gives? |
